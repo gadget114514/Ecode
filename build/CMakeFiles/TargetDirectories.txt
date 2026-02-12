@@ -1,0 +1,5 @@
+D:/ws/Ecode/build/CMakeFiles/ecode.dir
+D:/ws/Ecode/build/CMakeFiles/test_piecetable.dir
+D:/ws/Ecode/build/CMakeFiles/installer.dir
+D:/ws/Ecode/build/CMakeFiles/ALL_BUILD.dir
+D:/ws/Ecode/build/CMakeFiles/ZERO_CHECK.dir

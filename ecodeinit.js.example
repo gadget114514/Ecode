@@ -1,0 +1,63 @@
+/**
+ * ecodeinit.js - Ecode Initialization Script
+ * Put this in %APPDATA%/Ecode/ecodeinit.js
+ */
+
+// Configure Editor Font
+editor.setFont({
+    family: "Consolas",
+    size: 14.0,
+    weight: "normal", // normal, bold, light
+    stretch: "normal"
+});
+
+// Configure Editor Theme
+editor.setTheme({
+    background: "#1E1E1E",
+    foreground: "#D4D4D4",
+    caret: "#FFFFFF",
+    selection: "#264F78",
+    lineNumbers: "#858585",
+    
+    // Syntax Groups
+    syntax: {
+        keyword: "#569CD6",
+        string: "#CE9178",
+        number: "#B5CEA8",
+        comment: "#6A9955",
+        function: "#DCDCAA"
+    }
+});
+
+// Custom Key Bindings and Macros
+editor.setKeyBinding("Ctrl+S", "editor.save()");
+editor.setKeyBinding("Ctrl+W", "editor.close()");
+
+// Simple Macro Example: Duplicate Line
+editor.setKeyBinding("Ctrl+D", function() {
+    var pos = editor.getCursorPos();
+    var lineText = editor.getText(pos.line, 0, pos.line, -1); // Get full line
+    editor.moveCursor("down", 1);
+    editor.insert("\n" + lineText);
+});
+
+// File Management Example
+editor.setKeyBinding("Ctrl+Shift+N", "editor.newFile()");
+
+// Visual & Visibility Controls
+editor.setKeyBinding("F11", "editor.toggleFullScreen()");
+editor.setKeyBinding("Alt+T", function() {
+    var state = editor.getOption("showTabs") || false;
+    editor.showTabs(!state);
+});
+
+// Distraction Free Mode Macro
+editor.setKeyBinding("Ctrl+F12", function() {
+    editor.showTabs(false);
+    editor.showStatusBar(false);
+    editor.showMenuBar(false);
+    editor.setOpacity(0.95);
+    console.log("Distraction-free mode enabled.");
+});
+
+console.log("Ecode initialized with visual controls.");

@@ -1,0 +1,111 @@
+#include "../include/Editor.h"
+
+Editor::Editor() : m_activeBufferIndex(0) {}
+
+Editor::~Editor() {}
+
+size_t Editor::OpenFile(const std::wstring &path) {
+  auto buffer = std::make_unique<Buffer>();
+  if (buffer->OpenFile(path)) {
+    m_buffers.push_back(std::move(buffer));
+    m_activeBufferIndex = m_buffers.size() - 1;
+    return m_activeBufferIndex;
+  }
+  return static_cast<size_t>(-1);
+}
+
+void Editor::NewFile() {
+  auto buffer = std::make_unique<Buffer>();
+  // New file has empty original and added buffers
+  m_buffers.push_back(std::move(buffer));
+  m_activeBufferIndex = m_buffers.size() - 1;
+}
+
+void Editor::CloseBuffer(size_t index) {
+  if (index < m_buffers.size()) {
+    m_buffers.erase(m_buffers.begin() + index);
+    if (m_activeBufferIndex >= m_buffers.size() && !m_buffers.empty()) {
+      m_activeBufferIndex = m_buffers.size() - 1;
+    } else if (m_buffers.empty()) {
+      m_activeBufferIndex = 0;
+    }
+  }
+}
+
+void Editor::SwitchToBuffer(size_t index) {
+  if (index < m_buffers.size()) {
+    m_activeBufferIndex = index;
+  }
+}
+
+Buffer *Editor::GetActiveBuffer() const {
+  if (m_activeBufferIndex < m_buffers.size()) {
+    return m_buffers[m_activeBufferIndex].get();
+  }
+  return nullptr;
+}
+
+void Editor::Undo() {
+  Buffer *active = GetActiveBuffer();
+  if (active)
+    active->Undo();
+}
+
+void Editor::Redo() {
+  Buffer *active = GetActiveBuffer();
+  if (active)
+    active->Redo();
+}
+
+void Editor::Cut(HWND hwnd) {
+  Copy(hwnd);
+  Buffer *active = GetActiveBuffer();
+  if (active)
+    active->DeleteSelection();
+}
+
+void Editor::Copy(HWND hwnd) {
+  Buffer *active = GetActiveBuffer();
+  if (!active || !active->HasSelection())
+    return;
+
+  std::string text = active->GetSelectedText();
+
+  if (OpenClipboard(hwnd)) {
+    EmptyClipboard();
+    int len = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, NULL, 0);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, len * sizeof(wchar_t));
+    if (hMem) {
+      wchar_t *pMem = (wchar_t *)GlobalLock(hMem);
+      MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, pMem, len);
+      GlobalUnlock(hMem);
+      SetClipboardData(CF_UNICODETEXT, hMem);
+    }
+    CloseClipboard();
+  }
+}
+
+void Editor::Paste(HWND hwnd) {
+  if (OpenClipboard(hwnd)) {
+    HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+    if (hData) {
+      wchar_t *pMem = (wchar_t *)GlobalLock(hData);
+      if (pMem) {
+        int len =
+            WideCharToMultiByte(CP_UTF8, 0, pMem, -1, NULL, 0, NULL, NULL);
+        std::vector<char> text(len);
+        WideCharToMultiByte(CP_UTF8, 0, pMem, -1, text.data(), len, NULL, NULL);
+        GlobalUnlock(hData);
+
+        Buffer *active = GetActiveBuffer();
+        if (active) {
+          if (active->HasSelection())
+            active->DeleteSelection();
+          active->Insert(active->GetCaretPos(), text.data());
+          active->MoveCaret(static_cast<int>(strlen(text.data())));
+        }
+      }
+    }
+    CloseClipboard();
+  }
+}

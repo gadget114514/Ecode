@@ -1,0 +1,34 @@
+#pragma once
+
+#include "Buffer.h"
+#include <memory>
+#include <vector>
+
+class Editor {
+public:
+  Editor();
+  ~Editor();
+
+  size_t OpenFile(const std::wstring &path);
+  void NewFile();
+  void CloseBuffer(size_t index);
+
+  void SwitchToBuffer(size_t index);
+  Buffer *GetActiveBuffer() const;
+  size_t GetActiveBufferIndex() const { return m_activeBufferIndex; }
+
+  void Undo();
+  void Redo();
+
+  void Cut(HWND hwnd);
+  void Copy(HWND hwnd);
+  void Paste(HWND hwnd);
+
+  const std::vector<std::unique_ptr<Buffer>> &GetBuffers() const {
+    return m_buffers;
+  }
+
+private:
+  std::vector<std::unique_ptr<Buffer>> m_buffers;
+  size_t m_activeBufferIndex;
+};
