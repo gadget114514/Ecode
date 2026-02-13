@@ -19,10 +19,28 @@ set(RESOURCES "src/Ecode.rc")
 # Executable
 add_executable(ecode WIN32 ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
 
-# Test executable
+# Test executables
 add_executable(test_piecetable 
-    src/test_piecetable.cpp 
+    tests/test_piecetable.cpp 
     src/PieceTable.cpp
+)
+
+add_executable(test_editor_core
+    tests/test_editor_core.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src-duktape/duktape.c
+)
+target_link_libraries(test_editor_core 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
 )
 
 # Libraries to link

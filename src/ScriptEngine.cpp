@@ -1,7 +1,8 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include "../include/ScriptEngine.h"
 #include "../include/Dialogs.h"
 #include "../include/Editor.h"
-#include "../include/Renderer.h"
+#include "../include/EditorBufferRenderer.h"
 #include <commctrl.h>
 #include <iostream>
 
@@ -10,13 +11,32 @@ extern std::unique_ptr<Editor> g_editor;
 extern HWND g_mainHwnd;
 extern HWND g_statusHwnd;
 extern HWND g_progressHwnd;
-extern std::unique_ptr<class Renderer> g_renderer;
+extern HWND g_tabHwnd;
+extern std::unique_ptr<class EditorBufferRenderer> g_renderer;
+extern std::unique_ptr<class ScriptEngine> g_scriptEngine;
+
+void UpdateMenu(HWND hwnd);
+
+static std::string WStringToString(const std::wstring &ws) {
+  if (ws.empty()) return "";
+  int size_needed = WideCharToMultiByte(CP_UTF8, 0, &ws[0], (int)ws.size(), NULL, 0, NULL, NULL);
+  std::string strTo(size_needed, 0);
+  WideCharToMultiByte(CP_UTF8, 0, &ws[0], (int)ws.size(), &strTo[0], size_needed, NULL, NULL);
+  return strTo;
+}
+
+static std::wstring StringToWString(const std::string &s) {
+  if (s.empty()) return L"";
+  int size_needed = MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), NULL, 0);
+  std::wstring wstrTo(size_needed, 0);
+  MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), &wstrTo[0], size_needed);
+  return wstrTo;
+}
 
 // JS-to-C++ Bridge Functions for Status/Progress
 static duk_ret_t js_editor_set_status_text(duk_context *ctx) {
   const char *text = duk_get_string(ctx, 0);
-  std::string s(text);
-  std::wstring ws(s.begin(), s.end());
+  std::wstring ws = StringToWString(text);
   SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)ws.c_str());
   return 0;
 }
@@ -30,14 +50,14 @@ static duk_ret_t js_editor_set_progress(duk_context *ctx) {
 // JS-to-C++ Bridge Functions for Dialogs
 static duk_ret_t js_editor_open_dialog(duk_context *ctx) {
   std::wstring path = Dialogs::OpenFileDialog(g_mainHwnd);
-  std::string pathA(path.begin(), path.end());
+  std::string pathA = WStringToString(path);
   duk_push_string(ctx, pathA.c_str());
   return 1;
 }
 
 static duk_ret_t js_editor_save_dialog(duk_context *ctx) {
   std::wstring path = Dialogs::SaveFileDialog(g_mainHwnd);
-  std::string pathA(path.begin(), path.end());
+  std::string pathA = WStringToString(path);
   duk_push_string(ctx, pathA.c_str());
   return 1;
 }
@@ -48,6 +68,14 @@ static duk_ret_t js_editor_about_dialog(duk_context *ctx) {
 }
 
 // JS-to-C++ Bridge Functions
+static duk_ret_t js_editor_set_key_handler(duk_context *ctx) {
+  const char *funcName = duk_get_string(ctx, 0);
+  if (g_scriptEngine) {
+    g_scriptEngine->SetKeyHandler(funcName);
+  }
+  return 0;
+}
+
 static duk_ret_t js_editor_insert(duk_context *ctx) {
   size_t pos = (size_t)duk_get_number(ctx, 0);
   const char *text = duk_get_string(ctx, 1);
@@ -151,8 +179,7 @@ static duk_ret_t js_editor_move_caret_end(duk_context *ctx) {
 static duk_ret_t js_editor_set_font(duk_context *ctx) {
   const char *family = duk_get_string(ctx, 0);
   float size = static_cast<float>(duk_get_number(ctx, 1));
-  std::string s(family);
-  std::wstring ws(s.begin(), s.end());
+  std::wstring ws = StringToWString(family);
   if (g_renderer) {
     g_renderer->SetFont(ws, size);
   }
@@ -214,6 +241,135 @@ static duk_ret_t js_editor_show_physical_line_numbers(duk_context *ctx) {
   return 0;
 }
 
+static D2D1_COLOR_F ParseColor(const char *hex) {
+  if (hex[0] == '#') hex++;
+  unsigned int r, g, b, a = 255;
+  if (strlen(hex) == 6) {
+    sscanf(hex, "%02x%02x%02x", &r, &g, &b);
+  } else if (strlen(hex) == 8) {
+    sscanf(hex, "%02x%02x%02x%02x", &r, &g, &b, &a);
+  } else {
+    return {0, 0, 0, 1};
+  }
+  return {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+}
+
+static duk_ret_t js_editor_set_theme(duk_context *ctx) {
+  if (!duk_is_object(ctx, 0)) return 0;
+  
+  Theme theme;
+  
+  auto GetColor = [&](const char* prop, D2D1_COLOR_F& out) {
+    if (duk_get_prop_string(ctx, 0, prop)) {
+      if (duk_is_string(ctx, -1)) {
+        out = ParseColor(duk_get_string(ctx, -1));
+      }
+    }
+    duk_pop(ctx);
+  };
+
+  GetColor("background", theme.background);
+  GetColor("foreground", theme.foreground);
+  GetColor("caret", theme.caret);
+  GetColor("selection", theme.selection);
+  GetColor("lineNumbers", theme.lineNumbers);
+  GetColor("keyword", theme.keyword);
+  GetColor("string", theme.string);
+  GetColor("number", theme.number);
+  GetColor("comment", theme.comment);
+  GetColor("function", theme.function);
+
+  if (g_renderer) {
+    g_renderer->SetTheme(theme);
+  }
+  return 0;
+}
+
+static duk_ret_t js_editor_switch_buffer(duk_context *ctx) {
+  size_t index = (size_t)duk_get_number(ctx, 0);
+  if (g_editor) {
+    g_editor->SwitchToBuffer(index);
+    UpdateMenu(g_mainHwnd);
+    InvalidateRect(g_mainHwnd, NULL, FALSE);
+  }
+  return 0;
+}
+
+static duk_ret_t js_editor_close(duk_context *ctx) {
+  if (g_editor) {
+    g_editor->CloseBuffer(g_editor->GetActiveBufferIndex());
+    UpdateMenu(g_mainHwnd);
+    InvalidateRect(g_mainHwnd, NULL, FALSE);
+  }
+  return 0;
+}
+
+static duk_ret_t js_editor_new_file(duk_context *ctx) {
+  if (g_editor) {
+    g_editor->NewFile();
+    UpdateMenu(g_mainHwnd);
+    InvalidateRect(g_mainHwnd, NULL, FALSE);
+  }
+  return 0;
+}
+
+static duk_ret_t js_editor_toggle_fullscreen(duk_context *ctx) {
+    static bool isFullscreen = false;
+    static RECT oldPos;
+    static LONG oldStyle;
+
+    if (!isFullscreen) {
+        GetWindowRect(g_mainHwnd, &oldPos);
+        oldStyle = GetWindowLong(g_mainHwnd, GWL_STYLE);
+        
+        SetWindowLong(g_mainHwnd, GWL_STYLE, oldStyle & ~(WS_CAPTION | WS_THICKFRAME));
+        
+        int width = GetSystemMetrics(SM_CXSCREEN);
+        int height = GetSystemMetrics(SM_CYSCREEN);
+        SetWindowPos(g_mainHwnd, HWND_TOP, 0, 0, width, height, SWP_FRAMECHANGED);
+        isFullscreen = true;
+    } else {
+        SetWindowLong(g_mainHwnd, GWL_STYLE, oldStyle);
+        SetWindowPos(g_mainHwnd, NULL, oldPos.left, oldPos.top, 
+                     oldPos.right - oldPos.left, oldPos.bottom - oldPos.top, 
+                     SWP_FRAMECHANGED);
+        isFullscreen = false;
+    }
+    return 0;
+}
+
+static duk_ret_t js_editor_show_tabs(duk_context *ctx) {
+  bool show = duk_get_boolean(ctx, 0);
+  ShowWindow(g_tabHwnd, show ? SW_SHOW : SW_HIDE);
+  SendMessage(g_mainHwnd, WM_SIZE, 0, 0); // Trigger resize
+  return 0;
+}
+
+static duk_ret_t js_editor_show_status_bar(duk_context *ctx) {
+  bool show = duk_get_boolean(ctx, 0);
+  ShowWindow(g_statusHwnd, show ? SW_SHOW : SW_HIDE);
+  SendMessage(g_mainHwnd, WM_SIZE, 0, 0);
+  return 0;
+}
+
+static duk_ret_t js_editor_show_menu_bar(duk_context *ctx) {
+  bool show = duk_get_boolean(ctx, 0);
+  if (show) {
+    UpdateMenu(g_mainHwnd);
+  } else {
+    SetMenu(g_mainHwnd, NULL);
+  }
+  return 0;
+}
+
+static duk_ret_t js_editor_set_opacity(duk_context *ctx) {
+  float opacity = (float)duk_get_number(ctx, 0);
+  LONG exStyle = GetWindowLong(g_mainHwnd, GWL_EXSTYLE);
+  SetWindowLong(g_mainHwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+  SetLayeredWindowAttributes(g_mainHwnd, 0, (BYTE)(opacity * 255), LWA_ALPHA);
+  return 0;
+}
+
 static duk_ret_t js_editor_open(duk_context *ctx) {
   const char *path = duk_get_string(ctx, 0);
   std::string s(path);
@@ -269,10 +425,35 @@ static duk_ret_t js_editor_set_wrap_width(duk_context *ctx) {
   return 0;
 }
 
+static duk_ret_t js_editor_find(duk_context *ctx) {
+  const char *query = duk_get_string(ctx, 0);
+  size_t startPos = (size_t)duk_get_number(ctx, 1);
+  bool forward = duk_get_boolean(ctx, 2);
+  bool useRegex = duk_get_boolean(ctx, 3);
+  bool matchCase = duk_get_boolean(ctx, 4);
+
+  Buffer *buf = g_editor->GetActiveBuffer();
+  if (buf) {
+    size_t pos = buf->Find(query, startPos, forward, useRegex, matchCase);
+    if (pos != std::string::npos) {
+      duk_push_number(ctx, (double)pos);
+      return 1;
+    }
+  }
+  duk_push_number(ctx, -1);
+  return 1;
+}
+
 // Bridging the ScriptEngine itself for SetKeyBinding
-// We need a way to get the ScriptEngine instance, but for now we'll use a
-// global pointer
-extern std::unique_ptr<class ScriptEngine> g_scriptEngine;
+// We already have extern g_scriptEngine at the top
+
+static duk_ret_t js_editor_set_capture_keyboard(duk_context *ctx) {
+  bool capture = duk_get_boolean(ctx, 0);
+  if (g_scriptEngine) {
+    g_scriptEngine->SetCaptureKeyboard(capture);
+  }
+  return 0;
+}
 
 static duk_ret_t js_editor_set_key_binding(duk_context *ctx) {
   const char *chord = duk_get_string(ctx, 0);
@@ -306,8 +487,14 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "getText");
   duk_push_c_function(m_ctx, js_editor_get_length, 0);
   duk_put_prop_string(m_ctx, -2, "getLength");
+  duk_push_c_function(m_ctx, js_editor_find, 5);
+  duk_put_prop_string(m_ctx, -2, "find");
   duk_push_c_function(m_ctx, js_editor_set_key_binding, 2);
   duk_put_prop_string(m_ctx, -2, "setKeyBinding");
+  duk_push_c_function(m_ctx, js_editor_set_capture_keyboard, 1);
+  duk_put_prop_string(m_ctx, -2, "setCaptureKeyboard");
+  duk_push_c_function(m_ctx, js_editor_set_key_handler, 1);
+  duk_put_prop_string(m_ctx, -2, "setKeyHandler");
 
   duk_push_c_function(m_ctx, js_editor_open_dialog, 0);
   duk_put_prop_string(m_ctx, -2, "openDialog");
@@ -358,6 +545,26 @@ bool ScriptEngine::Initialize() {
 
   duk_push_c_function(m_ctx, js_editor_open, 1);
   duk_put_prop_string(m_ctx, -2, "open");
+  duk_push_c_function(m_ctx, js_editor_close, 0);
+  duk_put_prop_string(m_ctx, -2, "close");
+  duk_push_c_function(m_ctx, js_editor_switch_buffer, 1);
+  duk_put_prop_string(m_ctx, -2, "switchBuffer");
+
+  duk_push_c_function(m_ctx, js_editor_new_file, 0);
+  duk_put_prop_string(m_ctx, -2, "newFile");
+  duk_push_c_function(m_ctx, js_editor_set_theme, 1);
+  duk_put_prop_string(m_ctx, -2, "setTheme");
+  duk_push_c_function(m_ctx, js_editor_toggle_fullscreen, 0);
+  duk_put_prop_string(m_ctx, -2, "toggleFullScreen");
+  duk_push_c_function(m_ctx, js_editor_show_tabs, 1);
+  duk_put_prop_string(m_ctx, -2, "showTabs");
+  duk_push_c_function(m_ctx, js_editor_show_status_bar, 1);
+  duk_put_prop_string(m_ctx, -2, "showStatusBar");
+  duk_push_c_function(m_ctx, js_editor_show_menu_bar, 1);
+  duk_put_prop_string(m_ctx, -2, "showMenuBar");
+  duk_push_c_function(m_ctx, js_editor_set_opacity, 1);
+  duk_put_prop_string(m_ctx, -2, "setOpacity");
+
   duk_push_c_function(m_ctx, js_editor_get_total_lines, 0);
   duk_put_prop_string(m_ctx, -2, "getTotalLines");
   duk_push_c_function(m_ctx, js_editor_get_line_at_offset, 1);
@@ -386,7 +593,98 @@ void ScriptEngine::LoadDefaultBindings() {
     Editor.setKeyBinding("Ctrl+K", "emacs_kill_line");
     Editor.setKeyBinding("Ctrl+Y", "emacs_yank");
     Editor.setKeyBinding("Ctrl+Space", "emacs_set_mark");
-    Editor.setKeyBinding("Ctrl+T", "tag_jump");
+    Editor.setKeyBinding("Ctrl+V", "emacs_scroll_down");
+    Editor.setKeyBinding("Alt+V", "emacs_scroll_up");
+    Editor.setKeyBinding("Ctrl+T", "emacs_transpose_chars");
+    Editor.setKeyBinding("Ctrl+S", "emacs_isearch_forward");
+    Editor.setKeyBinding("Ctrl+R", "emacs_isearch_backward");
+    Editor.setKeyBinding("F12", "tag_jump");
+
+    var isearchQuery = "";
+    var isearchStartPos = 0;
+    var isearchForward = true;
+
+    function emacs_isearch_forward() {
+        isearchQuery = "";
+        isearchStartPos = Editor.getCaretPos();
+        isearchForward = true;
+        Editor.setCaptureKeyboard(true);
+        Editor.setKeyHandler("emacs_isearch_handler");
+        Editor.setStatusText("I-search: ");
+    }
+
+    function emacs_isearch_backward() {
+        isearchQuery = "";
+        isearchStartPos = Editor.getCaretPos();
+        isearchForward = false;
+        Editor.setCaptureKeyboard(true);
+        Editor.setKeyHandler("emacs_isearch_handler");
+        Editor.setStatusText("I-search backward: ");
+    }
+
+    function emacs_isearch_handler(key, isChar) {
+        if (!isChar) {
+            if (key == "Enter") {
+                Editor.setCaptureKeyboard(false);
+                Editor.setStatusText("Ready");
+                return true;
+            }
+            if (key == "Esc") {
+                Editor.setCaretPos(isearchStartPos);
+                Editor.setSelectionAnchor(isearchStartPos);
+                Editor.setCaptureKeyboard(false);
+                Editor.setStatusText("Canceled");
+                return true;
+            }
+            if (key == "Backspace") {
+                if (isearchQuery.length > 0) {
+                    isearchQuery = isearchQuery.substring(0, isearchQuery.length - 1);
+                    emacs_isearch_update();
+                }
+                return true;
+            }
+            if (key == "Ctrl+S") {
+                isearchForward = true;
+                emacs_isearch_next();
+                return true;
+            }
+            if (key == "Ctrl+R") {
+                isearchForward = false;
+                emacs_isearch_next();
+                return true;
+            }
+            return false;
+        }
+
+        isearchQuery += key;
+        emacs_isearch_update();
+        return true;
+    }
+
+    function emacs_isearch_update() {
+        var prefix = isearchForward ? "I-search: " : "I-search backward: ";
+        Editor.setStatusText(prefix + isearchQuery);
+        
+        var pos = Editor.find(isearchQuery, isearchStartPos, isearchForward, false, false);
+        if (pos != -1) {
+            Editor.setSelectionAnchor(pos);
+            Editor.setCaretPos(pos + isearchQuery.length);
+        }
+    }
+
+    function emacs_isearch_next() {
+        var currentPos = Editor.getCaretPos();
+        var searchStart = isearchForward ? currentPos : (currentPos - isearchQuery.length - 1);
+        if (searchStart < 0) searchStart = 0;
+        
+        var pos = Editor.find(isearchQuery, searchStart, isearchForward, false, false);
+        if (pos != -1) {
+            Editor.setSelectionAnchor(pos);
+            Editor.setCaretPos(pos + isearchQuery.length);
+        } else {
+            Editor.setStatusText("Failing " + (isearchForward ? "I-search: " : "I-search backward: ") + isearchQuery);
+        }
+    }
 
     function emacs_next_line() { Editor.moveCaretDown(); }
     function emacs_prev_line() { Editor.moveCaretUp(); }
@@ -394,19 +692,56 @@ void ScriptEngine::LoadDefaultBindings() {
     function emacs_backward_char() { Editor.moveCaret(-1); }
     function emacs_line_start() { Editor.moveCaretHome(); }
     function emacs_line_end() { Editor.moveCaretEnd(); }
-    function emacs_delete_char() { Editor.delete(1); }
+    function emacs_delete_char() { Editor.delete(Editor.getCaretPos(), 1); }
     function emacs_backspace() { 
         var pos = Editor.getCaretPos();
         if (pos > 0) {
             Editor.setCaretPos(pos - 1);
-            Editor.delete(1); 
+            Editor.delete(pos - 1, 1); 
         }
     }
     function emacs_kill_line() {
-        Editor.cut(); 
+        var pos = Editor.getCaretPos();
+        var lineIdx = Editor.getLineAtOffset(pos);
+        var lineEnd = Editor.getLineOffset(lineIdx + 1);
+        if (lineEnd == 0) lineEnd = Editor.getLength();
+        
+        var len = lineEnd - pos;
+        if (len > 0) {
+            var text = Editor.getText(pos, len);
+            var newlinePos = text.indexOf('\n');
+            if (newlinePos == 0) {
+                Editor.delete(pos, 1);
+            } else if (newlinePos > 0) {
+                Editor.setSelectionAnchor(pos);
+                Editor.setCaretPos(pos + newlinePos);
+                Editor.cut();
+            } else {
+                Editor.setSelectionAnchor(pos);
+                Editor.setCaretPos(pos + len);
+                Editor.cut();
+            }
+        }
     }
     function emacs_yank() { Editor.paste(); }
     function emacs_set_mark() { Editor.setSelectionAnchor(Editor.getCaretPos()); }
+
+    function emacs_scroll_up() { 
+        for(var i=0; i<20; i++) Editor.moveCaretUp();
+    }
+    function emacs_scroll_down() {
+        for(var i=0; i<20; i++) Editor.moveCaretDown();
+    }
+    function emacs_transpose_chars() {
+        var pos = Editor.getCaretPos();
+        if (pos > 0 && pos < Editor.getLength()) {
+            var c1 = Editor.getText(pos - 1, 1);
+            var c2 = Editor.getText(pos, 1);
+            Editor.delete(pos - 1, 2);
+            Editor.insert(pos - 1, c2 + c1);
+            Editor.setCaretPos(pos + 1);
+        }
+    }
 
     function tag_jump() {
         var pos = Editor.getCaretPos();
@@ -416,24 +751,20 @@ void ScriptEngine::LoadDefaultBindings() {
         if (end == 0) end = Editor.getLength(); 
         
         var text = Editor.getText(start, end - start);
-        
-        // Match patterns like "filename.cpp:123" or "filename.cpp(123)"
         var match = text.match(/([a-zA-Z0-9_\-\.\/\\]+)[:\(](\d+)[:\)]?/);
-  if (match) {
-    var file = match[1];
-    var line = parseInt(match[2]);
-    Editor.open(file);
-
-    // Move to line
-    var targetOffset = Editor.getLineOffset(line - 1);
-    Editor.setCaretPos(targetOffset);
-    Editor.setSelectionAnchor(targetOffset);
-  }
-}
+        if (match) {
+            var file = match[1];
+            var line = parseInt(match[2]);
+            Editor.open(file);
+            var targetOffset = Editor.getLineOffset(line - 1);
+            Editor.setCaretPos(targetOffset);
+            Editor.setSelectionAnchor(targetOffset);
+        }
+    }
   )";
   duk_peval_string(m_ctx, defaultBindings);
   duk_pop(m_ctx);
-  }
+}
 
   std::string ScriptEngine::Evaluate(const std::string &code) {
     if (!m_ctx)
@@ -468,6 +799,27 @@ void ScriptEngine::LoadDefaultBindings() {
     }
     duk_pop(m_ctx);
     return true;
+  }
+
+  bool ScriptEngine::HandleKeyEvent(const std::string &key, bool isChar) {
+    if (m_keyHandler.empty())
+      return false;
+
+    duk_get_global_string(m_ctx, m_keyHandler.c_str());
+    if (duk_is_function(m_ctx, -1)) {
+      duk_push_string(m_ctx, key.c_str());
+      duk_push_boolean(m_ctx, isChar);
+      if (duk_pcall(m_ctx, 2) != 0) {
+        std::cerr << "Script error in key handler: "
+                  << duk_safe_to_string(m_ctx, -1) << std::endl;
+        SetCaptureKeyboard(false); // Failsafe
+      }
+      bool handled = duk_get_boolean(m_ctx, -1);
+      duk_pop(m_ctx);
+      return handled;
+    }
+    duk_pop(m_ctx);
+    return false;
   }
 
   void ScriptEngine::RegisterBinding(const std::string &chord,

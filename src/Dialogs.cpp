@@ -1,11 +1,106 @@
 #include "../include/Dialogs.h"
+#include "../include/Editor.h"
 #include "../include/Localization.h"
-#include "../include/Renderer.h"
+#include "../include/EditorBufferRenderer.h"
 #include "../include/resource.h"
+#include "../include/ScriptEngine.h"
 #include <commdlg.h>
+#include <filesystem>
 #include <shellapi.h>
+#include <vector>
 
-extern std::unique_ptr<Renderer> g_renderer;
+#include <vector>
+
+extern std::unique_ptr<EditorBufferRenderer> g_renderer;
+extern std::unique_ptr<Editor> g_editor;
+extern std::unique_ptr<ScriptEngine> g_scriptEngine;
+
+namespace fs = std::filesystem;
+
+INT_PTR CALLBACK JumpToLineDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                   LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG:
+    return (INT_PTR)TRUE;
+
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDOK) {
+      UINT lineNum = GetDlgItemInt(hDlg, IDC_LINE_NUMBER, NULL, FALSE);
+      if (g_editor) {
+        Buffer *buf = g_editor->GetActiveBuffer();
+        if (buf && lineNum > 0 && lineNum <= buf->GetTotalLines()) {
+          size_t offset = buf->GetLineOffset(lineNum - 1);
+          buf->SetCaretPos(offset);
+          buf->SetSelectionAnchor(offset);
+        }
+      }
+      EndDialog(hDlg, IDOK);
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void Dialogs::ShowJumpToLineDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_JUMP_TO_LINE), hwnd,
+             JumpToLineDlgProc);
+  InvalidateRect(hwnd, NULL, FALSE);
+}
+
+INT_PTR CALLBACK MacroGalleryDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                     LPARAM lParam) {
+  static std::vector<std::wstring> macroPaths;
+
+  switch (message) {
+  case WM_INITDIALOG: {
+    macroPaths.clear();
+    HWND hList = GetDlgItem(hDlg, IDC_MACRO_LIST);
+    wchar_t appData[MAX_PATH];
+    if (GetEnvironmentVariableW(L"APPDATA", appData, MAX_PATH)) {
+      std::wstring macroDir = std::wstring(appData) + L"\\Ecode\\macros";
+      if (fs::exists(macroDir)) {
+        for (const auto &entry : fs::directory_iterator(macroDir)) {
+          if (entry.path().extension() == L".js") {
+            macroPaths.push_back(entry.path().wstring());
+            SendMessage(hList, LB_ADDSTRING, 0,
+                        (LPARAM)entry.path().filename().c_str());
+          }
+        }
+      }
+    }
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_RUN_MACRO ||
+        (LOWORD(wParam) == IDC_MACRO_LIST && HIWORD(wParam) == LBN_DBLCLK)) {
+      HWND hList = GetDlgItem(hDlg, IDC_MACRO_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR && sel < (int)macroPaths.size()) {
+        if (g_scriptEngine) {
+          g_scriptEngine->RunFile(macroPaths[sel]);
+        }
+      }
+      EndDialog(hDlg, IDOK);
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CANCEL_MACRO ||
+               LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void Dialogs::ShowMacroGalleryDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_MACRO_GALLERY), hwnd,
+             MacroGalleryDlgProc);
+  InvalidateRect(hwnd, NULL, FALSE);
+}
 
 std::wstring Dialogs::OpenFileDialog(HWND hwnd) {
   wchar_t fileName[MAX_PATH] = L"";

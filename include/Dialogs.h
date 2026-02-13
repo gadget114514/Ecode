@@ -11,4 +11,6 @@ public:
   static void ShowAboutDialog(HWND hwnd);
   static void ShowSettingsDialog(HWND hwnd);
   static void ShowFindReplaceDialog(HWND hwnd, bool replaceMode);
+  static void ShowJumpToLineDialog(HWND hwnd);
+  static void ShowMacroGalleryDialog(HWND hwnd);
 };

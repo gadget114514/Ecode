@@ -72,6 +72,7 @@ void Localization::LoadTranslations() {
   en["menu_edit_select_all"] = L"Select &All";
   en["menu_edit_find"] = L"&Find...";
   en["menu_edit_replace"] = L"&Replace...";
+  en["menu_edit_goto"] = L"&Go to Line...";
 
   en["menu_view"] = L"&View";
   en["menu_view_toggle_ui"] = L"&Toggle UI Elements";
@@ -91,7 +92,7 @@ void Localization::LoadTranslations() {
 
   en["menu_language"] = L"&Language";
   en["menu_language_en"] = L"English";
-  en["menu_language_jp"] = L"日本語 (Japanese)";
+  en["menu_language_jp"] = L"日本誁E(Japanese)";
   en["menu_language_es"] = L"Español (Spanish)";
   en["menu_language_fr"] = L"Français (French)";
   en["menu_language_de"] = L"Deutsch (German)";
@@ -103,47 +104,48 @@ void Localization::LoadTranslations() {
 
   // Japanese
   auto &jp = m_translations[Language::Japanese];
-  jp["title"] = L"Ecode - ネイティブ Win32 テキストエディタ";
+  jp["title"] = L"Ecode - ネイチE��チEWin32 チE��ストエチE��タ";
   jp["menu_file"] = L"ファイル(&F)";
-  jp["menu_file_new"] = L"新規作成(&N)";
+  jp["menu_file_new"] = L"新規作�E(&N)";
   jp["menu_file_open"] = L"開く(&O)...";
-  jp["menu_file_save"] = L"保存(&S)";
-  jp["menu_file_save_as"] = L"名前を付けて保存(&A)...";
-  jp["menu_file_close"] = L"閉じる(&C)";
-  jp["menu_file_scratch"] = L"新しいスクラッチバッファ(&S)";
-  jp["menu_file_exit"] = L"終了(&X)";
+  jp["menu_file_save"] = L"保孁E&S)";
+  jp["menu_file_save_as"] = L"名前を付けて保孁E&A)...";
+  jp["menu_file_close"] = L"閉じめE&C)";
+  jp["menu_file_scratch"] = L"新しいスクラチE��バッファ(&S)";
+  jp["menu_file_exit"] = L"終亁E&X)";
 
-  jp["menu_edit"] = L"編集(&E)";
-  jp["menu_edit_undo"] = L"元に戻す(&U)";
-  jp["menu_edit_redo"] = L"やり直し(&R)";
-  jp["menu_edit_cut"] = L"切り取り(&T)";
-  jp["menu_edit_copy"] = L"コピー(&C)";
+  jp["menu_edit"] = L"編雁E&E)";
+  jp["menu_edit_undo"] = L"允E��戻ぁE&U)";
+  jp["menu_edit_redo"] = L"めE��直ぁE&R)";
+  jp["menu_edit_cut"] = L"刁E��取り(&T)";
+  jp["menu_edit_copy"] = L"コピ�E(&C)";
   jp["menu_edit_paste"] = L"貼り付け(&P)";
-  jp["menu_edit_select_all"] = L"すべて選択(&A)";
+  jp["menu_edit_select_all"] = L"すべて選抁E&A)";
   jp["menu_edit_find"] = L"検索(&F)...";
-  jp["menu_edit_replace"] = L"置換(&R)...";
+  jp["menu_edit_replace"] = L"置揁E&R)...";
+  jp["menu_edit_goto"] = L"持E��行へ移勁E&G)...";
 
   jp["menu_view"] = L"表示(&V)";
-  jp["menu_view_toggle_ui"] = L"UI要素の切り替え(&T)";
+  jp["menu_view_toggle_ui"] = L"UI要素の刁E��替ぁE&T)";
   jp["menu_view_zoom_in"] = L"拡大(&I)";
-  jp["menu_view_zoom_out"] = L"縮小(&O)";
-  jp["menu_view_zoom_reset"] = L"ズームリセット(&R)";
+  jp["menu_view_zoom_out"] = L"縮封E&O)";
+  jp["menu_view_zoom_reset"] = L"ズームリセチE��(&R)";
 
-  jp["menu_config"] = L"設定(&C)";
-  jp["menu_config_settings"] = L"設定(&S)...";
-  jp["menu_config_theme"] = L"テーマ選択(&T)...";
-  jp["menu_config_edit_init"] = L"ecodeinit.jsを編集(&E)";
+  jp["menu_config"] = L"設宁E&C)";
+  jp["menu_config_settings"] = L"設宁E&S)...";
+  jp["menu_config_theme"] = L"チE�Eマ選抁E&T)...";
+  jp["menu_config_edit_init"] = L"ecodeinit.jsを編雁E&E)";
 
-  jp["menu_tools"] = L"ツール(&T)";
-  jp["menu_tools_run_macro"] = L"マクロ実行(&R)...";
+  jp["menu_tools"] = L"チE�Eル(&T)";
+  jp["menu_tools_run_macro"] = L"マクロ実衁E&R)...";
   jp["menu_tools_console"] = L"スクリプトコンソール(&C)";
   jp["menu_tools_macro_gallery"] = L"マクロギャラリー(&G)";
 
-  jp["menu_language"] = L"言語(&L)";
+  jp["menu_language"] = L"言誁E&L)";
   jp["menu_buffers"] = L"バッファ(&B)";
-  jp["menu_help"] = L"ヘルプ(&H)";
-  jp["menu_help_doc"] = L"ドキュメント(&D)";
-  jp["menu_help_about"] = L"バージョン情報(&A)";
+  jp["menu_help"] = L"ヘルチE&H)";
+  jp["menu_help_doc"] = L"ドキュメンチE&D)";
+  jp["menu_help_about"] = L"バ�Eジョン惁E��(&A)";
 
   // Spanish
   auto &es = m_translations[Language::Spanish];
@@ -166,6 +168,7 @@ void Localization::LoadTranslations() {
   es["menu_edit_select_all"] = L"Seleccionar &todo";
   es["menu_edit_find"] = L"&Buscar...";
   es["menu_edit_replace"] = L"&Reemplazar...";
+  es["menu_edit_goto"] = L"&Ir a la línea...";
 
   es["menu_view"] = L"&Vista";
   es["menu_config"] = L"&Configuración";
@@ -195,6 +198,7 @@ void Localization::LoadTranslations() {
   fr["menu_edit_select_all"] = L"&Tout sélectionner";
   fr["menu_edit_find"] = L"&Rechercher...";
   fr["menu_edit_replace"] = L"&Remplacer...";
+  fr["menu_edit_goto"] = L"&Aller à la ligne...";
 
   fr["menu_view"] = L"&Affichage";
   fr["menu_config"] = L"&Configuration";
@@ -224,6 +228,7 @@ void Localization::LoadTranslations() {
   de["menu_edit_select_all"] = L"&Alles auswählen";
   de["menu_edit_find"] = L"&Suchen...";
   de["menu_edit_replace"] = L"&Ersetzen...";
+  de["menu_edit_goto"] = L"&Gehe zu Zeile...";
 
   de["menu_view"] = L"&Ansicht";
   de["menu_config"] = L"&Konfiguration";
