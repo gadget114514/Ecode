@@ -40,7 +40,7 @@ This document tracks the detailed progress of Ecode features based on [REQUIREME
   - [x] Implement literal search.
   - [x] Integrate Win32 Find/Replace standard dialogs.
   - [x] Implement Regex search (using `<regex>`).
-- [ ] **FR-1.4.1: Emacs-style Key Bindings**: Implement default `Ctrl+F/B/N/P/A/E` mappings in `ecodeinit.js` or `HandleBinding`.
+- [x] **FR-1.4.1: Emacs-style Key Bindings**: Implement default `Ctrl+F/B/N/P/A/E` mappings in `ecodeinit.js` or `HandleBinding`.
 - [x] **FR-1.4.3: Drag and Drop**: Implement `WM_DROPFILES` handler.
 - [x] **FR-1.4.4: Context Menu**: Implement `WM_CONTEXTMENU` with Cut/Copy/Paste/Undo/Select All.
 - [x] **FR-1.5.1: Tabbed Interface**: Implement a UI container for tabs (using Win32 Tab Control).
@@ -49,11 +49,11 @@ This document tracks the detailed progress of Ecode features based on [REQUIREME
   - [x] Basic drawing (Done).
   - [x] Dynamic width based on line count (Done).
   - [x] Physical line numbers (Done).
-  - [ ] Mouse clicking in gutter for line selection.
+  - [x] Mouse clicking in gutter for line selection.
 - [x] **FR-1.2.6: Caret Blinking**: Use a Win32 timer (`SetTimer`) to toggle caret visibility.
-- [ ] **FR-1.9.1: Settings Persistence**: Save/Load window position, active language, theme to a config file.
+- [x] **FR-1.9.1: Settings Persistence**: Save/Load window position, active language, theme to a config file.
 - [x] **FR-1.2.7: Line Folding**: Virtual folding of text lines (logical display suppression).
-- [ ] **FR-1.2.8: Visual Indicators for Folding**: Icons/buttons in the gutter to toggle folding.
+- [x] **FR-1.2.8: Visual Indicators for Folding**: Icons/buttons in the gutter to toggle folding.
 
 ## 🔵 UI & Auxiliary
 - [x] **FR-1.2.9: Zoom Logic**: Implement `IDWRITE_TEXT_FORMAT` scaling or D2D Transform for zoom.

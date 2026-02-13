@@ -178,6 +178,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{C6DF2BB9-1726-30CE-A7E9-2E8B58F2FDFC}</Project>
       <Name>ecode</Name>
     </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\test_editor_core.vcxproj">
+      <Project>{8AC88E85-5054-37E8-8DD2-FBB291850A25}</Project>
+      <Name>test_editor_core</Name>
+    </ProjectReference>
     <ProjectReference Include="D:\ws\Ecode\build\test_piecetable.vcxproj">
       <Project>{7B19E317-D4B5-3B7A-89D8-EB257CB009F5}</Project>
       <Name>test_piecetable</Name>

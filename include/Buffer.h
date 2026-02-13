@@ -9,6 +9,11 @@
 
 enum class Encoding { UTF8, UTF16LE, UTF16BE, ANSI };
 
+enum class SelectionMode {
+    Normal,
+    Box
+};
+
 class Buffer {
 public:
   Buffer();
@@ -39,6 +44,17 @@ public:
   void Redo();
   bool CanUndo() const;
   bool CanRedo() const;
+
+  void SelectLine(size_t lineIndex);
+
+  void SetSelectionMode(SelectionMode mode) { m_selectionMode = mode; }
+  SelectionMode GetSelectionMode() const { return m_selectionMode; }
+  
+  struct SelectionRange {
+    size_t start;
+    size_t end;
+  };
+  std::vector<SelectionRange> GetSelectionRanges() const;
 
   const std::wstring &GetPath() const { return m_filePath; }
   bool IsDirty() const { return m_isDirty; }
@@ -101,6 +117,7 @@ private:
   std::wstring m_filePath;
   std::unique_ptr<MemoryMappedFile> m_mmFile;
   PieceTable m_pieceTable;
+  SelectionMode m_selectionMode = SelectionMode::Normal;
   size_t m_caretPos;
   size_t m_selectionAnchor;
   size_t m_scrollLine;

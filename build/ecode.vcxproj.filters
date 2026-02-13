@@ -10,6 +10,12 @@
     <ClCompile Include="D:\ws\Ecode\src\Editor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\EditorBufferRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\EditorBufferRenderer_Draw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -22,10 +28,10 @@
     <ClCompile Include="D:\ws\Ecode\src\PieceTable.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="D:\ws\Ecode\src\Renderer.cpp">
+    <ClCompile Include="D:\ws\Ecode\src\ScriptEngine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="D:\ws\Ecode\src\ScriptEngine.cpp">
+    <ClCompile Include="D:\ws\Ecode\src\SettingsManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\main.cpp">
@@ -37,6 +43,11 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="D:\ws\Ecode\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="D:\ws\Ecode\src\Ecode.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">

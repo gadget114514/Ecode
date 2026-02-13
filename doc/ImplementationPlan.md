@@ -1,83 +1,43 @@
-# Implementation Plan - Native Win32 Text Editor
+# Implementation Plan - Ecode
 
-This plan outlines the steps to build a high-performance native Win32 text editor with the specified features.
+This document outlines the roadmap and current implementation focus for Ecode.
 
-## Phase 1: Setup and Dependencies
-- [ ] Generate Duktape source files from the repository using `tools/configure.py`.
-- [ ] Set up the Project structure (src, include, lib).
-- [ ] Create a basic `main.cpp` to verify the build environment and window creation.
+## Phase-based Roadmap (Original)
 
-## Phase 2: Core Data Structures (Engine)
-- [ ] **Piece Table**: Implement the core data structure to manage large text buffers efficiently.
-- [ ] **Memory Mapped File**: Implement a class to handle loading/saving of huge files using memory mapping.
-- [ ] **Safe File I/O**: Implement "save-to-temp-and-rename" strategy to prevent data loss.
-- [ ] **Buffer Management**: Support for multiple buffers (tabs) and line ending detection (CRLF/LF/CR).
+### Phase 1: Setup and Dependencies
+- [x] Set up the Project structure.
+- [x] Create basic `main.cpp`.
 
+[... other phases truncated ...]
 
-### Phase 3: Rendering System
-- [ ] **DirectWrite Integration**: Initialize DirectWrite factory and resources.
-- [ ] **Text Layout**: Implement text layout using `IDWriteTextLayout`.
-- [ ] **Rendering Loop**: Implement the `WM_PAINT` handler to draw text using Direct2D/DirectWrite.
-- [ ] **Font Handling**: 
-    - [ ] Create a `FontManager` class to encapsulate DirectWrite font resources.
-    - [ ] Implement font selection, sizing, and weight application.
-    - [ ] Integration with the JS API to allow `editor.setFont(family, size, weight)`.
+## 🛠 Current Focus: Feature Enhancements (2026-02-13)
 
-## Phase 4: Input and Interaction
-- [ ] **Keyboard Handling**: Implement Emacs-like key bindings (Ctrl+F, Ctrl+B, Ctrl+N, Ctrl+P, etc.).
-- [ ] **Mouse Handling**:
-    - [ ] Caret positioning.
-    - [ ] Standard selection (stream selection).
-    - [ ] **Block/Box Selection**: Implement rectangular selection (Alt+Drag or similar logic).
-    - [ ] Drag and Drop file support.
-- [ ] **Clipboard**: Support Cut/Copy/Paste for both stream and block selections.
+This section covers the immediate tasks identified in `TODO.md` to bring the editor to a more usable state.
 
-## Phase 5: Editor Features
-- [ ] **Undo/Redo**: Implement an unrestricted undo/redo history stack.
-- [ ] **Search and Replace**:
-    - [ ] Simple string search.
-    - [ ] Regex search (using `<regex>` or Duktape's engine if suitable, or a lightweight C++ lib).
-- [ ] **Theming & Colors**: 
-    - [ ] Implement a `ColorTheme` structure to store UI and syntax colors.
-    - [ ] Expose `editor.setTheme(themeObject)` to JavaScript.
-    - [ ] Implement basic syntax highlighting logic for common types.
+### 1. Scripting & Key Bindings
+- **Improve Emacs Bindings**: Update `ScriptEngine.cpp` to support more complex Emacs operations like variable `kill-line` and scrolling.
+- **Key Chord Handling**: Ensure chords like `Ctrl+K` correctly interface with the `Buffer` logic.
 
+### 2. Settings & Persistence
+- **SettingsManager**: A new component to handle saving/loading window state, language, and editor options to `%APPDATA%/Ecode/settings.ini`.
+- **Application Integration**: Hook into `WM_CREATE` and `WM_DESTROY` in `main.cpp` to persist state.
 
-## Phase 6: Scripting and Extensibility
-- [ ] **Duktape Integration**: Embed the Duktape engine.
-- [ ] **API Exposure**: Implement JS-to-C++ bindings for:
-    - [ ] **File/Buffer**: Open, Save, Close, Switch Tab.
-    - [ ] **Editing**: Insert, Delete, Replace, GetText.
-    - [ ] **Cursor**: 
-        - [ ] Movement logic for units: char, word, line, page, home/end.
-        - [ ] Position calculation: Absolute index <-> Line/Col conversion.
-        - [ ] Selection handling (Linear and Rectangular/Box).
-        - [ ] Caret visibility and scroll-into-view logic.
-    - [ ] **Visuals**: Toggle UI visibility (Tabs, Menu, Status), Fullscreen, Opacity controls.
-    - [ ] **Keybindings**: Mapping strings like "Ctrl+S" to JS callbacks.
-- [ ] **Initialization Script**: Load `ecodeinit.js` from the user's data folder.
-- [ ] **Scratch Buffer**: 
-    - [ ] Implement a "Scratch" buffer type that isn't bound to a file.
-    - [ ] Add a command (`Ctrl+Enter`) to evaluate the current line or selection in the Duktape VM.
-- [ ] **Macro Gallery**: Provide a set of built-in macros for common tasks.
+### 3. Gutter & Interaction
+- **Gutter Hit-Testing**: Enable selecting lines by clicking the gutter.
+- **Folding Toggles**: Implement visual indicators and click handlers in the gutter for the existing folding logic.
 
-## Phase 7: UI Polish
-- [ ] **Menus**: File, Edit, View, Config (Settings/Themes/Edit Script), Tools, Language, Buffers, Help.
-- [ ] **Context Menu**: Right-click menu.
-- [ ] **Tabs**: UI for switching between open files.
-- [ ] **Status Bar**: Show cursor position, encoding, etc.
+### 5. Emacs-like Incremental Search (Isearch)
+- **Keyboard Capture**: Implement a mechanism to redirect keyboard input to a JavaScript handler for "modal" operations like Isearch.
+- **Search Logic**: Implement `emacs_isearch_forward` and `emacs_isearch_backward` in JavaScript.
 
-## Phase 8: Localization
-- [ ] **Localization infrastructure**: Implement a system to load translated strings from JSON or JS objects.
-- [ ] **Language Support**: 
-    - [ ] Add English (default).
-    - [ ] Add Japanese translation.
-    - [ ] Add Spanish translation.
-    - [ ] Add French translation.
-    - [ ] Add German translation.
-- [ ] **UI Integration**: Dynamically update menus and dialogs when language is changed.
+### 6. Test Suite Organization [NEW]
+- **Directory Structure**: Create a `tests/` directory at the project root.
+- **Test Programs**: Migrate and organize all test scripts and programs into the `tests/` folder.
+- **Visual Feedback**: Use `setStatusText` to show "I-search: [query]" in the status bar.
+- **Match Highlighting**: Proactively move the caret and update selection as the user types.
 
-## Phase 9: Testing and refinement
+## Phase 10: Testing and Refinement (Updated)
 - [ ] Test with huge files.
 - [ ] Test Unicode support (UTF-8, UCS-2).
 - [ ] Verify memory stability.
+- [ ] **Manual verification of Isearch**: `Ctrl+S` -> type "main" -> caret should move to each letter typed. `Ctrl+S` again -> skip to next match. `Enter` -> finalize. `Esc` -> revert.

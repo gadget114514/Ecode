@@ -374,3 +374,56 @@ size_t Buffer::GetPhysicalLine(size_t visualLineIndex) const {
   }
   return totalLines;
 }
+
+void Buffer::SelectLine(size_t lineIndex) {
+  if (lineIndex < GetTotalLines()) {
+    size_t start = GetLineOffset(lineIndex);
+    size_t end = (lineIndex < GetTotalLines() - 1) ? GetLineOffset(lineIndex + 1)
+                                                   : GetTotalLength();
+    SetSelectionAnchor(start);
+    SetCaretPos(end);
+  }
+}
+
+std::vector<Buffer::SelectionRange> Buffer::GetSelectionRanges() const {
+  std::vector<SelectionRange> ranges;
+  if (m_selectionMode == SelectionMode::Normal) {
+    if (m_caretPos != m_selectionAnchor) {
+      ranges.push_back({(std::min)(m_caretPos, m_selectionAnchor),
+                        (std::max)(m_caretPos, m_selectionAnchor)});
+    }
+  } else if (m_selectionMode == SelectionMode::Box) {
+    size_t startLine = GetLineAtOffset(m_selectionAnchor);
+    size_t endLine = GetLineAtOffset(m_caretPos);
+    size_t minLine = (std::min)(startLine, endLine);
+    size_t maxLine = (std::max)(startLine, endLine);
+
+    size_t anchorCol = m_selectionAnchor - GetLineOffset(startLine);
+    size_t caretCol = m_caretPos - GetLineOffset(endLine);
+    size_t minCol = (std::min)(anchorCol, caretCol);
+    size_t maxCol = (std::max)(anchorCol, caretCol);
+
+    for (size_t l = minLine; l <= maxLine; ++l) {
+      size_t lineStart = GetLineOffset(l);
+      size_t lineLength = (l < GetTotalLines() - 1)
+                              ? (GetLineOffset(l + 1) - lineStart)
+                              : (GetTotalLength() - lineStart);
+      
+      // Cleanup length (remove newline if needed)
+      std::string lineText = m_pieceTable.GetText(lineStart, lineLength);
+      while (!lineText.empty() && (lineText.back() == '\r' || lineText.back() == '\n')) {
+          lineText.pop_back();
+          lineLength--;
+      }
+
+      if (minCol <= lineLength) {
+        size_t actualStart = lineStart + minCol;
+        size_t actualEnd = lineStart + (std::min)(maxCol, lineLength);
+        if (actualStart < actualEnd) {
+          ranges.push_back({actualStart, actualEnd});
+        }
+      }
+    }
+  }
+  return ranges;
+}
