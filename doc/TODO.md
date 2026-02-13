@@ -14,20 +14,20 @@ This document tracks the detailed progress of Ecode features based on [REQUIREME
 - [x] **NFR-3.2.1: Safe Save**: Atomic-ish saving via temp files and renaming.
 
 ## 🟡 Partially Implemented / In Progress
-- [ ] **FR-1.2.2: Color Customization**: 
-  - [ ] Implement theme structure (JSON/JS based).
-  - [ ] Connect theme colors to `Renderer` (currently hardcoded White/Black/LightBlue).
-  - [ ] Support syntax highlighting colors (Comments, Keywords, etc.).
-- [ ] **FR-1.2.3: Font Support**:
+- [x] **FR-1.2.2: Color Customization**: 
+  - [x] Implement theme structure (JSON/JS based).
+  - [x] Connect theme colors to `Renderer` (Done).
+  - [x] Support syntax highlighting colors (Done).
+- [x] **FR-1.2.3: Font Support**:
   - [x] `Renderer::SetFont` implemented.
-  - [ ] Need UI/JS API to change font family/size/weight dynamically.
-- [ ] **FR-1.3.3: Selection Modes**:
+  - [x] UI/JS API to change font family/size/weight dynamically.
+- [x] **FR-1.3.3: Selection Modes**:
   - [x] Stream Selection (Done).
-  - [ ] Box/Block (Rectangular) Selection logic and rendering.
-- [ ] **FR-1.7.3: API Exposure**:
+  - [x] Box/Block (Rectangular) Selection logic and rendering.
+- [x] **FR-1.7.3: API Exposure**:
   - [x] Basic `Evaluate` and script execution (Done).
   - [x] Implement `moveCursor`, `getCursorPos`, `setCursorPos`, `getSelection`, `setSelection` (Done).
-  - [ ] Implement File/Buffer management APIs (`open`, `close`, `switchBuffer`).
+  - [x] Implement File/Buffer management APIs (`open`, `close`, `switchBuffer`).
 - [ ] **FR-1.1.3: Large File Support**: Verify performance with >1GB files; optimize multi-piece rendering if needed.
 - [ ] **FR-1.2.4: Text Wrapping**:
   - [x] Word wrap logic in `Renderer` (Done).
@@ -57,9 +57,9 @@ This document tracks the detailed progress of Ecode features based on [REQUIREME
 
 ## 🔵 UI & Auxiliary
 - [x] **FR-1.2.9: Zoom Logic**: Implement `IDWRITE_TEXT_FORMAT` scaling or D2D Transform for zoom.
-- [ ] **FR-1.7.4: Macro Gallery UI**: UI for browsing scripts.
-- [ ] **FR-1.9.2: Jump to Line Dialog**: Small input dialog for offset navigation.
-- [ ] **FR-1.5.3: Recent Files/Folders**: Track history in the File menu.
+- [x] **FR-1.7.4: Macro Gallery UI**: UI for browsing scripts.
+- [x] **FR-1.9.2: Jump to Line Dialog**: Small input dialog for offset navigation.
+- [x] **FR-1.5.3: Recent Files/Folders**: Track history in the File menu.
 - [x] **FR-1.9.3: Test Suite**: Core feature testing (src/test_editor_core.cpp).
 - [x] **FR-1.9.4: CLI Support**: Execute JS via command line (-e flag).
 - [x] **FR-1.2.10: Scrolling**: 
@@ -69,4 +69,4 @@ This document tracks the detailed progress of Ecode features based on [REQUIREME
   - [x] Horizontal (`SB_HORZ`) scrollbar.
 
 ---
-*Last Updated: 2026-02-11*
+*Last Updated: 2026-02-13*

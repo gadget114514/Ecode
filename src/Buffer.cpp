@@ -178,11 +178,22 @@ void Buffer::Replace(size_t start, size_t end, const std::string &replacement) {
 }
 
 std::string Buffer::GetSelectedText() const {
-  size_t start, end;
-  GetSelectionRange(start, end);
-  if (start == end)
+  std::vector<SelectionRange> ranges = GetSelectionRanges();
+  if (ranges.empty())
     return "";
-  return GetText(start, end - start);
+  
+  if (ranges.size() == 1) {
+    return GetText(ranges[0].start, ranges[0].end - ranges[0].start);
+  }
+
+  std::string result;
+  for (size_t i = 0; i < ranges.size(); ++i) {
+    result += GetText(ranges[i].start, ranges[i].end - ranges[i].start);
+    if (i < ranges.size() - 1) {
+      result += "\n";
+    }
+  }
+  return result;
 }
 
 void Buffer::UpdateDesiredColumn() {
@@ -258,15 +269,51 @@ void Buffer::MoveCaretPageDown(size_t linesPerPage) {
   SetCaretPos(lineStart + (std::min)(m_desiredColumn, lineLen));
 }
 
+void Buffer::MoveCaretByChar(int delta) {
+  if (delta == 0) return;
+  
+  std::string text = m_pieceTable.GetText(0, m_pieceTable.GetTotalLength());
+  size_t pos = m_caretPos;
+  size_t total = text.length();
+
+  if (delta > 0) {
+    for (int i = 0; i < delta && pos < total; ++i) {
+      unsigned char c = static_cast<unsigned char>(text[pos]);
+      if (c < 0x80) pos += 1;
+      else if ((c & 0xE0) == 0xC0) pos += 2;
+      else if ((c & 0xF0) == 0xE0) pos += 3;
+      else if ((c & 0xF8) == 0xF0) pos += 4;
+      else pos += 1; // Fallback for invalid sequence
+    }
+  } else {
+    for (int i = 0; i < -delta && pos > 0; ++i) {
+      pos--;
+      while (pos > 0 && (static_cast<unsigned char>(text[pos]) & 0xC0) == 0x80) {
+        pos--;
+      }
+    }
+  }
+  
+  SetCaretPos((std::min)(pos, total));
+  UpdateDesiredColumn();
+}
+
 void Buffer::DeleteSelection() {
-  size_t start, end;
-  GetSelectionRange(start, end);
-  if (start == end)
+  std::vector<SelectionRange> ranges = GetSelectionRanges();
+  if (ranges.empty())
     return;
 
-  Delete(start, end - start);
-  m_caretPos = start;
-  m_selectionAnchor = start;
+  // Delete ranges backwards to keep offsets valid
+  std::sort(ranges.begin(), ranges.end(), [](const SelectionRange& a, const SelectionRange& b) {
+      return a.start > b.start;
+  });
+
+  for (const auto& r : ranges) {
+      Delete(r.start, r.end - r.start);
+  }
+
+  m_caretPos = ranges.back().start; // Reset to start of first (now last in sorted) range
+  m_selectionAnchor = m_caretPos;
 }
 
 void Buffer::Undo() {

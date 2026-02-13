@@ -64,6 +64,9 @@
 // Buffers menu: 700-799
 #define IDM_BUFFERS_LIST 701
 
+// Recent Files menu: 2000-2010
+#define IDM_RECENT_START 2000
+
 // Buffers menu: 1000-1999
 #define IDM_BUFFERS_START 1000
 
@@ -198,6 +201,19 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE, L10N("menu_file_save"));
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE_AS, L10N("menu_file_save_as"));
   AppendMenu(hFile, MF_STRING, IDM_FILE_CLOSE, L10N("menu_file_close"));
+  
+  // Recent Files Submenu
+  HMENU hRecent = CreatePopupMenu();
+  const auto &recent = SettingsManager::Instance().GetRecentFiles();
+  if (recent.empty()) {
+    AppendMenu(hRecent, MF_GRAYED, 0, L10N("menu_file_recent_empty"));
+  } else {
+    for (size_t i = 0; i < recent.size(); ++i) {
+      AppendMenu(hRecent, MF_STRING, IDM_RECENT_START + i, recent[i].c_str());
+    }
+  }
+  AppendMenu(hFile, MF_POPUP, (UINT_PTR)hRecent, L10N("menu_file_recent"));
+
   AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
   AppendMenu(hFile, MF_STRING, IDM_FILE_SCRATCH, L10N("menu_file_scratch"));
   AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
@@ -526,6 +542,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       std::wstring path = Dialogs::OpenFileDialog(hwnd);
       if (!path.empty()) {
         g_editor->OpenFile(path);
+        SettingsManager::Instance().AddRecentFile(path);
+        UpdateMenu(hwnd);
       }
       break;
     }
@@ -546,8 +564,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       Buffer *buf = g_editor->GetActiveBuffer();
       if (buf) {
         std::wstring path = Dialogs::SaveFileDialog(hwnd);
-        if (!path.empty())
+        if (!path.empty()) {
           buf->SaveFile(path);
+          SettingsManager::Instance().AddRecentFile(path);
+          UpdateMenu(hwnd);
+        }
       }
       break;
     }
@@ -592,6 +613,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       g_hDlgFind = FindTextW(&g_fr);
       break;
     }
+    case IDM_EDIT_GOTO:
+      Dialogs::ShowJumpToLineDialog(hwnd);
+      break;
     case IDM_EDIT_REPLACE: {
       ZeroMemory(&g_fr, sizeof(g_fr));
       g_fr.lStructSize = sizeof(g_fr);
@@ -642,6 +666,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           LOWORD(wParam) < IDM_BUFFERS_START + 100) {
         g_editor->SwitchToBuffer(LOWORD(wParam) - IDM_BUFFERS_START);
         UpdateMenu(hwnd);
+      } else if (LOWORD(wParam) >= IDM_RECENT_START &&
+                 LOWORD(wParam) < IDM_RECENT_START + 10) {
+        size_t index = LOWORD(wParam) - IDM_RECENT_START;
+        const auto &recent = SettingsManager::Instance().GetRecentFiles();
+        if (index < recent.size()) {
+          g_editor->OpenFile(recent[index]);
+          SettingsManager::Instance().AddRecentFile(recent[index]);
+          UpdateMenu(hwnd);
+        }
       }
       break;
     }
@@ -695,7 +728,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         physicalLineNumbers.push_back(activeBuffer->GetPhysicalLine(i));
       }
 
+      auto highlights = activeBuffer->GetHighlights();
+
       g_renderer->DrawEditorLines(content, visualCaret, &selectionRanges,
+                         &highlights,
                          activeBuffer->GetScrollLine() + 1,
                          activeBuffer->GetScrollX(), &physicalLineNumbers,
                          activeBuffer->GetTotalLines());

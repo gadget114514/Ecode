@@ -9,6 +9,7 @@ extern std::unique_ptr<Editor> g_editor;
 
 void EditorBufferRenderer::DrawEditorLines(const std::string &text, size_t caretPos,
                        const std::vector<Buffer::SelectionRange> *selectionRanges,
+                       const std::vector<Buffer::HighlightRange> *highlights,
                        size_t firstLineNumber, float scrollX,
                        const std::vector<size_t> *physicalLineNumbers,
                        size_t totalLinesEstimate) {
@@ -63,6 +64,40 @@ void EditorBufferRenderer::DrawEditorLines(const std::string &text, size_t caret
 
   if (SUCCEEDED(hr)) {
     textLayout->SetLocaleName(locale.c_str(), {0, (UINT32)wtext.size()});
+
+    if (this->m_enableLigatures) {
+      Microsoft::WRL::ComPtr<IDWriteTypography> typography;
+      if (SUCCEEDED(this->m_dwriteFactory->CreateTypography(&typography))) {
+        DWRITE_FONT_FEATURE feature = {DWRITE_FONT_FEATURE_TAG_STANDARD_LIGATURES, 1};
+        typography->AddFontFeature(feature);
+        textLayout->SetTypography(typography.Get(), {0, (UINT32)wtext.size()});
+      }
+    }
+    }
+
+    // Apply Syntax Highlighting
+    if (highlights && !highlights->empty()) {
+      for (const auto &hrange : *highlights) {
+        int startChar = MultiByteToWideChar(
+            CP_UTF8, 0, text.c_str(), static_cast<int>(hrange.start), NULL, 0);
+        int endChar = MultiByteToWideChar(
+            CP_UTF8, 0, text.c_str(),
+            static_cast<int>(hrange.start + hrange.length), NULL, 0);
+
+        ID2D1SolidColorBrush *hBrush = nullptr;
+        switch (hrange.type) {
+        case 1: hBrush = this->m_keywordBrush.Get(); break;
+        case 2: hBrush = this->m_stringBrush.Get(); break;
+        case 3: hBrush = this->m_numberBrush.Get(); break;
+        case 4: hBrush = this->m_commentBrush.Get(); break;
+        case 5: hBrush = this->m_functionBrush.Get(); break;
+        }
+        if (hBrush) {
+          textLayout->SetDrawingEffect(
+              hBrush, {(UINT32)startChar, (UINT32)(endChar - startChar)});
+        }
+      }
+    }
   }
 
   if (SUCCEEDED(hr)) {

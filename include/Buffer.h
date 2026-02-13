@@ -56,6 +56,18 @@ public:
   };
   std::vector<SelectionRange> GetSelectionRanges() const;
 
+  struct HighlightRange {
+    size_t start;
+    size_t length;
+    int type; // 0: normal, 1: keyword, 2: string, 3: number, 4: comment, 5: function
+  };
+  void SetHighlights(const std::vector<HighlightRange> &highlights) {
+    m_highlights = highlights;
+  }
+  const std::vector<HighlightRange> &GetHighlights() const {
+    return m_highlights;
+  }
+
   const std::wstring &GetPath() const { return m_filePath; }
   bool IsDirty() const { return m_isDirty; }
 
@@ -81,6 +93,7 @@ public:
   void MoveCaretEnd();
   void MoveCaretPageUp(size_t linesPerPage);
   void MoveCaretPageDown(size_t linesPerPage);
+  void MoveCaretByChar(int delta);
 
   void UpdateDesiredColumn();
 
@@ -126,6 +139,7 @@ private:
   Encoding m_encoding;
   std::string m_convertedData; // For files that need conversion (UTF-16)
   std::set<size_t> m_foldedLines;
+  std::vector<HighlightRange> m_highlights;
   bool m_isDirty;
   bool m_isScratch;
 };
