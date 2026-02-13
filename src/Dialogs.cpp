@@ -163,6 +163,10 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                      g_renderer->GetWordWrap() ? BST_CHECKED : BST_UNCHECKED);
       SetDlgItemInt(hDlg, IDC_WRAP_WIDTH,
                     static_cast<UINT>(g_renderer->GetWrapWidth()), FALSE);
+      SetDlgItemInt(hDlg, IDC_FONT_WEIGHT,
+                    static_cast<UINT>(g_renderer->GetFontWeight()), FALSE);
+      CheckDlgButton(hDlg, IDC_ENABLE_LIGATURES,
+                     g_renderer->GetEnableLigatures() ? BST_CHECKED : BST_UNCHECKED);
     }
 
     HWND hCombo = GetDlgItem(hDlg, IDC_LANGUAGE);
@@ -186,11 +190,14 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       BOOL showPhysical = IsDlgButtonChecked(hDlg, IDC_SHOW_PHYSICAL_LINE_NUMS);
       BOOL wordWrap = IsDlgButtonChecked(hDlg, IDC_WORD_WRAP);
       UINT wrapWidth = GetDlgItemInt(hDlg, IDC_WRAP_WIDTH, NULL, FALSE);
+      UINT fontWeight = GetDlgItemInt(hDlg, IDC_FONT_WEIGHT, NULL, FALSE);
+      BOOL enableLigatures = IsDlgButtonChecked(hDlg, IDC_ENABLE_LIGATURES);
       int lang =
           (int)SendMessage(GetDlgItem(hDlg, IDC_LANGUAGE), CB_GETCURSEL, 0, 0);
 
       if (g_renderer) {
-        g_renderer->SetFont(fontFamily, (float)fontSize);
+        g_renderer->SetFont(fontFamily, (float)fontSize, static_cast<DWRITE_FONT_WEIGHT>(fontWeight));
+        g_renderer->SetEnableLigatures(enableLigatures == BST_CHECKED);
         g_renderer->SetShowLineNumbers(showLineNums == BST_CHECKED);
         g_renderer->SetShowPhysicalLineNumbers(showPhysical == BST_CHECKED);
         g_renderer->SetWordWrap(wordWrap == BST_CHECKED);

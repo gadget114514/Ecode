@@ -25,6 +25,14 @@ public:
     void SetLanguage(int lang) { m_language = lang; }
     bool IsWordWrap() const { return m_wordWrap; }
     void SetWordWrap(bool wrap) { m_wordWrap = wrap; }
+    int GetFontWeight() const { return m_fontWeight; }
+    void SetFontWeight(int weight) { m_fontWeight = weight; }
+    bool IsEnableLigatures() const { return m_enableLigatures; }
+    bool IsEnableLigatures() const { return m_enableLigatures; }
+    void SetEnableLigatures(bool enable) { m_enableLigatures = enable; }
+
+    const std::vector<std::wstring>& GetRecentFiles() const { return m_recentFiles; }
+    void AddRecentFile(const std::wstring& path);
 
 private:
     SettingsManager();
@@ -36,4 +44,7 @@ private:
     float m_fontSize;
     int m_language;
     bool m_wordWrap;
+    int m_fontWeight;
+    bool m_enableLigatures;
+    std::vector<std::wstring> m_recentFiles;
 };

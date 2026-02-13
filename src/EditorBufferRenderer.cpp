@@ -11,7 +11,8 @@ extern std::unique_ptr<Editor> g_editor;
 #pragma comment(lib, "dwrite.lib")
 
 EditorBufferRenderer::EditorBufferRenderer()
-    : m_hwnd(NULL), m_fontSize(12.0f), m_fontFamily(L"Consolas") {}
+    : m_hwnd(NULL), m_fontSize(12.0f), m_fontFamily(L"Consolas"), 
+      m_fontWeight(DWRITE_FONT_WEIGHT_NORMAL), m_enableLigatures(true) {}
 
 EditorBufferRenderer::~EditorBufferRenderer() {}
 
@@ -60,6 +61,11 @@ bool EditorBufferRenderer::CreateDeviceResources() {
     m_renderTarget->CreateSolidColorBrush(m_theme.caret, &m_caretBrush);
     m_renderTarget->CreateSolidColorBrush(m_theme.selection, &m_selBrush);
     m_renderTarget->CreateSolidColorBrush(m_theme.lineNumbers, &m_lnBrush);
+    m_renderTarget->CreateSolidColorBrush(m_theme.keyword, &m_keywordBrush);
+    m_renderTarget->CreateSolidColorBrush(m_theme.string, &m_stringBrush);
+    m_renderTarget->CreateSolidColorBrush(m_theme.number, &m_numberBrush);
+    m_renderTarget->CreateSolidColorBrush(m_theme.comment, &m_commentBrush);
+    m_renderTarget->CreateSolidColorBrush(m_theme.function, &m_functionBrush);
   }
 
   return SUCCEEDED(hr);
@@ -72,16 +78,17 @@ void EditorBufferRenderer::DiscardDeviceResources() {
   m_caretBrush.Reset();
   m_selBrush.Reset();
   m_lnBrush.Reset();
+  m_keywordBrush.Reset();
+  m_stringBrush.Reset();
+  m_numberBrush.Reset();
+  m_commentBrush.Reset();
+  m_functionBrush.Reset();
 }
 
 void EditorBufferRenderer::Resize(UINT width, UINT height) {
   if (m_renderTarget) {
     m_renderTarget->Resize(D2D1::SizeU(width, height));
   }
-}
-
-
-  m_renderTarget->EndDraw();
 }
 
 size_t EditorBufferRenderer::GetPositionFromPoint(const std::string &text, float x,
@@ -199,16 +206,17 @@ float EditorBufferRenderer::GetTextWidth(const std::string &text) {
   return 0.0f;
 }
 
-void EditorBufferRenderer::SetFont(const std::wstring &familyName, float fontSize) {
+void EditorBufferRenderer::SetFont(const std::wstring &familyName, float fontSize, DWRITE_FONT_WEIGHT weight) {
   m_fontFamily = familyName;
   m_fontSize = fontSize;
+  m_fontWeight = weight;
   UpdateFontFormat();
 }
 
 void EditorBufferRenderer::UpdateFontFormat() {
   m_textFormat.Reset();
   m_dwriteFactory->CreateTextFormat(
-      m_fontFamily.c_str(), NULL, DWRITE_FONT_WEIGHT_NORMAL,
+      m_fontFamily.c_str(), NULL, m_fontWeight,
       DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, m_fontSize,
       L"en-us", &m_textFormat);
 }

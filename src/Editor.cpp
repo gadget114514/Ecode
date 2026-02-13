@@ -101,8 +101,37 @@ void Editor::Paste(HWND hwnd) {
         if (active) {
           if (active->HasSelection())
             active->DeleteSelection();
-          active->Insert(active->GetCaretPos(), text.data());
-          active->MoveCaret(static_cast<int>(strlen(text.data())));
+
+          if (active->GetSelectionMode() == SelectionMode::Box) {
+              // Block paste logic: split clipboard text by lines and insert each line
+              // into sequential lines starting at the caret row/column.
+              std::string clipText(text.data());
+              std::vector<std::string> lines;
+              size_t start = 0, end;
+              while ((end = clipText.find('\n', start)) != std::string::npos) {
+                  std::string line = clipText.substr(start, end - start);
+                  if (!line.empty() && line.back() == '\r') line.pop_back();
+                  lines.push_back(line);
+                  start = end + 1;
+              }
+              lines.push_back(clipText.substr(start));
+
+              size_t startLine = active->GetLineAtOffset(active->GetCaretPos());
+              size_t startCol = active->GetCaretPos() - active->GetLineOffset(startLine);
+
+              for (size_t i = 0; i < lines.size(); ++i) {
+                  size_t currentLine = startLine + i;
+                  if (currentLine >= active->GetTotalLines()) {
+                      active->Insert(active->GetTotalLength(), "\n");
+                  }
+                  size_t lineOffset = active->GetLineOffset(currentLine);
+                  size_t insertPos = lineOffset + (std::min)(startCol, active->GetLineOffset(currentLine + 1) - lineOffset - 1);
+                  active->Insert(insertPos, lines[i]);
+              }
+          } else {
+            active->Insert(active->GetCaretPos(), text.data());
+            active->MoveCaret(static_cast<int>(strlen(text.data())));
+          }
         }
       }
     }

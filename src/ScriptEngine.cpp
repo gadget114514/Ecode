@@ -38,13 +38,15 @@ static duk_ret_t js_editor_set_status_text(duk_context *ctx) {
   const char *text = duk_get_string(ctx, 0);
   std::wstring ws = StringToWString(text);
   SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)ws.c_str());
-  return 0;
+  duk_push_boolean(ctx, true);
+  return 1;
 }
 
 static duk_ret_t js_editor_set_progress(duk_context *ctx) {
   int value = (int)duk_get_number(ctx, 0);
   SendMessage(g_progressHwnd, PBM_SETPOS, value, 0);
-  return 0;
+  duk_push_boolean(ctx, true);
+  return 1;
 }
 
 // JS-to-C++ Bridge Functions for Dialogs
@@ -72,8 +74,11 @@ static duk_ret_t js_editor_set_key_handler(duk_context *ctx) {
   const char *funcName = duk_get_string(ctx, 0);
   if (g_scriptEngine) {
     g_scriptEngine->SetKeyHandler(funcName);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_insert(duk_context *ctx) {
@@ -82,8 +87,11 @@ static duk_ret_t js_editor_insert(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->Insert(pos, text);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_delete(duk_context *ctx) {
@@ -92,8 +100,11 @@ static duk_ret_t js_editor_delete(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->Delete(pos, len);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_get_text(duk_context *ctx) {
@@ -131,8 +142,11 @@ static duk_ret_t js_editor_set_caret_pos(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->SetCaretPos(pos);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_move_caret(duk_context *ctx) {
@@ -140,50 +154,96 @@ static duk_ret_t js_editor_move_caret(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->MoveCaret(delta);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_move_caret_by_char(duk_context *ctx) {
+  int delta = (int)duk_get_number(ctx, 0);
+  Buffer *buf = g_editor->GetActiveBuffer();
+  if (buf) {
+    buf->MoveCaretByChar(delta);
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_move_caret_up(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->MoveCaretUp();
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_move_caret_down(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->MoveCaretDown();
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_move_caret_home(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->MoveCaretHome();
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_move_caret_end(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->MoveCaretEnd();
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_set_font(duk_context *ctx) {
   const char *family = duk_get_string(ctx, 0);
   float size = static_cast<float>(duk_get_number(ctx, 1));
+  int weight = DWRITE_FONT_WEIGHT_NORMAL;
+  if (duk_is_number(ctx, 2)) {
+      weight = (int)duk_get_number(ctx, 2);
+  }
+
   std::wstring ws = StringToWString(family);
   if (g_renderer) {
-    g_renderer->SetFont(ws, size);
+    g_renderer->SetFont(ws, size, static_cast<DWRITE_FONT_WEIGHT>(weight));
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_set_ligatures(duk_context *ctx) {
+    bool enable = duk_get_boolean(ctx, 0);
+    if (g_renderer) {
+        bool old = g_renderer->SetLigatures(enable);
+        duk_push_boolean(ctx, old);
+        return 1;
+    }
+    duk_push_boolean(ctx, false);
+    return 1;
 }
 
 static duk_ret_t js_editor_set_selection_anchor(duk_context *ctx) {
@@ -191,54 +251,95 @@ static duk_ret_t js_editor_set_selection_anchor(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->SetSelectionAnchor(pos);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_set_selection_mode(duk_context *ctx) {
+    int mode = duk_get_int(ctx, 0);
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf) {
+        buf->SetSelectionMode(static_cast<SelectionMode>(mode));
+        duk_push_boolean(ctx, true);
+        return 1;
+    }
+    duk_push_boolean(ctx, false);
+    return 1;
 }
 
 static duk_ret_t js_editor_copy(duk_context *ctx) {
-  if (g_editor)
+  if (g_editor) {
     g_editor->Copy(g_mainHwnd);
-  return 0;
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_cut(duk_context *ctx) {
-  if (g_editor)
+  if (g_editor) {
     g_editor->Cut(g_mainHwnd);
-  return 0;
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_paste(duk_context *ctx) {
-  if (g_editor)
+  if (g_editor) {
     g_editor->Paste(g_mainHwnd);
-  return 0;
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_undo(duk_context *ctx) {
-  if (g_editor)
+  if (g_editor) {
     g_editor->Undo();
-  return 0;
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_redo(duk_context *ctx) {
-  if (g_editor)
+  if (g_editor) {
     g_editor->Redo();
-  return 0;
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_show_line_numbers(duk_context *ctx) {
   bool show = duk_get_boolean(ctx, 0);
   if (g_renderer) {
-    g_renderer->SetShowLineNumbers(show);
+    bool old = g_renderer->SetShowLineNumbers(show);
+    duk_push_boolean(ctx, old);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false); // Or whatever error return
+  return 1;
 }
 
 static duk_ret_t js_editor_show_physical_line_numbers(duk_context *ctx) {
   bool show = duk_get_boolean(ctx, 0);
   if (g_renderer) {
-    g_renderer->SetShowPhysicalLineNumbers(show);
+    bool old = g_renderer->SetShowPhysicalLineNumbers(show);
+    duk_push_boolean(ctx, old);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static D2D1_COLOR_F ParseColor(const char *hex) {
@@ -255,7 +356,10 @@ static D2D1_COLOR_F ParseColor(const char *hex) {
 }
 
 static duk_ret_t js_editor_set_theme(duk_context *ctx) {
-  if (!duk_is_object(ctx, 0)) return 0;
+  if (!duk_is_object(ctx, 0)) {
+      duk_push_boolean(ctx, false);
+      return 1;
+  }
   
   Theme theme;
   
@@ -281,8 +385,11 @@ static duk_ret_t js_editor_set_theme(duk_context *ctx) {
 
   if (g_renderer) {
     g_renderer->SetTheme(theme);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_switch_buffer(duk_context *ctx) {
@@ -291,8 +398,11 @@ static duk_ret_t js_editor_switch_buffer(duk_context *ctx) {
     g_editor->SwitchToBuffer(index);
     UpdateMenu(g_mainHwnd);
     InvalidateRect(g_mainHwnd, NULL, FALSE);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_close(duk_context *ctx) {
@@ -300,8 +410,11 @@ static duk_ret_t js_editor_close(duk_context *ctx) {
     g_editor->CloseBuffer(g_editor->GetActiveBufferIndex());
     UpdateMenu(g_mainHwnd);
     InvalidateRect(g_mainHwnd, NULL, FALSE);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_new_file(duk_context *ctx) {
@@ -309,8 +422,11 @@ static duk_ret_t js_editor_new_file(duk_context *ctx) {
     g_editor->NewFile();
     UpdateMenu(g_mainHwnd);
     InvalidateRect(g_mainHwnd, NULL, FALSE);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_toggle_fullscreen(duk_context *ctx) {
@@ -318,6 +434,7 @@ static duk_ret_t js_editor_toggle_fullscreen(duk_context *ctx) {
     static RECT oldPos;
     static LONG oldStyle;
 
+    bool prev = isFullscreen;
     if (!isFullscreen) {
         GetWindowRect(g_mainHwnd, &oldPos);
         oldStyle = GetWindowLong(g_mainHwnd, GWL_STYLE);
@@ -335,49 +452,103 @@ static duk_ret_t js_editor_toggle_fullscreen(duk_context *ctx) {
                      SWP_FRAMECHANGED);
         isFullscreen = false;
     }
-    return 0;
+    duk_push_boolean(ctx, prev);
+    return 1;
+}
+
+static duk_ret_t js_editor_set_highlights(duk_context *ctx) {
+    if (!duk_is_array(ctx, 0)) {
+        duk_push_boolean(ctx, false);
+        return 1;
+    }
+    
+    std::vector<Buffer::HighlightRange> highlights;
+    duk_size_t n = duk_get_length(ctx, 0);
+    for (duk_size_t i = 0; i < n; i++) {
+        duk_get_prop_index(ctx, 0, i);
+        if (duk_is_object(ctx, -1)) {
+            Buffer::HighlightRange h;
+            duk_get_prop_string(ctx, -1, "start");
+            h.start = (size_t)duk_get_number(ctx, -1);
+            duk_pop(ctx);
+            duk_get_prop_string(ctx, -1, "length");
+            h.length = (size_t)duk_get_number(ctx, -1);
+            duk_pop(ctx);
+            duk_get_prop_string(ctx, -1, "type");
+            h.type = (int)duk_get_number(ctx, -1);
+            duk_pop(ctx);
+            highlights.push_back(h);
+        }
+        duk_pop(ctx);
+    }
+    
+    Buffer *buf = g_editor ? g_editor->GetActiveBuffer() : nullptr;
+    if (buf) {
+        buf->SetHighlights(highlights);
+        duk_push_boolean(ctx, true);
+        return 1;
+    }
+    duk_push_boolean(ctx, false);
+    return 1;
 }
 
 static duk_ret_t js_editor_show_tabs(duk_context *ctx) {
   bool show = duk_get_boolean(ctx, 0);
+  bool old = IsWindowVisible(g_tabHwnd) != 0;
   ShowWindow(g_tabHwnd, show ? SW_SHOW : SW_HIDE);
   SendMessage(g_mainHwnd, WM_SIZE, 0, 0); // Trigger resize
-  return 0;
+  duk_push_boolean(ctx, old);
+  return 1;
 }
 
 static duk_ret_t js_editor_show_status_bar(duk_context *ctx) {
   bool show = duk_get_boolean(ctx, 0);
+  bool old = IsWindowVisible(g_statusHwnd) != 0;
   ShowWindow(g_statusHwnd, show ? SW_SHOW : SW_HIDE);
   SendMessage(g_mainHwnd, WM_SIZE, 0, 0);
-  return 0;
+  duk_push_boolean(ctx, old);
+  return 1;
 }
 
 static duk_ret_t js_editor_show_menu_bar(duk_context *ctx) {
   bool show = duk_get_boolean(ctx, 0);
+  bool old = GetMenu(g_mainHwnd) != NULL;
   if (show) {
     UpdateMenu(g_mainHwnd);
   } else {
     SetMenu(g_mainHwnd, NULL);
   }
-  return 0;
+  duk_push_boolean(ctx, old);
+  return 1;
 }
 
 static duk_ret_t js_editor_set_opacity(duk_context *ctx) {
   float opacity = (float)duk_get_number(ctx, 0);
   LONG exStyle = GetWindowLong(g_mainHwnd, GWL_EXSTYLE);
   SetWindowLong(g_mainHwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-  SetLayeredWindowAttributes(g_mainHwnd, 0, (BYTE)(opacity * 255), LWA_ALPHA);
-  return 0;
+  if (SetLayeredWindowAttributes(g_mainHwnd, 0, (BYTE)(opacity * 255), LWA_ALPHA)) {
+      duk_push_boolean(ctx, true);
+  } else {
+      duk_push_boolean(ctx, false);
+  }
+  return 1;
 }
 
 static duk_ret_t js_editor_open(duk_context *ctx) {
   const char *path = duk_get_string(ctx, 0);
   std::string s(path);
-  std::wstring ws(s.begin(), s.end());
+  std::wstring ws(s.begin(), s.size() == 0 ? s.end() : s.begin() + s.size());
+  // Note: the above is a bit messy, let's just use StringToWString
+  std::wstring wpath = StringToWString(path);
   if (g_editor) {
-    g_editor->OpenFile(ws);
+    size_t index = g_editor->OpenFile(wpath);
+    if (index != static_cast<size_t>(-1)) {
+        duk_push_boolean(ctx, true);
+        return 1;
+    }
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_get_total_lines(duk_context *ctx) {
@@ -412,17 +583,23 @@ static duk_ret_t js_editor_get_line_offset(duk_context *ctx) {
 static duk_ret_t js_editor_set_word_wrap(duk_context *ctx) {
   bool wrap = duk_get_boolean(ctx, 0);
   if (g_renderer) {
-    g_renderer->SetWordWrap(wrap);
+    bool old = g_renderer->SetWordWrap(wrap);
+    duk_push_boolean(ctx, old);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_set_wrap_width(duk_context *ctx) {
   float width = (float)duk_get_number(ctx, 0);
   if (g_renderer) {
     g_renderer->SetWrapWidth(width);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_find(duk_context *ctx) {
@@ -444,15 +621,40 @@ static duk_ret_t js_editor_find(duk_context *ctx) {
   return 1;
 }
 
-// Bridging the ScriptEngine itself for SetKeyBinding
+static duk_ret_t js_editor_get_buffers(duk_context *ctx) {
+    if (!g_editor) return 0;
+    const auto& buffers = g_editor->GetBuffers();
+    duk_push_array(ctx);
+    for (size_t i = 0; i < buffers.size(); ++i) {
+        duk_push_object(ctx);
+        duk_push_number(ctx, (double)i);
+        duk_put_prop_string(ctx, -2, "index");
+        
+        std::string path = WStringToString(buffers[i]->GetPath());
+        duk_push_string(ctx, path.c_str());
+        duk_put_prop_string(ctx, -2, "path");
+        
+        duk_push_boolean(ctx, buffers[i]->IsDirty());
+        duk_put_prop_string(ctx, -2, "isDirty");
+        
+        duk_push_boolean(ctx, buffers[i]->IsScratch());
+        duk_put_prop_string(ctx, -2, "isScratch");
+        
+        duk_put_prop_index(ctx, -2, (duk_uarridx_t)i);
+    }
+    return 1;
+}
 // We already have extern g_scriptEngine at the top
 
 static duk_ret_t js_editor_set_capture_keyboard(duk_context *ctx) {
   bool capture = duk_get_boolean(ctx, 0);
   if (g_scriptEngine) {
     g_scriptEngine->SetCaptureKeyboard(capture);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
 }
 
 static duk_ret_t js_editor_set_key_binding(duk_context *ctx) {
@@ -460,8 +662,35 @@ static duk_ret_t js_editor_set_key_binding(duk_context *ctx) {
   const char *funcName = duk_get_string(ctx, 1);
   if (g_scriptEngine) {
     g_scriptEngine->RegisterBinding(chord, funcName);
+    duk_push_boolean(ctx, true);
+    return 1;
   }
-  return 0;
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_jump_to_line(duk_context *ctx) {
+    size_t lineNum = (size_t)duk_get_number(ctx, 0);
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf && lineNum > 0 && lineNum <= buf->GetTotalLines()) {
+        size_t offset = buf->GetLineOffset(lineNum - 1);
+        buf->SetCaretPos(offset);
+        buf->SetSelectionAnchor(offset);
+        duk_push_boolean(ctx, true);
+        return 1;
+    }
+    duk_push_boolean(ctx, false);
+    return 1;
+}
+
+static duk_ret_t js_editor_show_jump_to_line(duk_context *ctx) {
+    if (g_mainHwnd) {
+        Dialogs::ShowJumpToLineDialog(g_mainHwnd);
+        duk_push_boolean(ctx, true);
+        return 1;
+    }
+    duk_push_boolean(ctx, false);
+    return 1;
 }
 
 ScriptEngine::ScriptEngine() : m_ctx(nullptr) {}
@@ -495,6 +724,8 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "setCaptureKeyboard");
   duk_push_c_function(m_ctx, js_editor_set_key_handler, 1);
   duk_put_prop_string(m_ctx, -2, "setKeyHandler");
+  duk_push_c_function(m_ctx, js_editor_set_selection_mode, 1);
+  duk_put_prop_string(m_ctx, -2, "setSelectionMode");
 
   duk_push_c_function(m_ctx, js_editor_open_dialog, 0);
   duk_put_prop_string(m_ctx, -2, "openDialog");
@@ -514,6 +745,8 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "setCaretPos");
   duk_push_c_function(m_ctx, js_editor_move_caret, 1);
   duk_put_prop_string(m_ctx, -2, "moveCaret");
+  duk_push_c_function(m_ctx, js_editor_move_caret_by_char, 1);
+  duk_put_prop_string(m_ctx, -2, "moveCaretByChar");
   duk_push_c_function(m_ctx, js_editor_move_caret_up, 0);
   duk_put_prop_string(m_ctx, -2, "moveCaretUp");
   duk_push_c_function(m_ctx, js_editor_move_caret_down, 0);
@@ -523,8 +756,10 @@ bool ScriptEngine::Initialize() {
   duk_push_c_function(m_ctx, js_editor_move_caret_end, 0);
   duk_put_prop_string(m_ctx, -2, "moveCaretEnd");
 
-  duk_push_c_function(m_ctx, js_editor_set_font, 2);
+  duk_push_c_function(m_ctx, js_editor_set_font, 3);
   duk_put_prop_string(m_ctx, -2, "setFont");
+  duk_push_c_function(m_ctx, js_editor_set_ligatures, 1);
+  duk_put_prop_string(m_ctx, -2, "setLigatures");
   duk_push_c_function(m_ctx, js_editor_set_selection_anchor, 1);
   duk_put_prop_string(m_ctx, -2, "setSelectionAnchor");
   duk_push_c_function(m_ctx, js_editor_copy, 0);
@@ -549,6 +784,8 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "close");
   duk_push_c_function(m_ctx, js_editor_switch_buffer, 1);
   duk_put_prop_string(m_ctx, -2, "switchBuffer");
+  duk_push_c_function(m_ctx, js_editor_get_buffers, 0);
+  duk_put_prop_string(m_ctx, -2, "getBuffers");
 
   duk_push_c_function(m_ctx, js_editor_new_file, 0);
   duk_put_prop_string(m_ctx, -2, "newFile");
@@ -571,6 +808,12 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "getLineAtOffset");
   duk_push_c_function(m_ctx, js_editor_get_line_offset, 1);
   duk_put_prop_string(m_ctx, -2, "getLineOffset");
+  duk_push_c_function(m_ctx, js_editor_jump_to_line, 1);
+  duk_put_prop_string(m_ctx, -2, "jumpToLine");
+  duk_push_c_function(m_ctx, js_editor_show_jump_to_line, 0);
+  duk_put_prop_string(m_ctx, -2, "showJumpToLine");
+  duk_push_c_function(m_ctx, js_editor_set_highlights, 1);
+  duk_put_prop_string(m_ctx, -2, "setHighlights");
 
   duk_put_global_string(m_ctx, "Editor");
 
@@ -598,6 +841,7 @@ void ScriptEngine::LoadDefaultBindings() {
     Editor.setKeyBinding("Ctrl+T", "emacs_transpose_chars");
     Editor.setKeyBinding("Ctrl+S", "emacs_isearch_forward");
     Editor.setKeyBinding("Ctrl+R", "emacs_isearch_backward");
+    Editor.setKeyBinding("Ctrl+G", "emacs_jump_to_line");
     Editor.setKeyBinding("F12", "tag_jump");
 
     var isearchQuery = "";
@@ -688,8 +932,8 @@ void ScriptEngine::LoadDefaultBindings() {
 
     function emacs_next_line() { Editor.moveCaretDown(); }
     function emacs_prev_line() { Editor.moveCaretUp(); }
-    function emacs_forward_char() { Editor.moveCaret(1); }
-    function emacs_backward_char() { Editor.moveCaret(-1); }
+    function emacs_forward_char() { Editor.moveCaretByChar(1); }
+    function emacs_backward_char() { Editor.moveCaretByChar(-1); }
     function emacs_line_start() { Editor.moveCaretHome(); }
     function emacs_line_end() { Editor.moveCaretEnd(); }
     function emacs_delete_char() { Editor.delete(Editor.getCaretPos(), 1); }
@@ -761,6 +1005,8 @@ void ScriptEngine::LoadDefaultBindings() {
             Editor.setSelectionAnchor(targetOffset);
         }
     }
+
+    function emacs_jump_to_line() { Editor.showJumpToLine(); }
   )";
   duk_peval_string(m_ctx, defaultBindings);
   duk_pop(m_ctx);
