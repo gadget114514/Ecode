@@ -147,3 +147,28 @@ void Editor::Paste(HWND hwnd) {
     CloseClipboard();
   }
 }
+void Editor::LogMessage(const std::string &msg) {
+  if (!m_messagesBuffer) {
+    m_messagesBuffer = GetBufferByName(L"*Messages*");
+    if (!m_messagesBuffer) {
+      auto buffer = std::make_unique<Buffer>();
+      buffer->SetPath(L"*Messages*");
+      buffer->SetScratch(true);
+      m_messagesBuffer = buffer.get();
+      m_buffers.push_back(std::move(buffer));
+    }
+  }
+
+  if (m_messagesBuffer) {
+    m_messagesBuffer->Insert(m_messagesBuffer->GetTotalLength(), msg + "\n");
+  }
+}
+
+Buffer *Editor::GetBufferByName(const std::wstring &name) {
+  for (auto &buf : m_buffers) {
+    if (buf->GetPath() == name) {
+      return buf.get();
+    }
+  }
+  return nullptr;
+}

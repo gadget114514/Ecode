@@ -20,6 +20,7 @@ void EditorBufferRenderer::DrawEditorLines(
   this->m_renderTarget->Clear(this->m_theme.background);
 
   // OPTIMIZATION #6: Cache UTF-8 to UTF-16 conversion
+  bool textChanged = false;
   if (!m_isConversionCacheValid || m_lastUtf8Content != text) {
     int len = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, NULL, 0);
     m_cachedWtext.resize(len);
@@ -27,6 +28,7 @@ void EditorBufferRenderer::DrawEditorLines(
                         len);
     m_lastUtf8Content = text;
     m_isConversionCacheValid = true;
+    textChanged = true;
   }
 
   const std::vector<wchar_t> &wtext = m_cachedWtext;
@@ -75,9 +77,8 @@ void EditorBufferRenderer::DrawEditorLines(
     m_lastHighlights.clear();
   }
 
-  if (!m_cachedTextLayout || !m_isConversionCacheValid ||
-      m_lastLayoutWidth != layoutWidth || m_lastLayoutHeight != size.height ||
-      highlightsChanged) {
+  if (!m_cachedTextLayout || textChanged || m_lastLayoutWidth != layoutWidth ||
+      m_lastLayoutHeight != size.height || highlightsChanged) {
     std::wstring locale = Localization::Instance().GetLocaleName();
     HRESULT hr = this->m_dwriteFactory->CreateTextLayout(
         wtext.data(), static_cast<UINT32>(wtext.size() - 1),
@@ -272,17 +273,22 @@ void EditorBufferRenderer::DrawEditorLines(
           D2D1_RECT_F rect = D2D1::RectF(caretX + xOffset, caretY + yOffset,
                                          caretX + xOffset + width,
                                          caretY + metrics.height + yOffset);
+          this->m_lastCaretRect = rect;
           m_caretBrush->SetOpacity(0.5f);
           this->m_renderTarget->FillRectangle(rect, this->m_caretBrush.Get());
           m_caretBrush->SetOpacity(1.0f);
         } else if (m_caretStyle == CaretStyle::Underline) {
+          float yPos = caretY + metrics.height + yOffset;
+          this->m_lastCaretRect = D2D1::RectF(caretX + xOffset, yPos - 2,
+                                              caretX + xOffset + width, yPos);
           this->m_renderTarget->DrawLine(
-              D2D1::Point2F(caretX + xOffset,
-                            caretY + metrics.height + yOffset),
-              D2D1::Point2F(caretX + xOffset + width,
-                            caretY + metrics.height + yOffset),
+              D2D1::Point2F(caretX + xOffset, yPos),
+              D2D1::Point2F(caretX + xOffset + width, yPos),
               this->m_caretBrush.Get(), 2.0f);
         } else { // Line
+          this->m_lastCaretRect = D2D1::RectF(
+              caretX + xOffset, caretY + yOffset, caretX + xOffset + 2,
+              caretY + metrics.height + yOffset);
           this->m_renderTarget->DrawLine(
               D2D1::Point2F(caretX + xOffset, caretY + yOffset),
               D2D1::Point2F(caretX + xOffset,

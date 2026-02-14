@@ -98,6 +98,9 @@ public:
   CaretStyle GetCaretStyle() const { return m_caretStyle; }
   bool GetCaretBlinking() const { return m_enableCaretBlinking; }
 
+  D2D1_RECT_F GetLastCaretRect() const { return m_lastCaretRect; }
+  POINT GetCaretScreenPoint() const;
+
 private:
   void UpdateFontFormat();
   bool m_bIsCaretVisibleVal = true;
@@ -108,6 +111,7 @@ private:
   float m_wrapWidth = 0.0f; // 0 means wrap to window width
   float val_TopPadding = 0.0f;
   HWND m_hwnd;
+  D2D1_RECT_F m_lastCaretRect = {0, 0, 0, 0};
   // OPTIMIZATION #6: UTF-8 to UTF-16 conversion caching
   mutable std::string m_lastUtf8Content;
   mutable std::vector<wchar_t> m_cachedWtext;

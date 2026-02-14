@@ -146,10 +146,11 @@ target_link_libraries(ecode
     gdi32 
     shell32 
     ole32 
-    comdlg32
-    comctl32
+    comdlg32 
+    comctl32 
     d2d1 
     dwrite
+    imm32
 )
 
 # Output directory
@@ -163,6 +164,14 @@ set_target_properties(test_search_replace PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$
 set_target_properties(test_file_io PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_visual_wrap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+
+# Copy scripts directory to output
+add_custom_command(TARGET ecode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
+    "$<TARGET_FILE_DIR:ecode>/scripts"
+    COMMENT "Copying scripts to output directory..."
+)
 
 # Installer
 find_program(ISCC_EXECUTABLE ISCC 

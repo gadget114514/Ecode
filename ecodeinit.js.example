@@ -3,61 +3,96 @@
  * Put this in %APPDATA%/Ecode/ecodeinit.js
  */
 
-// Configure Editor Font
-editor.setFont({
-    family: "Consolas",
-    size: 14.0,
-    weight: "normal", // normal, bold, light
-    stretch: "normal"
-});
+// --- Editor Configuration ---
 
-// Configure Editor Theme
-editor.setTheme({
+// Set Font: Family, Size, Weight (100-900)
+// Common weights: 300 (Light), 400 (Normal), 700 (Bold)
+Editor.setFont("Consolas", 14.0, 400);
+
+// Configure Theme
+// Use hex strings: #RRGGBB or #RRGGBBAA
+Editor.setTheme({
     background: "#1E1E1E",
     foreground: "#D4D4D4",
     caret: "#FFFFFF",
-    selection: "#264F78",
+    selection: "#264F7880", // 50% opacity blue
     lineNumbers: "#858585",
     
-    // Syntax Groups
-    syntax: {
-        keyword: "#569CD6",
-        string: "#CE9178",
-        number: "#B5CEA8",
-        comment: "#6A9955",
-        function: "#DCDCAA"
+    // Syntax colors
+    keyword: "#569CD6",
+    string: "#CE9178",
+    number: "#B5CEA8",
+    comment: "#6A9955",
+    function: "#DCDCAA"
+});
+
+// --- Editor Behavior ---
+Editor.showLineNumbers(true);
+Editor.setWordWrap(true);
+Editor.setWrapWidth(800.0);
+Editor.setLigatures(true);
+Editor.setOpacity(1.0);
+
+// --- Key Bindings ---
+// format: Chord, GlobalFunctionName
+Editor.setKeyBinding("Ctrl+S", "Editor.save");
+Editor.setKeyBinding("Ctrl+Shift+S", "Editor.saveDialog");
+Editor.setKeyBinding("Ctrl+O", "Editor.openDialog");
+Editor.setKeyBinding("Ctrl+N", "Editor.newFile");
+Editor.setKeyBinding("Ctrl+W", "Editor.close");
+Editor.setKeyBinding("Ctrl+G", "Editor.showJumpToLine");
+Editor.setKeyBinding("F1", "Editor.showAbout");
+Editor.setKeyBinding("F11", "Editor.toggleFullScreen");
+
+// --- Custom Macros ---
+
+/**
+ * Duplicate Current Line macro
+ */
+function duplicateLine() {
+    var pos = Editor.getCaretPos();
+    var lineIdx = Editor.getLineAtOffset(pos);
+    var lineStart = Editor.getLineOffset(lineIdx);
+    var lineEnd = Editor.getLineOffset(lineIdx + 1);
+    
+    // If it's the last line, lineEnd might be 0
+    if (lineEnd == 0) lineEnd = Editor.getLength();
+    
+    var lineText = Editor.getText(lineStart, lineEnd - lineStart);
+    if (lineText.indexOf('\n') == -1) {
+        lineText += '\n';
     }
-});
+    
+    Editor.insert(lineEnd, lineText);
+}
+Editor.setKeyBinding("Ctrl+D", "duplicateLine");
 
-// Custom Key Bindings and Macros
-editor.setKeyBinding("Ctrl+S", "editor.save()");
-editor.setKeyBinding("Ctrl+W", "editor.close()");
+/**
+ * Distraction Free Mode
+ */
+function toggleDistractionFree() {
+    var isVisible = Editor.showTabs(!Editor.showTabs(true)); // Toggle trick
+    Editor.showTabs(!isVisible);
+    Editor.showStatusBar(!isVisible);
+    Editor.showMenuBar(!isVisible);
+    
+    if (!isVisible) {
+        Editor.setOpacity(0.95);
+        Editor.setStatusText("Distraction-free mode enabled.");
+    } else {
+        Editor.setOpacity(1.0);
+        Editor.setStatusText("Ready");
+    }
+}
+Editor.setKeyBinding("Ctrl+F12", "toggleDistractionFree");
 
-// Simple Macro Example: Duplicate Line
-editor.setKeyBinding("Ctrl+D", function() {
-    var pos = editor.getCursorPos();
-    var lineText = editor.getText(pos.line, 0, pos.line, -1); // Get full line
-    editor.moveCursor("down", 1);
-    editor.insert("\n" + lineText);
-});
+/**
+ * Insert Timestamp macro
+ */
+function insertTimestamp() {
+    var now = new Date();
+    Editor.insert(Editor.getCaretPos(), now.toLocaleString());
+}
+Editor.setKeyBinding("Alt+T", "insertTimestamp");
 
-// File Management Example
-editor.setKeyBinding("Ctrl+Shift+N", "editor.newFile()");
-
-// Visual & Visibility Controls
-editor.setKeyBinding("F11", "editor.toggleFullScreen()");
-editor.setKeyBinding("Alt+T", function() {
-    var state = editor.getOption("showTabs") || false;
-    editor.showTabs(!state);
-});
-
-// Distraction Free Mode Macro
-editor.setKeyBinding("Ctrl+F12", function() {
-    editor.showTabs(false);
-    editor.showStatusBar(false);
-    editor.showMenuBar(false);
-    editor.setOpacity(0.95);
-    console.log("Distraction-free mode enabled.");
-});
-
-console.log("Ecode initialized with visual controls.");
+console.log("Ecode initialized successfully.");

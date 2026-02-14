@@ -259,3 +259,9 @@ size_t EditorBufferRenderer::CalculateVisibleLineCount() const {
 
   return visibleLines;
 }
+
+POINT EditorBufferRenderer::GetCaretScreenPoint() const {
+  POINT pt = {(long)m_lastCaretRect.left, (long)m_lastCaretRect.bottom};
+  ClientToScreen(m_hwnd, &pt);
+  return pt;
+}

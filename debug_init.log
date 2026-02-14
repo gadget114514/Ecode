@@ -15,3 +15,73 @@ WM_CREATE: Renderer Init
 WM_CREATE: ScriptEngine Init
 WM_CREATE: Editor Init
 WM_CREATE: Load Init Script
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: Entering for path: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: File opened successfully
+ScriptEngine::RunFile: File read, size: 1139
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: Entering for path: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: File opened successfully
+ScriptEngine::RunFile: File read, size: 1139
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 21890616
+WM_SHOWWINDOW Received, wParam=1
