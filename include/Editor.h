@@ -31,8 +31,12 @@ public:
     return m_buffers;
   }
 
+  void LogMessage(const std::string &msg);
+  Buffer *GetBufferByName(const std::wstring &name);
+
 private:
   std::function<void(float)> m_progressCb;
   std::vector<std::unique_ptr<Buffer>> m_buffers;
   size_t m_activeBufferIndex;
+  Buffer *m_messagesBuffer = nullptr;
 };

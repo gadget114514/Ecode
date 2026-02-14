@@ -80,6 +80,7 @@ public:
   }
 
   const std::wstring &GetPath() const { return m_filePath; }
+  void SetPath(const std::wstring &path) { m_filePath = path; }
   bool IsDirty() const { return m_isDirty; }
 
   void SetScratch(bool scratch) { m_isScratch = scratch; }

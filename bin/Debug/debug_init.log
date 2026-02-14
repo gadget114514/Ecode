@@ -1,0 +1,115 @@
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: Entering for path: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: File opened successfully
+ScriptEngine::RunFile: File read, size: 1139
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 1510350
+WM_SHOWWINDOW Received, wParam=1
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: path=C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 8848944
+WM_SHOWWINDOW Received, wParam=1
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+ScriptEngine::RunFile: path=D:\ws\Ecode\bin\Debug\scripts\emacs.js
+ScriptEngine::RunFile: Success
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: path=C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 591686
+WM_SHOWWINDOW Received, wParam=1
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: Editor Init
+WM_CREATE: ScriptEngine Init
+ScriptEngine::RunFile: path=D:\ws\Ecode\bin\Debug\scripts\emacs.js
+JS: Loading Emacs key bindings...
+ScriptEngine::RunFile: Success
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: path=C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 788470
+WM_SHOWWINDOW Received, wParam=1
+WM_CHAR: 97 char=a
+WM_CHAR: 97 char=a
+WM_CHAR: 97 char=a
+WM_CHAR: 97 char=a
+WM_CHAR: 97 char=a
+WM_CHAR: 97 char=a
+WM_CHAR: 13 char=
+WM_CHAR: 13 char=
+WM_CHAR: 13 char=
+WM_CHAR: 13 char=
+WM_CHAR: 8 char=
+WM_CHAR: 8 char=
+WM_CHAR: 8 char=
+WM_CHAR: 8 char=
+WM_CHAR: 98 char=b
+WM_CHAR: 98 char=b
+WM_CHAR: 98 char=b
+WM_CHAR: 1 char=
+WM_CHAR: 1 char=
+WM_CHAR: 1 char=
+WM_CHAR: 1 char=
+WM_CHAR: 6 char=
+WM_CHAR: 6 char=
+WM_CHAR: 6 char=
+WM_CHAR: 5 char=
+WM_CHAR: 5 char=
+WM_CHAR: 5 char=
+WM_CHAR: 22 char=

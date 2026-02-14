@@ -9,6 +9,7 @@
 #include "../include/ScriptEngine.h"
 #include "../include/SettingsManager.h"
 #include <commctrl.h>
+#include <imm.h>
 #include <memory>
 #include <string>
 #include <windows.h>
@@ -73,6 +74,7 @@
 // Help menu: 800-899
 #define IDM_HELP_DOC 801
 #define IDM_HELP_ABOUT 802
+#define IDM_HELP_MESSAGES 803
 
 // Global objects
 HWND g_mainHwnd = NULL;
@@ -369,6 +371,7 @@ void UpdateMenu(HWND hwnd) {
   HMENU hHelp = CreatePopupMenu();
   AppendMenu(hHelp, MF_STRING, IDM_HELP_DOC, L10N("menu_help_doc"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_ABOUT, L10N("menu_help_about"));
+  AppendMenu(hHelp, MF_STRING, IDM_HELP_MESSAGES, L"Show Messages");
 
   // Main Menu Bar
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hFile, L10N("menu_file"));
@@ -517,6 +520,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                   GetWindowLong(hwnd, GWL_STYLE) | WS_CLIPCHILDREN);
     g_mainHwnd = hwnd;
 
+    // Initialize Editor first so we can log to it
+    g_editor = std::make_unique<Editor>();
+    g_editor->LogMessage("--- Ecode Session Started ---");
+
     // Initialize Common Controls
     INITCOMMONCONTROLSEX icex;
     icex.dwSize = sizeof(icex);
@@ -565,18 +572,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       return -1;
     }
 
-    DebugLog("WM_CREATE: ScriptEngine Init");
-    g_scriptEngine = std::make_unique<ScriptEngine>();
-    g_scriptEngine->Initialize();
-
     DebugLog("WM_CREATE: Editor Init");
-    g_editor = std::make_unique<Editor>();
     g_editor->SetProgressCallback([](float progress) {
       if (g_progressHwnd) {
         SendMessage(g_progressHwnd, PBM_SETPOS, (int)(progress * 100), 0);
         UpdateWindow(g_statusHwnd);
       }
     });
+
+    DebugLog("WM_CREATE: ScriptEngine Init");
+    g_scriptEngine = std::make_unique<ScriptEngine>();
+    g_scriptEngine->Initialize();
+
     g_editor->NewFile();
     UpdateMenu(hwnd);
     SetTimer(hwnd, 1, 500, NULL);
@@ -813,6 +820,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     case IDM_HELP_DOC:
       MessageBox(hwnd, L"Feature not yet implemented", L"Info", MB_OK);
       break;
+    case IDM_HELP_MESSAGES: {
+      Buffer *msgBuf = g_editor->GetBufferByName(L"*Messages*");
+      if (msgBuf) {
+        const auto &buffers = g_editor->GetBuffers();
+        for (size_t i = 0; i < buffers.size(); ++i) {
+          if (buffers[i].get() == msgBuf) {
+            g_editor->SwitchToBuffer(i);
+            UpdateMenu(hwnd);
+            break;
+          }
+        }
+      }
+      break;
+    }
 
     default:
       if (LOWORD(wParam) >= IDM_BUFFERS_START &&
@@ -971,35 +992,73 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     return 0;
   }
   case WM_CHAR: {
-    if (g_scriptEngine->IsKeyboardCaptured()) {
-      char c = static_cast<char>(wParam);
-      if (g_scriptEngine->HandleKeyEvent(std::string(1, c), true)) {
+    wchar_t wc_dbg = static_cast<wchar_t>(wParam);
+    bool captured = g_scriptEngine->IsKeyboardCaptured();
+    DebugLog("WM_CHAR: " + std::to_string(wParam) +
+             " char=" + (char)(wParam < 128 ? wParam : '?') +
+             " captured=" + (captured ? "Y" : "N"));
+    if (captured) {
+      wchar_t wc = static_cast<wchar_t>(wParam);
+      std::string s;
+      int len = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, NULL, 0, NULL, NULL);
+      if (len > 0) {
+        s.resize(len);
+        WideCharToMultiByte(CP_UTF8, 0, &wc, 1, &s[0], len, NULL, NULL);
+      }
+      if (g_scriptEngine->HandleKeyEvent(s, true)) {
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
       }
     }
     Buffer *activeBuffer = g_editor->GetActiveBuffer();
     if (activeBuffer) {
-      if (wParam >= 32) {
+      if (wParam >= 32 || wParam == VK_RETURN || wParam == VK_TAB) {
         if (activeBuffer->HasSelection()) {
           activeBuffer->DeleteSelection();
         }
-        char c = static_cast<char>(wParam);
-        std::string s(1, c);
-        activeBuffer->Insert(activeBuffer->GetCaretPos(), s);
-        activeBuffer->MoveCaret(1);
-        activeBuffer->SetSelectionAnchor(activeBuffer->GetCaretPos());
-        EnsureCaretVisible(hwnd);
-        UpdateScrollbars(hwnd);
-        InvalidateRect(hwnd, NULL, FALSE);
+
+        std::string s;
+        if (wParam == VK_RETURN) {
+          s = "\n";
+        } else if (wParam == VK_TAB) {
+          s = "\t";
+        } else {
+          wchar_t wc = static_cast<wchar_t>(wParam);
+          int len =
+              WideCharToMultiByte(CP_UTF8, 0, &wc, 1, NULL, 0, NULL, NULL);
+          if (len > 0) {
+            s.resize(len);
+            WideCharToMultiByte(CP_UTF8, 0, &wc, 1, &s[0], len, NULL, NULL);
+          }
+        }
+
+        if (!s.empty()) {
+          activeBuffer->Insert(activeBuffer->GetCaretPos(), s);
+          activeBuffer->MoveCaret(static_cast<int>(s.length()));
+          activeBuffer->SetSelectionAnchor(activeBuffer->GetCaretPos());
+          EnsureCaretVisible(hwnd);
+          UpdateScrollbars(hwnd);
+          InvalidateRect(hwnd, NULL, FALSE);
+        }
       } else if (wParam == VK_BACK) {
         if (activeBuffer->HasSelection()) {
           activeBuffer->DeleteSelection();
         } else {
           size_t pos = activeBuffer->GetCaretPos();
           if (pos > 0) {
-            activeBuffer->Delete(pos - 1, 1);
-            activeBuffer->MoveCaret(-1);
+            size_t fetchSize = (pos > 8) ? 8 : pos;
+            std::string text =
+                activeBuffer->GetText(pos - fetchSize, fetchSize);
+            size_t relPos = text.length();
+            size_t prevRelPos = relPos - 1;
+            while (prevRelPos > 0 && (text[prevRelPos] & 0xC0) == 0x80) {
+              prevRelPos--;
+            }
+            size_t bytesToDelete = relPos - prevRelPos;
+            size_t deleteAt = pos - bytesToDelete;
+
+            activeBuffer->Delete(deleteAt, bytesToDelete);
+            activeBuffer->SetCaretPos(deleteAt);
             activeBuffer->SetSelectionAnchor(activeBuffer->GetCaretPos());
             EnsureCaretVisible(hwnd);
             UpdateScrollbars(hwnd);
@@ -1506,17 +1565,57 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
+  case WM_IME_SETCONTEXT:
+    lParam &= ~ISC_SHOWUICOMPOSITIONWINDOW;
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+
+  case WM_IME_STARTCOMPOSITION: {
+    HIMC himc = ImmGetContext(hwnd);
+    if (himc) {
+      COMPOSITIONFORM cf;
+      cf.dwStyle = CFS_POINT;
+      POINT pt = g_renderer->GetCaretScreenPoint();
+      ScreenToClient(hwnd, &pt);
+      cf.ptCurrentPos = pt;
+      ImmSetCompositionWindow(himc, &cf);
+      ImmReleaseContext(hwnd, himc);
+    }
+    return 0;
+  }
+  case WM_IME_COMPOSITION: {
+    if (lParam & GCS_RESULTSTR) {
+      HIMC himc = ImmGetContext(hwnd);
+      if (himc) {
+        LONG size = ImmGetCompositionStringW(himc, GCS_RESULTSTR, NULL, 0);
+        if (size > 0) {
+          std::vector<wchar_t> buf(size / sizeof(wchar_t) + 1);
+          ImmGetCompositionStringW(himc, GCS_RESULTSTR, buf.data(), size);
+          buf[size / sizeof(wchar_t)] = L'\0';
+
+          for (wchar_t wc : buf) {
+            if (wc == L'\0')
+              break;
+            SendMessage(hwnd, WM_CHAR, (WPARAM)wc, 0);
+          }
+        }
+        ImmReleaseContext(hwnd, himc);
+      }
+    }
+    return 0;
+  }
   }
   return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
 #include <fstream>
 #include <shellapi.h>
-#include <stdexcept>
 
 void DebugLog(const std::string &msg) {
   std::ofstream ofs("debug_init.log", std::ios::app);
   ofs << msg << std::endl;
+  if (g_editor) {
+    g_editor->LogMessage(msg);
+  }
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,

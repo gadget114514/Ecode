@@ -5,8 +5,10 @@
 #include "../include/EditorBufferRenderer.h"
 #include <commctrl.h>
 #include <iostream>
+#include <windows.h>
 
 // Forward declarations
+void DebugLog(const std::string &msg);
 extern std::unique_ptr<Editor> g_editor;
 extern HWND g_mainHwnd;
 extern HWND g_statusHwnd;
@@ -39,9 +41,36 @@ static std::wstring StringToWString(const std::string &s) {
   return wstrTo;
 }
 
+static duk_ret_t js_console_log(duk_context *ctx) {
+  int n = duk_get_top(ctx);
+  std::string out;
+  for (int i = 0; i < n; i++) {
+    out += duk_safe_to_string(ctx, i);
+    if (i < n - 1)
+      out += " ";
+  }
+  std::string outWithPrefix = "JS: " + out;
+  DebugLog(outWithPrefix);
+  OutputDebugStringA((outWithPrefix + "\n").c_str());
+  std::cerr << outWithPrefix << std::endl;
+
+  // Show in status bar
+  std::wstring ws = StringToWString(out);
+  if (g_statusHwnd)
+    SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)ws.c_str());
+
+  if (g_editor) {
+    g_editor->LogMessage("JS: " + out);
+  }
+
+  return 0;
+}
+
 // JS-to-C++ Bridge Functions for Status/Progress
 static duk_ret_t js_editor_set_status_text(duk_context *ctx) {
   const char *text = duk_get_string(ctx, 0);
+  if (!text)
+    text = "";
   std::wstring ws = StringToWString(text);
   SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)ws.c_str());
   duk_push_boolean(ctx, true);
@@ -75,10 +104,60 @@ static duk_ret_t js_editor_about_dialog(duk_context *ctx) {
   return 0;
 }
 
+static duk_ret_t js_editor_save_as(duk_context *ctx) {
+  const char *path = duk_get_string(ctx, 0);
+  if (!path) {
+    duk_push_boolean(ctx, false);
+    return 1;
+  }
+  std::wstring wpath = StringToWString(path);
+  Buffer *buf = g_editor ? g_editor->GetActiveBuffer() : nullptr;
+  if (buf) {
+    bool result = buf->SaveFile(wpath);
+    duk_push_boolean(ctx, result);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_save(duk_context *ctx) {
+  Buffer *buf = g_editor ? g_editor->GetActiveBuffer() : nullptr;
+  if (buf) {
+    std::wstring path = buf->GetPath();
+    if (path.empty()) {
+      path = Dialogs::SaveFileDialog(g_mainHwnd);
+      if (path.empty()) {
+        duk_push_boolean(ctx, false);
+        return 1;
+      }
+    }
+    bool result = buf->SaveFile(path);
+    duk_push_boolean(ctx, result);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
 // JS-to-C++ Bridge Functions
 static duk_ret_t js_editor_set_key_handler(duk_context *ctx) {
+  if (duk_is_function(ctx, 0)) {
+    // Store the function in the global stash
+    duk_push_global_stash(ctx);
+    duk_dup(ctx, 0);
+    duk_put_prop_string(ctx, -2, "__key_handler_func");
+    duk_pop(ctx);
+
+    if (g_scriptEngine) {
+      g_scriptEngine->SetKeyHandler("__JS_FUNCTION__");
+    }
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+
   const char *funcName = duk_get_string(ctx, 0);
-  if (g_scriptEngine) {
+  if (funcName && g_scriptEngine) {
     g_scriptEngine->SetKeyHandler(funcName);
     duk_push_boolean(ctx, true);
     return 1;
@@ -90,6 +169,8 @@ static duk_ret_t js_editor_set_key_handler(duk_context *ctx) {
 static duk_ret_t js_editor_insert(duk_context *ctx) {
   size_t pos = (size_t)duk_get_number(ctx, 0);
   const char *text = duk_get_string(ctx, 1);
+  if (!text)
+    text = "";
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->Insert(pos, text);
@@ -237,6 +318,8 @@ static duk_ret_t js_editor_move_caret_end(duk_context *ctx) {
 
 static duk_ret_t js_editor_set_font(duk_context *ctx) {
   const char *family = duk_get_string(ctx, 0);
+  if (!family)
+    family = "Consolas";
   float size = static_cast<float>(duk_get_number(ctx, 1));
   int weight = DWRITE_FONT_WEIGHT_NORMAL;
   if (duk_is_number(ctx, 2)) {
@@ -368,6 +451,8 @@ static duk_ret_t js_editor_show_physical_line_numbers(duk_context *ctx) {
 }
 
 static D2D1_COLOR_F ParseColor(const char *hex) {
+  if (!hex || hex[0] == '\0')
+    return {0, 0, 0, 1};
   if (hex[0] == '#')
     hex++;
   unsigned int r, g, b, a = 255;
@@ -564,9 +649,10 @@ static duk_ret_t js_editor_set_opacity(duk_context *ctx) {
 
 static duk_ret_t js_editor_open(duk_context *ctx) {
   const char *path = duk_get_string(ctx, 0);
-  std::string s(path);
-  std::wstring ws(s.begin(), s.size() == 0 ? s.end() : s.begin() + s.size());
-  // Note: the above is a bit messy, let's just use StringToWString
+  if (!path) {
+    duk_push_boolean(ctx, false);
+    return 1;
+  }
   std::wstring wpath = StringToWString(path);
   if (g_editor) {
     size_t index = g_editor->OpenFile(wpath);
@@ -632,6 +718,8 @@ static duk_ret_t js_editor_set_wrap_width(duk_context *ctx) {
 
 static duk_ret_t js_editor_find(duk_context *ctx) {
   const char *query = duk_get_string(ctx, 0);
+  if (!query)
+    query = "";
   size_t startPos = (size_t)duk_get_number(ctx, 1);
   bool forward = duk_get_boolean(ctx, 2);
   bool useRegex = duk_get_boolean(ctx, 3);
@@ -689,7 +777,7 @@ static duk_ret_t js_editor_set_capture_keyboard(duk_context *ctx) {
 static duk_ret_t js_editor_set_key_binding(duk_context *ctx) {
   const char *chord = duk_get_string(ctx, 0);
   const char *funcName = duk_get_string(ctx, 1);
-  if (g_scriptEngine) {
+  if (chord && funcName && g_scriptEngine) {
     g_scriptEngine->RegisterBinding(chord, funcName);
     duk_push_boolean(ctx, true);
     return 1;
@@ -716,6 +804,33 @@ static duk_ret_t js_editor_show_jump_to_line(duk_context *ctx) {
   if (g_mainHwnd) {
     Dialogs::ShowJumpToLineDialog(g_mainHwnd);
     duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_log_message(duk_context *ctx) {
+  const char *msg = duk_get_string(ctx, 0);
+  if (msg && g_editor) {
+    g_editor->LogMessage(msg);
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_load_script(duk_context *ctx) {
+  const char *path = duk_get_string(ctx, 0);
+  if (!path) {
+    duk_push_boolean(ctx, false);
+    return 1;
+  }
+  std::wstring wpath = StringToWString(path);
+  if (g_scriptEngine) {
+    bool success = g_scriptEngine->RunFile(wpath);
+    duk_push_boolean(ctx, success);
     return 1;
   }
   duk_push_boolean(ctx, false);
@@ -760,6 +875,10 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "openDialog");
   duk_push_c_function(m_ctx, js_editor_save_dialog, 0);
   duk_put_prop_string(m_ctx, -2, "saveDialog");
+  duk_push_c_function(m_ctx, js_editor_save, 0);
+  duk_put_prop_string(m_ctx, -2, "save");
+  duk_push_c_function(m_ctx, js_editor_save_as, 1);
+  duk_put_prop_string(m_ctx, -2, "saveAs");
   duk_push_c_function(m_ctx, js_editor_about_dialog, 0);
   duk_put_prop_string(m_ctx, -2, "showAbout");
 
@@ -810,6 +929,10 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "showLineNumbers");
   duk_push_c_function(m_ctx, js_editor_show_physical_line_numbers, 1);
   duk_put_prop_string(m_ctx, -2, "showPhysicalLineNumbers");
+  duk_push_c_function(m_ctx, js_editor_set_word_wrap, 1);
+  duk_put_prop_string(m_ctx, -2, "setWordWrap");
+  duk_push_c_function(m_ctx, js_editor_set_wrap_width, 1);
+  duk_put_prop_string(m_ctx, -2, "setWrapWidth");
 
   duk_push_c_function(m_ctx, js_editor_open, 1);
   duk_put_prop_string(m_ctx, -2, "open");
@@ -847,202 +970,60 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "showJumpToLine");
   duk_push_c_function(m_ctx, js_editor_set_highlights, 1);
   duk_put_prop_string(m_ctx, -2, "setHighlights");
-
+  duk_push_c_function(m_ctx, js_editor_load_script, 1);
+  duk_put_prop_string(m_ctx, -2, "loadScript");
+  duk_push_c_function(m_ctx, js_editor_log_message, 1);
+  duk_put_prop_string(m_ctx, -2, "logMessage");
   duk_put_global_string(m_ctx, "Editor");
+
+  // Create global 'console' object
+  duk_push_object(m_ctx);
+  duk_push_c_function(m_ctx, js_console_log, DUK_VARARGS);
+  duk_put_prop_string(m_ctx, -2, "log");
+  duk_put_global_string(m_ctx, "console");
 
   LoadDefaultBindings();
 
   return true;
 }
 
+#include <windows.h>
+
 void ScriptEngine::LoadDefaultBindings() {
-  const char *defaultBindings = R"(
-    // Emacs-style Key Bindings
-    Editor.setKeyBinding("Ctrl+N", "emacs_next_line");
-    Editor.setKeyBinding("Ctrl+P", "emacs_prev_line");
-    Editor.setKeyBinding("Ctrl+F", "emacs_forward_char");
-    Editor.setKeyBinding("Ctrl+B", "emacs_backward_char");
-    Editor.setKeyBinding("Ctrl+A", "emacs_line_start");
-    Editor.setKeyBinding("Ctrl+E", "emacs_line_end");
-    Editor.setKeyBinding("Ctrl+D", "emacs_delete_char");
-    Editor.setKeyBinding("Ctrl+H", "emacs_backspace");
-    Editor.setKeyBinding("Ctrl+K", "emacs_kill_line");
-    Editor.setKeyBinding("Ctrl+Y", "emacs_yank");
-    Editor.setKeyBinding("Ctrl+Space", "emacs_set_mark");
-    Editor.setKeyBinding("Ctrl+V", "emacs_scroll_down");
-    Editor.setKeyBinding("Alt+V", "emacs_scroll_up");
-    Editor.setKeyBinding("Ctrl+T", "emacs_transpose_chars");
-    Editor.setKeyBinding("Ctrl+S", "emacs_isearch_forward");
-    Editor.setKeyBinding("Ctrl+R", "emacs_isearch_backward");
-    Editor.setKeyBinding("Ctrl+G", "emacs_jump_to_line");
-    Editor.setKeyBinding("F12", "tag_jump");
+  wchar_t buffer[MAX_PATH];
+  GetModuleFileNameW(NULL, buffer, MAX_PATH);
+  std::wstring exePath = buffer;
+  size_t lastBackslash = exePath.find_last_of(L"\\/");
+  std::wstring exeDir = (lastBackslash != std::wstring::npos)
+                            ? exePath.substr(0, lastBackslash)
+                            : L".";
 
-    var isearchQuery = "";
-    var isearchStartPos = 0;
-    var isearchForward = true;
+  std::vector<std::wstring> searchPaths = {
+      exeDir + L"\\scripts\\emacs.js",
+      exeDir + L"\\..\\..\\scripts\\emacs.js", // If running from bin/Debug
+      exeDir + L"\\..\\scripts\\emacs.js",     // If running from bin/
+      L".\\scripts\\emacs.js"                  // Current working directory
+  };
 
-    function emacs_isearch_forward() {
-        isearchQuery = "";
-        isearchStartPos = Editor.getCaretPos();
-        isearchForward = true;
-        Editor.setCaptureKeyboard(true);
-        Editor.setKeyHandler("emacs_isearch_handler");
-        Editor.setStatusText("I-search: ");
+  bool loaded = false;
+  for (const auto &p : searchPaths) {
+    if (RunFile(p)) {
+      DebugLog("LoadDefaultBindings: Successfully loaded emacs.js from " +
+               WStringToString(p));
+      loaded = true;
+      break;
     }
+  }
 
-    function emacs_isearch_backward() {
-        isearchQuery = "";
-        isearchStartPos = Editor.getCaretPos();
-        isearchForward = false;
-        Editor.setCaptureKeyboard(true);
-        Editor.setKeyHandler("emacs_isearch_handler");
-        Editor.setStatusText("I-search backward: ");
+  if (!loaded) {
+    DebugLog("LoadDefaultBindings: CRITICAL - Could not load emacs.js from any "
+             "search path!");
+    // Fallback msg in status bar
+    if (g_statusHwnd) {
+      SendMessage(g_statusHwnd, SB_SETTEXT, 0,
+                  (LPARAM)L"Failed to load emacs.js");
     }
-
-    function emacs_isearch_handler(key, isChar) {
-        if (!isChar) {
-            if (key == "Enter") {
-                Editor.setCaptureKeyboard(false);
-                Editor.setStatusText("Ready");
-                return true;
-            }
-            if (key == "Esc") {
-                Editor.setCaretPos(isearchStartPos);
-                Editor.setSelectionAnchor(isearchStartPos);
-                Editor.setCaptureKeyboard(false);
-                Editor.setStatusText("Canceled");
-                return true;
-            }
-            if (key == "Backspace") {
-                if (isearchQuery.length > 0) {
-                    isearchQuery = isearchQuery.substring(0, isearchQuery.length - 1);
-                    emacs_isearch_update();
-                }
-                return true;
-            }
-            if (key == "Ctrl+S") {
-                isearchForward = true;
-                emacs_isearch_next();
-                return true;
-            }
-            if (key == "Ctrl+R") {
-                isearchForward = false;
-                emacs_isearch_next();
-                return true;
-            }
-            return false;
-        }
-
-        isearchQuery += key;
-        emacs_isearch_update();
-        return true;
-    }
-
-    function emacs_isearch_update() {
-        var prefix = isearchForward ? "I-search: " : "I-search backward: ";
-        Editor.setStatusText(prefix + isearchQuery);
-        
-        var pos = Editor.find(isearchQuery, isearchStartPos, isearchForward, false, false);
-        if (pos != -1) {
-            Editor.setSelectionAnchor(pos);
-            Editor.setCaretPos(pos + isearchQuery.length);
-        }
-    }
-
-    function emacs_isearch_next() {
-        var currentPos = Editor.getCaretPos();
-        var searchStart = isearchForward ? currentPos : (currentPos - isearchQuery.length - 1);
-        if (searchStart < 0) searchStart = 0;
-        
-        var pos = Editor.find(isearchQuery, searchStart, isearchForward, false, false);
-        if (pos != -1) {
-            Editor.setSelectionAnchor(pos);
-            Editor.setCaretPos(pos + isearchQuery.length);
-        } else {
-            Editor.setStatusText("Failing " + (isearchForward ? "I-search: " : "I-search backward: ") + isearchQuery);
-        }
-    }
-
-    function emacs_next_line() { Editor.moveCaretDown(); }
-    function emacs_prev_line() { Editor.moveCaretUp(); }
-    function emacs_forward_char() { Editor.moveCaretByChar(1); }
-    function emacs_backward_char() { Editor.moveCaretByChar(-1); }
-    function emacs_line_start() { Editor.moveCaretHome(); }
-    function emacs_line_end() { Editor.moveCaretEnd(); }
-    function emacs_delete_char() { Editor.delete(Editor.getCaretPos(), 1); }
-    function emacs_backspace() { 
-        var pos = Editor.getCaretPos();
-        if (pos > 0) {
-            Editor.setCaretPos(pos - 1);
-            Editor.delete(pos - 1, 1); 
-        }
-    }
-    function emacs_kill_line() {
-        var pos = Editor.getCaretPos();
-        var lineIdx = Editor.getLineAtOffset(pos);
-        var lineEnd = Editor.getLineOffset(lineIdx + 1);
-        if (lineEnd == 0) lineEnd = Editor.getLength();
-        
-        var len = lineEnd - pos;
-        if (len > 0) {
-            var text = Editor.getText(pos, len);
-            var newlinePos = text.indexOf('\n');
-            if (newlinePos == 0) {
-                Editor.delete(pos, 1);
-            } else if (newlinePos > 0) {
-                Editor.setSelectionAnchor(pos);
-                Editor.setCaretPos(pos + newlinePos);
-                Editor.cut();
-            } else {
-                Editor.setSelectionAnchor(pos);
-                Editor.setCaretPos(pos + len);
-                Editor.cut();
-            }
-        }
-    }
-    function emacs_yank() { Editor.paste(); }
-    function emacs_set_mark() { Editor.setSelectionAnchor(Editor.getCaretPos()); }
-
-    function emacs_scroll_up() { 
-        for(var i=0; i<20; i++) Editor.moveCaretUp();
-    }
-    function emacs_scroll_down() {
-        for(var i=0; i<20; i++) Editor.moveCaretDown();
-    }
-    function emacs_transpose_chars() {
-        var pos = Editor.getCaretPos();
-        if (pos > 0 && pos < Editor.getLength()) {
-            var c1 = Editor.getText(pos - 1, 1);
-            var c2 = Editor.getText(pos, 1);
-            Editor.delete(pos - 1, 2);
-            Editor.insert(pos - 1, c2 + c1);
-            Editor.setCaretPos(pos + 1);
-        }
-    }
-
-    function tag_jump() {
-        var pos = Editor.getCaretPos();
-        var lineIdx = Editor.getLineAtOffset(pos);
-        var start = Editor.getLineOffset(lineIdx);
-        var end = Editor.getLineOffset(lineIdx + 1);
-        if (end == 0) end = Editor.getLength(); 
-        
-        var text = Editor.getText(start, end - start);
-        var match = text.match(/([a-zA-Z0-9_\-\.\/\\]+)[:\(](\d+)[:\)]?/);
-        if (match) {
-            var file = match[1];
-            var line = parseInt(match[2]);
-            Editor.open(file);
-            var targetOffset = Editor.getLineOffset(line - 1);
-            Editor.setCaretPos(targetOffset);
-            Editor.setSelectionAnchor(targetOffset);
-        }
-    }
-
-    function emacs_jump_to_line() { Editor.showJumpToLine(); }
-  )";
-  duk_peval_string(m_ctx, defaultBindings);
-  duk_pop(m_ctx);
+  }
 }
 
 std::string ScriptEngine::Evaluate(const std::string &code) {
@@ -1050,9 +1031,24 @@ std::string ScriptEngine::Evaluate(const std::string &code) {
     return "Engine not initialized";
 
   if (duk_peval_string(m_ctx, code.c_str()) != 0) {
-    std::string err = duk_safe_to_string(m_ctx, -1);
+    std::string errMsg = duk_safe_to_string(m_ctx, -1);
+    int line = -1;
+    if (duk_is_error(m_ctx, -1)) {
+      duk_get_prop_string(m_ctx, -1, "lineNumber");
+      line = duk_to_int(m_ctx, -1);
+      duk_pop(m_ctx);
+    }
     duk_pop(m_ctx);
-    return "Error: " + err;
+
+    std::string fullMsg = "JS Error: " + errMsg;
+    if (line != -1)
+      fullMsg += " at line " + std::to_string(line);
+
+    // Also show in status bar
+    std::wstring ws = StringToWString(fullMsg);
+    SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)ws.c_str());
+
+    return fullMsg;
   }
 
   std::string result = duk_safe_to_string(m_ctx, -1);
@@ -1070,27 +1066,93 @@ void DebugLog(const std::string &msg); // Forward declaration: Assume it's
 // So I can just declare it.
 
 bool ScriptEngine::RunFile(const std::wstring &path) {
-  DebugLog("ScriptEngine::RunFile: " + WStringToString(path));
-  std::ifstream f(path);
-  if (!f.is_open()) {
-    DebugLog("ScriptEngine::RunFile: Failed to open file");
+  std::string pathA = WStringToString(path);
+  DebugLog("ScriptEngine::RunFile: path=" + pathA);
+
+  if (!m_ctx) {
+    DebugLog("ScriptEngine::RunFile: m_ctx is NULL!");
     return false;
   }
-  DebugLog("ScriptEngine::RunFile: File opened");
+
+  std::ifstream f(path);
+  if (!f.is_open()) {
+    DebugLog("ScriptEngine::RunFile: Failed to open file: " + pathA);
+    return false;
+  }
+
   std::stringstream ss;
   ss << f.rdbuf();
   std::string code = ss.str();
-  DebugLog("ScriptEngine::RunFile: File read, size: " +
-           std::to_string(code.size()));
-  if (duk_peval_string(m_ctx, code.c_str()) != 0) {
-    std::cerr << "Error running script file " << duk_safe_to_string(m_ctx, -1)
-              << std::endl;
-    DebugLog("ScriptEngine::RunFile: Error parsing/running");
-    duk_pop(m_ctx);
+  DebugLog("ScriptEngine::RunFile: Read " + std::to_string(code.size()) +
+           " bytes. Snippet: " + code.substr(0, 64));
+
+  // Push filename for error reporting
+  duk_push_string(m_ctx, pathA.c_str());
+
+  // Compile the code with filename info
+  if (duk_pcompile_lstring_filename(m_ctx, DUK_COMPILE_EVAL, code.data(),
+                                    code.size()) != 0) {
+    // Compilation error
+    std::string errMsg = duk_safe_to_string(m_ctx, -1);
+    int line = -1;
+    if (duk_is_error(m_ctx, -1)) {
+      duk_get_prop_string(m_ctx, -1, "lineNumber");
+      line = duk_to_int(m_ctx, -1);
+      duk_pop(m_ctx);
+    }
+    duk_pop(m_ctx); // pop error object
+
+    std::string fullMsg = "JS Compile Error in " + pathA + ": " + errMsg;
+    if (line != -1)
+      fullMsg += " at line " + std::to_string(line);
+
+    DebugLog(fullMsg);
+    std::cerr << fullMsg << std::endl;
+    std::wstring ws = StringToWString(fullMsg);
+    SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)ws.c_str());
     return false;
   }
+
+  // Execute the compiled script
+  if (duk_pcall(m_ctx, 0) != 0) {
+    // Execution error
+    std::string errMsg = duk_safe_to_string(m_ctx, -1);
+    int line = -1;
+    if (duk_is_error(m_ctx, -1)) {
+      duk_get_prop_string(m_ctx, -1, "lineNumber");
+      line = duk_to_int(m_ctx, -1);
+      duk_pop(m_ctx);
+    }
+    duk_pop(m_ctx); // pop error object
+
+    std::string fullMsg = "JS Error in " + pathA + ": " + errMsg;
+    if (line != -1)
+      fullMsg += " at line " + std::to_string(line);
+
+    DebugLog(fullMsg);
+    std::cerr << fullMsg << std::endl;
+
+    // Show in status bar
+    std::wstring ws = StringToWString(fullMsg);
+    SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)ws.c_str());
+
+    // Jump to error line if paths match
+    if (line > 0 && g_editor) {
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf && buf->GetPath() == path) {
+        size_t offset = buf->GetLineOffset(static_cast<size_t>(line - 1));
+        buf->SetCaretPos(offset);
+        buf->SetSelectionAnchor(offset);
+        if (g_mainHwnd)
+          InvalidateRect(g_mainHwnd, NULL, FALSE);
+      }
+    }
+
+    return false;
+  }
+
   DebugLog("ScriptEngine::RunFile: Success");
-  duk_pop(m_ctx);
+  duk_pop(m_ctx); // pop return value
   return true;
 }
 
@@ -1098,7 +1160,13 @@ bool ScriptEngine::HandleKeyEvent(const std::string &key, bool isChar) {
   if (m_keyHandler.empty())
     return false;
 
-  duk_get_global_string(m_ctx, m_keyHandler.c_str());
+  if (m_keyHandler == "__JS_FUNCTION__") {
+    duk_push_global_stash(m_ctx);
+    duk_get_prop_string(m_ctx, -1, "__key_handler_func");
+  } else {
+    duk_get_global_string(m_ctx, m_keyHandler.c_str());
+  }
+
   if (duk_is_function(m_ctx, -1)) {
     duk_push_string(m_ctx, key.c_str());
     duk_push_boolean(m_ctx, isChar);
@@ -1109,30 +1177,41 @@ bool ScriptEngine::HandleKeyEvent(const std::string &key, bool isChar) {
     }
     bool handled = duk_get_boolean(m_ctx, -1);
     duk_pop(m_ctx);
+    if (m_keyHandler == "__JS_FUNCTION__")
+      duk_pop(m_ctx); // pop stash
     return handled;
   }
   duk_pop(m_ctx);
+  if (m_keyHandler == "__JS_FUNCTION__")
+    duk_pop(m_ctx); // pop stash
   return false;
 }
 
 void ScriptEngine::RegisterBinding(const std::string &chord,
                                    const std::string &jsFuncName) {
+  DebugLog("ScriptEngine::RegisterBinding: " + chord + " -> " + jsFuncName);
   m_keyBindings[chord] = jsFuncName;
 }
 
 bool ScriptEngine::HandleBinding(const std::string &chord) {
   auto it = m_keyBindings.find(chord);
   if (it != m_keyBindings.end()) {
-    duk_get_global_string(m_ctx, it->second.c_str());
-    if (duk_is_function(m_ctx, -1)) {
-      if (duk_pcall(m_ctx, 0) != 0) {
-        std::cerr << "Script error in " << it->second << ": "
-                  << duk_safe_to_string(m_ctx, -1) << std::endl;
-      }
+    DebugLog("ScriptEngine::HandleBinding: Match found for " + chord + " -> " +
+             it->second);
+    std::string code = it->second;
+    // If it's just a function/method name without parens, add them
+    if (code.find('(') == std::string::npos) {
+      code += "()";
+    }
+    if (duk_peval_string(m_ctx, code.c_str()) != 0) {
+      std::string err = duk_safe_to_string(m_ctx, -1);
+      DebugLog("Script error in " + it->second + ": " + err);
+      std::cerr << "Script error in " << it->second << ": " << err << std::endl;
       duk_pop(m_ctx);
       return true;
     }
     duk_pop(m_ctx);
+    return true;
   }
   return false;
 }
