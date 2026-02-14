@@ -1,5 +1,12 @@
 D:/ws/Ecode/build/CMakeFiles/ecode.dir
 D:/ws/Ecode/build/CMakeFiles/test_piecetable.dir
+D:/ws/Ecode/build/CMakeFiles/test_piecetable_stress.dir
 D:/ws/Ecode/build/CMakeFiles/test_editor_core.dir
+D:/ws/Ecode/build/CMakeFiles/test_undoredo_stress.dir
+D:/ws/Ecode/build/CMakeFiles/test_search_replace.dir
+D:/ws/Ecode/build/CMakeFiles/test_file_io.dir
+D:/ws/Ecode/build/CMakeFiles/performance_benchmark.dir
+D:/ws/Ecode/build/CMakeFiles/test_visual_wrap.dir
+D:/ws/Ecode/build/CMakeFiles/installer.dir
 D:/ws/Ecode/build/CMakeFiles/ALL_BUILD.dir
 D:/ws/Ecode/build/CMakeFiles/ZERO_CHECK.dir

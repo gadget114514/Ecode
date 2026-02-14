@@ -1,21 +1,19 @@
 #include "../include/Dialogs.h"
 #include "../include/Editor.h"
-#include "../include/Localization.h"
 #include "../include/EditorBufferRenderer.h"
-#include "../include/resource.h"
+#include "../include/Localization.h"
 #include "../include/ScriptEngine.h"
+#include "../include/resource.h"
 #include <commdlg.h>
 #include <filesystem>
 #include <shellapi.h>
-#include <vector>
-
 #include <vector>
 
 extern std::unique_ptr<EditorBufferRenderer> g_renderer;
 extern std::unique_ptr<Editor> g_editor;
 extern std::unique_ptr<ScriptEngine> g_scriptEngine;
 
-namespace fs = std::filesystem;
+// Use fully qualified calls or ensure C++17
 
 INT_PTR CALLBACK JumpToLineDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                    LPARAM lParam) {
@@ -62,8 +60,9 @@ INT_PTR CALLBACK MacroGalleryDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     wchar_t appData[MAX_PATH];
     if (GetEnvironmentVariableW(L"APPDATA", appData, MAX_PATH)) {
       std::wstring macroDir = std::wstring(appData) + L"\\Ecode\\macros";
-      if (fs::exists(macroDir)) {
-        for (const auto &entry : fs::directory_iterator(macroDir)) {
+      if (std::filesystem::exists(macroDir)) {
+        for (const auto &entry :
+             std::filesystem::directory_iterator(macroDir)) {
           if (entry.path().extension() == L".js") {
             macroPaths.push_back(entry.path().wstring());
             SendMessage(hList, LB_ADDSTRING, 0,
@@ -156,9 +155,6 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       CheckDlgButton(hDlg, IDC_SHOW_LINE_NUMBERS,
                      g_renderer->GetShowLineNumbers() ? BST_CHECKED
                                                       : BST_UNCHECKED);
-      CheckDlgButton(hDlg, IDC_SHOW_PHYSICAL_LINE_NUMS,
-                     g_renderer->GetShowPhysicalLineNumbers() ? BST_CHECKED
-                                                              : BST_UNCHECKED);
       CheckDlgButton(hDlg, IDC_WORD_WRAP,
                      g_renderer->GetWordWrap() ? BST_CHECKED : BST_UNCHECKED);
       SetDlgItemInt(hDlg, IDC_WRAP_WIDTH,
@@ -166,7 +162,19 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       SetDlgItemInt(hDlg, IDC_FONT_WEIGHT,
                     static_cast<UINT>(g_renderer->GetFontWeight()), FALSE);
       CheckDlgButton(hDlg, IDC_ENABLE_LIGATURES,
-                     g_renderer->GetEnableLigatures() ? BST_CHECKED : BST_UNCHECKED);
+                     g_renderer->GetEnableLigatures() ? BST_CHECKED
+                                                      : BST_UNCHECKED);
+
+      HWND hCaret = GetDlgItem(hDlg, IDC_CARET_STYLE);
+      SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Line");
+      SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Block");
+      SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Underline");
+      SendMessage(hCaret, CB_SETCURSEL,
+                  (static_cast<int>(g_renderer->GetCaretStyle())), 0);
+
+      CheckDlgButton(hDlg, IDC_CARET_BLINKING,
+                     g_renderer->GetCaretBlinking() ? BST_CHECKED
+                                                    : BST_UNCHECKED);
     }
 
     HWND hCombo = GetDlgItem(hDlg, IDC_LANGUAGE);
@@ -196,12 +204,19 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           (int)SendMessage(GetDlgItem(hDlg, IDC_LANGUAGE), CB_GETCURSEL, 0, 0);
 
       if (g_renderer) {
-        g_renderer->SetFont(fontFamily, (float)fontSize, static_cast<DWRITE_FONT_WEIGHT>(fontWeight));
+        g_renderer->SetFont(fontFamily, (float)fontSize,
+                            static_cast<DWRITE_FONT_WEIGHT>(fontWeight));
         g_renderer->SetEnableLigatures(enableLigatures == BST_CHECKED);
         g_renderer->SetShowLineNumbers(showLineNums == BST_CHECKED);
-        g_renderer->SetShowPhysicalLineNumbers(showPhysical == BST_CHECKED);
+        // g_renderer->SetShowPhysicalLineNumbers(showPhysical == BST_CHECKED);
         g_renderer->SetWordWrap(wordWrap == BST_CHECKED);
         g_renderer->SetWrapWidth((float)wrapWidth);
+
+        int caretStyle =
+            (int)SendDlgItemMessage(hDlg, IDC_CARET_STYLE, CB_GETCURSEL, 0, 0);
+        BOOL caretBlinking = IsDlgButtonChecked(hDlg, IDC_CARET_BLINKING);
+        g_renderer->SetCaretStyle((EditorBufferRenderer::CaretStyle)caretStyle);
+        g_renderer->SetCaretBlinking(caretBlinking == BST_CHECKED);
       }
 
       Localization::Instance().SetLanguage((Language)lang);
@@ -233,4 +248,17 @@ void Dialogs::ShowFindReplaceDialog(HWND hwnd, bool replaceMode) {
   std::wstring type = replaceMode ? L"Replace" : L"Find";
   MessageBoxW(hwnd, (type + L" Dialog - Under Construction").c_str(),
               type.c_str(), MB_OK);
+}
+
+Dialogs::ConfirmationResult
+Dialogs::ShowSaveConfirmationDialog(HWND hwnd, const std::wstring &filename) {
+  std::wstring name = filename.empty() ? L"Untitled" : filename;
+  std::wstring msg = L"Do you want to save changes to " + name + L"?";
+  int result =
+      MessageBoxW(hwnd, msg.c_str(), L"Ecode", MB_YESNOCANCEL | MB_ICONWARNING);
+  if (result == IDYES)
+    return ConfirmationResult::Save;
+  if (result == IDNO)
+    return ConfirmationResult::Discard;
+  return ConfirmationResult::Cancel;
 }

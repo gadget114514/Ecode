@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -39,10 +40,16 @@ public:
 
   // Retrieval
   std::string GetText(size_t pos, size_t length) const;
+  void WriteTo(std::function<void(const char *, size_t)> writer) const;
   size_t GetTotalLength() const;
   size_t GetTotalLines() const;
   size_t GetLineOffset(size_t lineIndex) const;
   size_t GetLineAtOffset(size_t offset) const;
+
+  // OPTIMIZATION: Piece table compaction
+  void CompactPieces();
+  size_t GetPieceCount() const { return m_pieces.size(); }
+  void InvalidateLineCache() { m_lineCacheValid = false; }
 
 private:
   const char *m_originalData;
@@ -51,6 +58,7 @@ private:
   std::vector<Piece> m_pieces;
 
   size_t m_totalLength;
+  size_t m_totalLines;
 
   const char *GetPieceData(const Piece &p) const;
 
@@ -66,4 +74,13 @@ private:
     size_t offsetInPiece;
   };
   PieceInfo FindPiecePosition(size_t pos) const;
+
+  // OPTIMIZATION: Line offset cache for O(1) line lookups
+  mutable std::vector<size_t> m_lineOffsetCache;
+  mutable bool m_lineCacheValid = false;
+
+  void RebuildLineCache() const;
+
+  // OPTIMIZATION: Piece table compaction tracking
+  size_t m_editsSinceCompaction = 0;
 };

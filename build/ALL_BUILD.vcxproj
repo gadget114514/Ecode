@@ -178,13 +178,37 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{C6DF2BB9-1726-30CE-A7E9-2E8B58F2FDFC}</Project>
       <Name>ecode</Name>
     </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\performance_benchmark.vcxproj">
+      <Project>{5FD67924-776D-3F09-A3FC-505DA5543468}</Project>
+      <Name>performance_benchmark</Name>
+    </ProjectReference>
     <ProjectReference Include="D:\ws\Ecode\build\test_editor_core.vcxproj">
       <Project>{8AC88E85-5054-37E8-8DD2-FBB291850A25}</Project>
       <Name>test_editor_core</Name>
     </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\test_file_io.vcxproj">
+      <Project>{7314ACF5-2C29-33DC-B020-5CA7EBE7C0DF}</Project>
+      <Name>test_file_io</Name>
+    </ProjectReference>
     <ProjectReference Include="D:\ws\Ecode\build\test_piecetable.vcxproj">
       <Project>{7B19E317-D4B5-3B7A-89D8-EB257CB009F5}</Project>
       <Name>test_piecetable</Name>
+    </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\test_piecetable_stress.vcxproj">
+      <Project>{65C06EB3-971F-3783-A101-2C713A18F734}</Project>
+      <Name>test_piecetable_stress</Name>
+    </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\test_search_replace.vcxproj">
+      <Project>{94B4FF8F-B37B-3941-8AE1-F71EAABF448E}</Project>
+      <Name>test_search_replace</Name>
+    </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\test_undoredo_stress.vcxproj">
+      <Project>{E0B7703B-F4C2-3304-B5D5-337744F60AD9}</Project>
+      <Name>test_undoredo_stress</Name>
+    </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\test_visual_wrap.vcxproj">
+      <Project>{7082959B-3346-3F3B-A24F-5A72B736DDA2}</Project>
+      <Name>test_visual_wrap</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

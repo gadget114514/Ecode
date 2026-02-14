@@ -4,8 +4,8 @@
 
 #include "../include/Dialogs.h"
 #include "../include/Editor.h"
-#include "../include/Localization.h"
 #include "../include/EditorBufferRenderer.h"
+#include "../include/Localization.h"
 #include "../include/ScriptEngine.h"
 #include "../include/SettingsManager.h"
 #include <commctrl.h>
@@ -79,6 +79,9 @@ HWND g_mainHwnd = NULL;
 HWND g_statusHwnd = NULL;
 HWND g_progressHwnd = NULL;
 HWND g_tabHwnd = NULL;
+HWND g_minibufferHwnd = NULL;
+bool g_minibufferVisible = false;
+std::string g_minibufferPrompt = ":";
 std::unique_ptr<Editor> g_editor;
 std::unique_ptr<EditorBufferRenderer> g_renderer;
 std::unique_ptr<ScriptEngine> g_scriptEngine;
@@ -88,6 +91,74 @@ FINDREPLACEW g_fr = {0};
 WCHAR g_szFindWhat[256] = L"";
 WCHAR g_szReplaceWith[256] = L"";
 HWND g_hDlgFind = NULL;
+
+std::wstring StringToWString(const std::string &s) {
+  int len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, NULL, 0);
+  if (len <= 0)
+    return L"";
+  std::wstring ws(len - 1, '\0');
+  MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &ws[0], len);
+  return ws;
+}
+
+WNDPROC g_oldMinibufferProc = NULL;
+
+LRESULT CALLBACK MinibufferSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam,
+                                        LPARAM lParam) {
+  if (uMsg == WM_KEYDOWN) {
+    if (wParam == VK_RETURN) {
+      int len = GetWindowTextLengthA(hwnd);
+      std::string code(len, '\0');
+      GetWindowTextA(hwnd, &code[0], len + 1);
+
+      // Execute command
+      std::string result = g_scriptEngine->Evaluate(code);
+
+      // Show result in status bar or as an alert
+      std::wstring wresult = StringToWString(result);
+      SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)wresult.c_str());
+
+      // Hide minibuffer
+      g_minibufferVisible = false;
+      SendMessage(g_mainHwnd, WM_SIZE, 0, 0);
+      SetFocus(g_mainHwnd);
+      return 0;
+    } else if (wParam == VK_ESCAPE) {
+      g_minibufferVisible = false;
+      SendMessage(g_mainHwnd, WM_SIZE, 0, 0);
+      SetFocus(g_mainHwnd);
+      return 0;
+    }
+  }
+  return CallWindowProc(g_oldMinibufferProc, hwnd, uMsg, wParam, lParam);
+}
+
+bool PromptSaveBuffer(HWND hwnd, Buffer *buf) {
+  if (!buf->IsDirty())
+    return true;
+
+  auto res = Dialogs::ShowSaveConfirmationDialog(hwnd, buf->GetPath());
+  if (res == Dialogs::ConfirmationResult::Cancel)
+    return false;
+  if (res == Dialogs::ConfirmationResult::Discard)
+    return true;
+
+  // Save
+  if (buf->GetPath().empty()) {
+    std::wstring path = Dialogs::SaveFileDialog(hwnd);
+    if (path.empty())
+      return false; // User cancelled save dialog
+    if (buf->SaveFile(path)) {
+      SettingsManager::Instance().AddRecentFile(path);
+      return true;
+    }
+    return false; // Save failed
+  } else {
+    if (buf->SaveFile(buf->GetPath()))
+      return true;
+    return false;
+  }
+}
 
 void UpdateScrollbars(HWND hwnd) {
   Buffer *buf = g_editor->GetActiveBuffer();
@@ -116,9 +187,14 @@ void UpdateScrollbars(HWND hwnd) {
   si.nPos = (int)buf->GetScrollLine();
   SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
 
-  // Horizontal Scroll
-  std::string content = buf->GetText(0, buf->GetTotalLength());
-  float textWidth = g_renderer->GetTextWidth(content);
+  // Horizontal Scroll - OPTIMIZATION: Use viewport text instead of entire file
+  size_t scrollLine = buf->GetScrollLine();
+  size_t viewportLineCount = g_renderer->CalculateVisibleLineCount();
+  size_t actualLines = 0;
+  std::string viewportContent =
+      buf->GetViewportText(scrollLine, viewportLineCount, actualLines);
+
+  float textWidth = g_renderer->GetTextWidth(viewportContent);
   float gutterWidth = 50.0f;
   int totalWidth = (int)(textWidth + gutterWidth + 20.0f);
   int visibleWidth = rc.right;
@@ -201,7 +277,7 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE, L10N("menu_file_save"));
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE_AS, L10N("menu_file_save_as"));
   AppendMenu(hFile, MF_STRING, IDM_FILE_CLOSE, L10N("menu_file_close"));
-  
+
   // Recent Files Submenu
   HMENU hRecent = CreatePopupMenu();
   const auto &recent = SettingsManager::Instance().GetRecentFiles();
@@ -310,8 +386,18 @@ void UpdateMenu(HWND hwnd) {
   UpdateTabs(hwnd);
 }
 
+void DebugLog(const std::string &msg);
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                             LPARAM lParam) {
+  if (uMsg == WM_CREATE) {
+    DebugLog("WM_CREATE Received");
+  } else if (uMsg == WM_SHOWWINDOW) {
+    DebugLog("WM_SHOWWINDOW Received, wParam=" + std::to_string(wParam));
+  } else if (uMsg == WM_SIZE) {
+    // Too noisy?
+  }
+
   if (uMsg == g_uFindMsgString) {
     LPFINDREPLACEW lpfr = (LPFINDREPLACEW)lParam;
     Buffer *buf = g_editor->GetActiveBuffer();
@@ -395,13 +481,28 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       }
 
       size_t count = 0;
+      size_t totalReplaceCount = 0; // Estimate or count first?
+      // Let's count first if the file is large
+      size_t tempPos = 0;
+      while ((tempPos = buf->Find(findWhat, tempPos, true, useRegex,
+                                  matchCase)) != std::string::npos) {
+        totalReplaceCount++;
+        tempPos += findWhat.length();
+      }
+
       size_t pos = 0;
       while ((pos = buf->Find(findWhat, pos, true, useRegex, matchCase)) !=
              std::string::npos) {
         buf->Replace(pos, pos + findWhat.length(), replaceWith);
         pos += replaceWith.length();
         count++;
+        if (totalReplaceCount > 0) {
+          SendMessage(g_progressHwnd, PBM_SETPOS,
+                      (int)((float)count / totalReplaceCount * 100), 0);
+          UpdateWindow(g_statusHwnd);
+        }
       }
+      SendMessage(g_progressHwnd, PBM_SETPOS, 0, 0); // Reset
       if (count > 0) {
         UpdateScrollbars(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);
@@ -412,6 +513,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
 
   switch (uMsg) {
   case WM_CREATE: {
+    SetWindowLong(hwnd, GWL_STYLE,
+                  GetWindowLong(hwnd, GWL_STYLE) | WS_CLIPCHILDREN);
     g_mainHwnd = hwnd;
 
     // Initialize Common Controls
@@ -420,82 +523,131 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     icex.dwICC = ICC_BAR_CLASSES | ICC_PROGRESS_CLASS | ICC_TAB_CLASSES;
     InitCommonControlsEx(&icex);
 
+    DebugLog("WM_CREATE: Common Controls Init");
+
     // Create Tab Control
     g_tabHwnd = CreateWindowEx(0, WC_TABCONTROL, NULL,
                                WS_CHILD | WS_VISIBLE | TCS_TABS, 0, 0, 0, 0,
                                hwnd, (HMENU)2002, GetModuleHandle(NULL), NULL);
 
+    DebugLog("WM_CREATE: Status Bar");
     // Create Status Bar
     g_statusHwnd = CreateWindowEx(
         0, STATUSCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0,
         0, 0, hwnd, (HMENU)2000, GetModuleHandle(NULL), NULL);
 
-    // Create Progress Bar as a child of the status bar or just above it
-    // For simplicity, we'll put it in one of the parts of the status bar later,
-    // but for now let's just create it.
+    // Create Progress Bar
     g_progressHwnd = CreateWindowEx(
         0, PROGRESS_CLASS, NULL, WS_CHILD | WS_VISIBLE | PBS_SMOOTH, 0, 0, 0, 0,
         g_statusHwnd, (HMENU)2001, GetModuleHandle(NULL), NULL);
+
+    DebugLog("WM_CREATE: Mini Buffer");
+    // Create Mini Buffer
+    g_minibufferHwnd =
+        CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"",
+                       WS_CHILD | WS_CLIPSIBLINGS | ES_AUTOHSCROLL, 0, 0, 0, 0,
+                       hwnd, (HMENU)2003, GetModuleHandle(NULL), NULL);
+
+    SendMessage(g_minibufferHwnd, WM_SETFONT,
+                (WPARAM)GetStockObject(DEFAULT_GUI_FONT), TRUE);
+
+    g_oldMinibufferProc = (WNDPROC)SetWindowLongPtr(
+        g_minibufferHwnd, GWLP_WNDPROC, (LONG_PTR)MinibufferSubclassProc);
 
     int parts[] = {300, 600, -1};
     SendMessage(g_statusHwnd, SB_SETPARTS, 3, (LPARAM)parts);
     SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)L"Ready");
 
+    DebugLog("WM_CREATE: Renderer Init");
     g_renderer = std::make_unique<EditorBufferRenderer>();
     if (!g_renderer->Initialize(hwnd)) {
+      DebugLog("Renderer Initialize Failed");
       return -1;
     }
+
+    DebugLog("WM_CREATE: ScriptEngine Init");
     g_scriptEngine = std::make_unique<ScriptEngine>();
     g_scriptEngine->Initialize();
 
+    DebugLog("WM_CREATE: Editor Init");
     g_editor = std::make_unique<Editor>();
+    g_editor->SetProgressCallback([](float progress) {
+      if (g_progressHwnd) {
+        SendMessage(g_progressHwnd, PBM_SETPOS, (int)(progress * 100), 0);
+        UpdateWindow(g_statusHwnd);
+      }
+    });
     g_editor->NewFile();
     UpdateMenu(hwnd);
     SetTimer(hwnd, 1, 500, NULL);
     g_uFindMsgString = RegisterWindowMessageW(FINDMSGSTRINGW);
     DragAcceptFiles(hwnd, TRUE);
 
-    // Load initialization script
+    DebugLog("WM_CREATE: Load Init Script");
     wchar_t appData[MAX_PATH];
     if (GetEnvironmentVariableW(L"APPDATA", appData, MAX_PATH)) {
       std::wstring initPath = std::wstring(appData) + L"\\Ecode\\ecodeinit.js";
       g_scriptEngine->RunFile(initPath);
     }
 
+    DebugLog("WM_CREATE: Settings Load");
     // Apply managed settings
-    auto& settings = SettingsManager::Instance();
+    auto &settings = SettingsManager::Instance();
     settings.Load();
-    
+
     RECT rc = {0};
     settings.GetWindowRect(rc);
     if (rc.right > rc.left && rc.bottom > rc.top) {
-        MoveWindow(hwnd, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, TRUE);
+      MoveWindow(hwnd, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+                 TRUE);
     }
     if (settings.IsWindowMaximized()) {
-        ShowWindow(hwnd, SW_MAXIMIZE);
+      ShowWindow(hwnd, SW_MAXIMIZE);
     }
+
+    ShowWindow(g_statusHwnd, settings.IsShowStatusBar() ? SW_SHOW : SW_HIDE);
 
     g_renderer->SetFont(settings.GetFontFamily(), settings.GetFontSize());
     g_renderer->SetWordWrap(settings.IsWordWrap());
-    Localization::Instance().SetLanguage(static_cast<Language>(settings.GetLanguage()));
+    Localization::Instance().SetLanguage(
+        static_cast<Language>(settings.GetLanguage()));
     UpdateMenu(hwnd);
 
     return 0;
-}
+  }
+  case WM_CLOSE: {
+    const auto &buffers = g_editor->GetBuffers();
+    for (size_t i = 0; i < buffers.size(); ++i) {
+      if (buffers[i]->IsDirty()) {
+        g_editor->SwitchToBuffer(i);
+        UpdateMenu(hwnd);
+        UpdateTabs(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+        UpdateWindow(hwnd);
+
+        if (!PromptSaveBuffer(hwnd, buffers[i].get())) {
+          return 0;
+        }
+      }
+    }
+    DestroyWindow(hwnd);
+    return 0;
+  }
   case WM_DESTROY: {
-    auto& settings = SettingsManager::Instance();
+    auto &settings = SettingsManager::Instance();
     WINDOWPLACEMENT wp = {0};
     wp.length = sizeof(wp);
     if (GetWindowPlacement(hwnd, &wp)) {
-        settings.SetWindowRect(wp.rcNormalPosition);
-        settings.SetWindowMaximized(wp.showCmd == SW_SHOWMAXIMIZED);
+      settings.SetWindowRect(wp.rcNormalPosition);
+      settings.SetWindowMaximized(wp.showCmd == SW_SHOWMAXIMIZED);
     }
     settings.SetFontFamily(g_renderer->GetFontFamily());
     settings.SetFontSize(g_renderer->GetFontSize());
-    settings.SetLanguage(static_cast<int>(Localization::Instance().GetCurrentLanguage()));
+    settings.SetLanguage(
+        static_cast<int>(Localization::Instance().GetCurrentLanguage()));
     settings.SetWordWrap(g_renderer->IsWordWrap());
     settings.Save();
-    
+
     PostQuitMessage(0);
     return 0;
   }
@@ -578,8 +730,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
 
     // Stubs for other menu items
     case IDM_FILE_CLOSE:
-      g_editor->CloseBuffer(g_editor->GetActiveBufferIndex());
-      UpdateMenu(hwnd);
+      if (g_editor->GetActiveBuffer()) {
+        if (!PromptSaveBuffer(hwnd, g_editor->GetActiveBuffer()))
+          break;
+        g_editor->CloseBuffer(g_editor->GetActiveBufferIndex());
+        UpdateMenu(hwnd);
+      }
       break;
     case IDM_EDIT_UNDO:
       g_editor->Undo();
@@ -627,9 +783,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       g_hDlgFind = ReplaceTextW(&g_fr);
       break;
     }
-    case IDM_EDIT_GOTO:
-      Dialogs::ShowJumpToLineDialog(hwnd);
-      break;
     case IDM_VIEW_TOGGLE_UI:
       MessageBox(hwnd, L"Toggle UI - Under Construction", L"Info", MB_OK);
       break;
@@ -690,22 +843,39 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     int tabHeight = 25;
 
     // Resize Status Bar
-    SendMessage(g_statusHwnd, WM_SIZE, 0, 0);
+    if (IsWindowVisible(g_statusHwnd)) {
+      SendMessage(g_statusHwnd, WM_SIZE, 0, 0);
+    }
+
+    RECT rcStatusWnd = {0};
+    int statusHeight = 0;
+    if (IsWindowVisible(g_statusHwnd)) {
+      GetWindowRect(g_statusHwnd, &rcStatusWnd);
+      statusHeight = rcStatusWnd.bottom - rcStatusWnd.top;
+    }
+
+    // Resize Mini Buffer
+    int minibufferHeight = g_minibufferVisible ? 24 : 0;
+    MoveWindow(g_minibufferHwnd, 0, height - statusHeight - minibufferHeight,
+               width, minibufferHeight, TRUE);
+    ShowWindow(g_minibufferHwnd, g_minibufferVisible ? SW_SHOW : SW_HIDE);
 
     // Reposition Progress Bar within the status bar (part 2)
-    RECT rcStatus;
-    SendMessage(g_statusHwnd, SB_GETRECT, 2, (LPARAM)&rcStatus);
-    MoveWindow(g_progressHwnd, rcStatus.left + 2, rcStatus.top + 2,
-               rcStatus.right - rcStatus.left - 4,
-               rcStatus.bottom - rcStatus.top - 4, TRUE);
+    if (IsWindowVisible(g_statusHwnd)) {
+      RECT rcStatus;
+      SendMessage(g_statusHwnd, SB_GETRECT, 2, (LPARAM)&rcStatus);
+      MoveWindow(g_progressHwnd, rcStatus.left + 2, rcStatus.top + 2,
+                 rcStatus.right - rcStatus.left - 4,
+                 rcStatus.bottom - rcStatus.top - 4, TRUE);
+    }
 
     // Calculate available height for editor
-    RECT rcStatusWnd;
-    GetWindowRect(g_statusHwnd, &rcStatusWnd);
-    int statusHeight = rcStatusWnd.bottom - rcStatusWnd.top;
-
+    // Subtract a small margin to ensure the last line is fully visible and not
+    // covered by status bar
+    int safetyMargin = 50;
     g_renderer->SetTopOffset((float)tabHeight);
-    g_renderer->Resize(width, height - tabHeight - statusHeight);
+    g_renderer->Resize(width, height - tabHeight - statusHeight -
+                                  minibufferHeight - safetyMargin);
     UpdateScrollbars(hwnd);
     return 0;
   }
@@ -714,27 +884,88 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     BeginPaint(hwnd, &ps);
     Buffer *activeBuffer = g_editor->GetActiveBuffer();
     if (activeBuffer) {
-      std::string content = activeBuffer->GetVisibleText();
-      
-      auto selectionRanges = activeBuffer->GetSelectionRanges();
-      
-      size_t visualCaret =
-          activeBuffer->LogicalToVisualOffset(activeBuffer->GetCaretPos());
+      // VIEWPORT RENDERING OPTIMIZATION FOR LARGE FILES (FR-1.1.3)
+      // Instead of getting all visible text, only get the lines that fit in the
+      // viewport
+      size_t scrollLine = activeBuffer->GetScrollLine();
+      size_t viewportLineCount = g_renderer->CalculateVisibleLineCount();
+      size_t actualLines = 0;
 
+      // Get only the viewport text (typically 50-100 lines instead of millions)
+      std::string content = activeBuffer->GetViewportText(
+          scrollLine, viewportLineCount, actualLines);
+
+      auto selectionRanges = activeBuffer->GetSelectionRanges();
+
+      // Calculate viewport-relative caret position
+      // The caret position needs to be relative to the viewport text, not the
+      // entire buffer
+      size_t logicalCaret = activeBuffer->GetCaretPos();
+      size_t visualCaret = activeBuffer->LogicalToVisualOffset(logicalCaret);
+
+      // Calculate the visual offset of the viewport start
+      size_t viewportStartPhysicalLine =
+          (scrollLine < activeBuffer->GetVisibleLineCount())
+              ? activeBuffer->GetPhysicalLine(scrollLine)
+              : 0;
+      size_t viewportStartLogical =
+          activeBuffer->GetLineOffset(viewportStartPhysicalLine);
+      size_t viewportStartVisual =
+          activeBuffer->LogicalToVisualOffset(viewportStartLogical);
+
+      // Make caret position relative to viewport
+      size_t viewportRelativeCaret = (visualCaret >= viewportStartVisual)
+                                         ? (visualCaret - viewportStartVisual)
+                                         : 0;
+
+      // Build physical line numbers for the viewport only
       std::vector<size_t> physicalLineNumbers;
-      size_t visibleLineCount = activeBuffer->GetVisibleLineCount();
-      physicalLineNumbers.reserve(visibleLineCount);
-      for (size_t i = 0; i < visibleLineCount; ++i) {
-        physicalLineNumbers.push_back(activeBuffer->GetPhysicalLine(i));
+      physicalLineNumbers.reserve(actualLines);
+      for (size_t i = 0; i < actualLines; ++i) {
+        physicalLineNumbers.push_back(
+            activeBuffer->GetPhysicalLine(scrollLine + i));
       }
 
       auto highlights = activeBuffer->GetHighlights();
+      size_t viewportEndLogical = viewportStartLogical + content.length();
 
-      g_renderer->DrawEditorLines(content, visualCaret, &selectionRanges,
-                         &highlights,
-                         activeBuffer->GetScrollLine() + 1,
-                         activeBuffer->GetScrollX(), &physicalLineNumbers,
-                         activeBuffer->GetTotalLines());
+      // OPTIMIZATION #3: Lazy Syntax Highlighting - Filter and adjust for
+      // viewport
+      std::vector<Buffer::HighlightRange> viewportHighlights;
+      for (const auto &h : highlights) {
+        size_t hEnd = h.start + h.length;
+        if (hEnd > viewportStartLogical && h.start < viewportEndLogical) {
+          Buffer::HighlightRange adjusted = h;
+          // Clamp start to viewport and make relative
+          size_t startRel = (h.start > viewportStartLogical)
+                                ? (h.start - viewportStartLogical)
+                                : 0;
+          size_t endRel = (hEnd < viewportEndLogical)
+                              ? (hEnd - viewportStartLogical)
+                              : content.length();
+          adjusted.start = startRel;
+          adjusted.length = endRel - startRel;
+          viewportHighlights.push_back(adjusted);
+        }
+      }
+
+      // Adjust selection ranges for the viewport as well
+      std::vector<Buffer::SelectionRange> viewportSelections;
+      for (const auto &s : selectionRanges) {
+        if (s.end > viewportStartLogical && s.start < viewportEndLogical) {
+          viewportSelections.push_back({(s.start > viewportStartLogical)
+                                            ? (s.start - viewportStartLogical)
+                                            : 0,
+                                        (s.end < viewportEndLogical)
+                                            ? (s.end - viewportStartLogical)
+                                            : content.length()});
+        }
+      }
+
+      g_renderer->DrawEditorLines(
+          content, viewportRelativeCaret, &viewportSelections,
+          &viewportHighlights, scrollLine + 1, activeBuffer->GetScrollX(),
+          &physicalLineNumbers, activeBuffer->GetTotalLines());
     }
     EndPaint(hwnd, &ps);
     return 0;
@@ -780,6 +1011,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     return 0;
   }
   case WM_KEYDOWN: {
+    static bool s_inEscapeSequence = false;
+
+    if (s_inEscapeSequence) {
+      s_inEscapeSequence = false;
+      if (wParam == 'X') {
+        g_minibufferVisible = true;
+        SendMessage(hwnd, WM_SIZE, 0, 0);
+        SetFocus(g_minibufferHwnd);
+        SetWindowTextA(g_minibufferHwnd, "");
+        return 0;
+      }
+    }
+
     std::string chord;
     if (GetKeyState(VK_CONTROL) & 0x8000)
       chord += "Ctrl+";
@@ -787,10 +1031,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       chord += "Shift+";
     if (GetKeyState(VK_MENU) & 0x8000)
       chord += "Alt+";
-    
-    if (GetKeyState(VK_CONTROL) & 0x8000 && wParam == 'G') {
-        Dialogs::ShowJumpToLineDialog(hwnd);
+
+    if ((GetKeyState(VK_MENU) & 0x8000) && wParam == 'X') {
+      g_minibufferVisible = true;
+      SendMessage(hwnd, WM_SIZE, 0, 0);
+      SetFocus(g_minibufferHwnd);
+      SetWindowTextA(g_minibufferHwnd, "");
+      return 0;
+    }
+
+    if (wParam == VK_ESCAPE) {
+      if (g_minibufferVisible) {
+        g_minibufferVisible = false;
+        SendMessage(hwnd, WM_SIZE, 0, 0);
+        SetFocus(hwnd);
         return 0;
+      }
+      s_inEscapeSequence = true;
+      return 0;
+    }
+
+    if (GetKeyState(VK_CONTROL) & 0x8000 && wParam == 'G') {
+      Dialogs::ShowJumpToLineDialog(hwnd);
+      return 0;
     }
 
     if (wParam >= 'A' && wParam <= 'Z') {
@@ -973,33 +1236,54 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     Buffer *activeBuffer = g_editor->GetActiveBuffer();
     if (activeBuffer) {
       size_t visualLineIndex;
-      std::string visibleText = activeBuffer->GetVisibleText();
-      if (g_renderer->HitTestGutter(visibleText, (float)x, (float)y,
+      size_t totalLines = activeBuffer->GetTotalLines();
+      if (g_renderer->HitTestGutter((float)x, (float)y, totalLines,
                                     visualLineIndex)) {
-        size_t physicalLine =
-            activeBuffer->GetPhysicalLine(visualLineIndex +
-                                          activeBuffer->GetScrollLine());
-        
-        // Check if hit fold indicator area (approx last 15 pixels of gutter)
-        // We'll trust EditorBufferRenderer to give us the line, but we check X here
-        // This is a bit of a hack, better to have HitTestGutter return more info
-        // but for now...
+        size_t physicalLine = activeBuffer->GetPhysicalLine(
+            visualLineIndex + activeBuffer->GetScrollLine());
+
         float gutterWidth;
         {
-            size_t totalLines = activeBuffer->GetTotalLines();
-            int digits = (int)std::to_string(totalLines).length();
-            gutterWidth = (digits * 8.0f) + 15.0f;
+          int digits =
+              (totalLines > 0) ? (int)std::to_string(totalLines).length() : 1;
+          gutterWidth = (digits * 8.0f) + 15.0f;
         }
 
         if (x > gutterWidth - 15.0f) {
-            activeBuffer->ToggleFold(physicalLine);
+          activeBuffer->ToggleFold(physicalLine);
         } else {
-            activeBuffer->SelectLine(physicalLine);
+          activeBuffer->SelectLine(physicalLine);
         }
       } else {
-        size_t visualPos =
-            g_renderer->GetPositionFromPoint(visibleText, (float)x, (float)y);
-        size_t pos = activeBuffer->VisualToLogicalOffset(visualPos);
+        // OPTIMIZATION: Use viewport text instead of entire file text
+        size_t scrollLine = activeBuffer->GetScrollLine();
+        size_t viewportLineCount = g_renderer->CalculateVisibleLineCount();
+        size_t actualLines = 0;
+        std::string viewportText = activeBuffer->GetViewportText(
+            scrollLine, viewportLineCount, actualLines);
+
+        size_t viewportRelVisualPos = g_renderer->GetPositionFromPoint(
+            viewportText, (float)x, (float)y, totalLines);
+
+        // Convert viewport-relative visual position to logical position
+        // 1. Find the start offset of the viewport
+        size_t viewportStartPhysical =
+            activeBuffer->GetPhysicalLine(scrollLine);
+        size_t viewportOffset =
+            activeBuffer->GetLineOffset(viewportStartPhysical);
+        // 2. Add the visual-to-logical translation of the viewportRelative
+        // position Note: For simple text, visualPos == logicalOffset in
+        // viewport. For wrapping/folding, we need to be more careful. Assuming
+        // GetPositionFromPoint returns character index in provided text.
+
+        size_t logicalPosInViewport =
+            activeBuffer->VisualToLogicalOffset(viewportRelVisualPos);
+        // Wait, VisualToLogicalOffset is defined on the whole buffer...
+        // Actually, if we pass viewportText, GetPositionFromPoint gives byte
+        // index in that string. So we just add the viewport's starting logical
+        // offset.
+
+        size_t pos = viewportOffset + viewportRelVisualPos;
         activeBuffer->SetCaretPos(pos);
         if (!(GetKeyState(VK_SHIFT) & 0x8000)) {
           activeBuffer->SetSelectionAnchor(pos);
@@ -1018,15 +1302,27 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       if (activeBuffer) {
         // Toggle Box selection if Alt is pressed
         if (GetKeyState(VK_MENU) & 0x8000) {
-            activeBuffer->SetSelectionMode(SelectionMode::Box);
+          activeBuffer->SetSelectionMode(SelectionMode::Box);
         } else {
-            activeBuffer->SetSelectionMode(SelectionMode::Normal);
+          activeBuffer->SetSelectionMode(SelectionMode::Normal);
         }
 
-        std::string text = activeBuffer->GetVisibleText();
-        size_t visualPos =
-            g_renderer->GetPositionFromPoint(text, (float)x, (float)y);
-        size_t pos = activeBuffer->VisualToLogicalOffset(visualPos);
+        size_t scrollLine = activeBuffer->GetScrollLine();
+        size_t viewportLineCount = g_renderer->CalculateVisibleLineCount();
+        size_t actualLines = 0;
+        std::string viewportText = activeBuffer->GetViewportText(
+            scrollLine, viewportLineCount, actualLines);
+        size_t totalLines = activeBuffer->GetTotalLines();
+
+        size_t viewportRelVisualPos = g_renderer->GetPositionFromPoint(
+            viewportText, (float)x, (float)y, totalLines);
+
+        size_t viewportStartPhysical =
+            activeBuffer->GetPhysicalLine(scrollLine);
+        size_t viewportOffset =
+            activeBuffer->GetLineOffset(viewportStartPhysical);
+        size_t pos = viewportOffset + viewportRelVisualPos;
+
         activeBuffer->SetCaretPos(pos);
         EnsureCaretVisible(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);
@@ -1185,36 +1481,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
-  case WM_CLOSE: {
-    bool cancelExit = false;
-    for (const auto &buf : g_editor->GetBuffers()) {
-      if (buf->IsDirty()) {
-        std::wstring name =
-            buf->GetPath().empty() ? L"Untitled" : buf->GetPath();
-        int res = MessageBoxW(hwnd, (L"Save changes to " + name + L"?").c_str(),
-                              L"Ecode", MB_YESNOCANCEL | MB_ICONQUESTION);
-        if (res == IDCANCEL) {
-          cancelExit = true;
-          break;
-        } else if (res == IDYES) {
-          if (buf->GetPath().empty()) {
-            std::wstring path = Dialogs::SaveFileDialog(hwnd);
-            if (!path.empty())
-              buf->SaveFile(path);
-            else {
-              cancelExit = true;
-              break;
-            }
-          } else {
-            buf->SaveFile(buf->GetPath());
-          }
-        }
-      }
-    }
-    if (!cancelExit)
-      DestroyWindow(hwnd);
-    return 0;
-  }
   case WM_DROPFILES: {
     HDROP hDrop = (HDROP)wParam;
     UINT count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
@@ -1244,61 +1510,112 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
+#include <fstream>
 #include <shellapi.h>
+#include <stdexcept>
+
+void DebugLog(const std::string &msg) {
+  std::ofstream ofs("debug_init.log", std::ios::app);
+  ofs << msg << std::endl;
+}
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     PWSTR pCmdLine, int nCmdShow) {
-  const wchar_t CLASS_NAME[] = L"EcodeWindowClass";
+  DebugLog("wWinMain Entry");
+  INITCOMMONCONTROLSEX icex;
+  icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
+  icex.dwICC = ICC_WIN95_CLASSES | ICC_STANDARD_CLASSES | ICC_BAR_CLASSES;
+  InitCommonControlsEx(&icex);
+  DebugLog("InitCommonControlsEx Done");
 
-  WNDCLASS wc = {};
-  wc.lpfnWndProc = WindowProc;
-  wc.hInstance = hInstance;
-  wc.lpszClassName = CLASS_NAME;
-  wc.hCursor = LoadCursor(NULL, IDC_IBEAM);
+  try {
+    const wchar_t CLASS_NAME[] = L"EcodeWindowClass";
 
-  RegisterClass(&wc);
+    WNDCLASS wc = {};
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = CLASS_NAME;
+    wc.hCursor = LoadCursor(NULL, IDC_IBEAM);
 
-  HWND hwnd = CreateWindowEx(0, CLASS_NAME, L"Ecode",
-                             WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL,
-                             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                             CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
+    DebugLog("Before RegisterClass");
+    if (!RegisterClass(&wc)) {
+      MessageBox(NULL, L"RegisterClass failed!", L"Error", MB_ICONERROR);
+      return 0;
+    }
+    DebugLog("Before CreateWindowEx");
 
-  if (hwnd == NULL)
-    return 0;
+    HWND hwnd = CreateWindowEx(0, CLASS_NAME, L"Ecode",
+                               WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL |
+                                   WS_CLIPCHILDREN,
+                               CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                               CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
+    DebugLog("After CreateWindowEx, hwnd: " +
+             std::to_string((unsigned long long)hwnd));
 
-  // Handle command line arguments
-  int argc;
-  LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-  if (argv) {
-    for (int i = 1; i < argc; ++i) {
-      if (wcscmp(argv[i], L"-e") == 0 && i + 1 < argc) {
-        std::wstring code = argv[++i];
-        int len = WideCharToMultiByte(CP_UTF8, 0, code.c_str(), -1, NULL, 0,
-                                      NULL, NULL);
-        if (len > 0) {
-          std::string codeA(len - 1, 0);
-          WideCharToMultiByte(CP_UTF8, 0, code.c_str(), -1, &codeA[0], len,
-                              NULL, NULL);
-          g_scriptEngine->Evaluate(codeA);
+    if (hwnd == NULL) {
+      DWORD err = GetLastError();
+      std::wstring msg = L"CreateWindow failed! Error: " + std::to_wstring(err);
+      MessageBox(NULL, msg.c_str(), L"Error", MB_ICONERROR);
+      return 0;
+    }
+
+    // Handle command line arguments
+    int argc;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    bool headless = false;
+    if (argv) {
+      for (int i = 1; i < argc; ++i) {
+        if (wcscmp(argv[i], L"-headless") == 0) {
+          headless = true;
         }
-      } else {
-        g_editor->OpenFile(argv[i]);
+      }
+
+      for (int i = 1; i < argc; ++i) {
+        if (wcscmp(argv[i], L"-headless") == 0) {
+          continue;
+        }
+        if (wcscmp(argv[i], L"-e") == 0 && i + 1 < argc) {
+          std::wstring code = argv[++i];
+          int len = WideCharToMultiByte(CP_UTF8, 0, code.c_str(), -1, NULL, 0,
+                                        NULL, NULL);
+          if (len > 0) {
+            std::string codeA(len - 1, 0);
+            WideCharToMultiByte(CP_UTF8, 0, code.c_str(), -1, &codeA[0], len,
+                                NULL, NULL);
+            g_scriptEngine->Evaluate(codeA);
+          }
+        } else {
+          g_editor->OpenFile(argv[i]);
+        }
+      }
+      LocalFree(argv);
+      UpdateMenu(hwnd);
+      InvalidateRect(hwnd, NULL, FALSE);
+    }
+
+    if (headless) {
+      return 0;
+    }
+
+    ShowWindow(hwnd, nCmdShow);
+
+    MSG msg = {};
+    while (GetMessage(&msg, NULL, 0, 0)) {
+      if (g_hDlgFind == NULL || !IsDialogMessage(g_hDlgFind, &msg)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
       }
     }
-    LocalFree(argv);
-    UpdateMenu(hwnd);
-    InvalidateRect(hwnd, NULL, FALSE);
+
+    return 0;
+  } catch (const std::exception &e) {
+    std::string what = e.what();
+    std::wstring wwhat(what.begin(), what.end());
+    MessageBox(NULL, (L"Unhandled exception: " + wwhat).c_str(), L"Crash",
+               MB_ICONERROR);
+    return 1;
+  } catch (...) {
+    MessageBox(NULL, L"Unhandled unknown exception", L"Crash", MB_ICONERROR);
+    return 1;
   }
-
-  ShowWindow(hwnd, nCmdShow);
-
-  MSG msg = {};
-  while (GetMessage(&msg, NULL, 0, 0)) {
-    if (g_hDlgFind == NULL || !IsDialogMessage(g_hDlgFind, &msg)) {
-      TranslateMessage(&msg);
-      DispatchMessage(&msg);
-    }
-  }
-
-  return 0;
 }

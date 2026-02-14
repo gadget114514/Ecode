@@ -28,8 +28,12 @@ This document tracks the detailed progress of Ecode features based on [REQUIREME
   - [x] Basic `Evaluate` and script execution (Done).
   - [x] Implement `moveCursor`, `getCursorPos`, `setCursorPos`, `getSelection`, `setSelection` (Done).
   - [x] Implement File/Buffer management APIs (`open`, `close`, `switchBuffer`).
-- [ ] **FR-1.1.3: Large File Support**: Verify performance with >1GB files; optimize multi-piece rendering if needed.
-- [ ] **FR-1.2.4: Text Wrapping**:
+- [x] **FR-1.1.3: Large File Support**: 
+  - [x] Implemented viewport-based rendering (only renders visible lines).
+  - [x] Memory usage now O(viewport_size) instead of O(file_size).
+  - [x] Rendering performance constant regardless of file size.
+  - [x] Works seamlessly with memory-mapped files for true multi-GB file support.
+- [x] **FR-1.2.4: Text Wrapping**:
   - [x] Word wrap logic in `Renderer` (Done).
   - [x] Configurable wrap width (Done).
   - [x] Localization-aware wrapping (Kinsho shori, etc.) (Done).

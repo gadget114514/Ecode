@@ -1,35 +1,34 @@
-// Ecode JavaScript API Test Suite
-// This script tests basic buffer manipulation and caret movement APIs
+function assertEqual(actual, expected, msg) {
+    if (actual !== expected) {
+        throw "ASSERTION FAILED: " + msg + " (Expected '" + expected + "', Got '" + actual + "')";
+    }
+}
 
 function test_js_apis() {
+    Editor.newFile();
     Editor.setStatusText("Running JS API Tests...");
 
     // Test: Insertion
-    var startPos = Editor.getCaretPos();
-    Editor.insert(startPos, "API TEST START\n");
-    
-    // Test: Length and Position
-    var len = Editor.getLength();
-    var pos = Editor.getCaretPos();
-    
+    Editor.insert(0, "API TEST START\n");
+    assertEqual(Editor.getLength(), 15, "Line 11: Length after insert mismatch");
+
     // Test: Selection
+    var pos = Editor.getLength();
     Editor.insert(pos, "Selecting this text.");
     Editor.setSelectionAnchor(pos);
-    Editor.setCaretPos(pos + 19); // "Selecting this text" is 19 chars
-    
+    Editor.setCaretPos(pos + 20);
+    assertEqual(Editor.getSelectionText(), "Selecting this text.", "Line 18: Selection text mismatch");
+
     // Test: Caret Movement
     Editor.setCaretPos(Editor.getLength());
-    Editor.insert(Editor.getLength(), "\nCaret moved to end.\n");
+    assertEqual(Editor.getCaretPos(), Editor.getLength(), "Line 22: Caret pos mismatch");
 
     // Test: Search
     var findPos = Editor.find("API TEST", 0, true, false, true);
-    if (findPos !== -1) {
-        Editor.insert(Editor.getLength(), "Find API TEST: SUCCESS at " + findPos + "\n");
-    } else {
-        Editor.insert(Editor.getLength(), "Find API TEST: FAILED\n");
-    }
+    assertEqual(findPos, 0, "Line 26: Find 'API TEST' failed");
 
     Editor.setStatusText("JS API Tests Completed.");
+    return "SUCCESS";
 }
 
 test_js_apis();

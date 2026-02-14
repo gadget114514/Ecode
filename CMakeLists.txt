@@ -25,6 +25,11 @@ add_executable(test_piecetable
     src/PieceTable.cpp
 )
 
+add_executable(test_piecetable_stress
+    tests/test_piecetable_stress.cpp
+    src/PieceTable.cpp
+)
+
 add_executable(test_editor_core
     tests/test_editor_core.cpp
     src/Buffer.cpp
@@ -33,6 +38,98 @@ add_executable(test_editor_core
     src-duktape/duktape.c
 )
 target_link_libraries(test_editor_core 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
+add_executable(test_undoredo_stress
+    tests/test_undoredo_stress.cpp
+    src/PieceTable.cpp
+)
+target_link_libraries(test_undoredo_stress 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
+add_executable(test_search_replace
+    tests/test_search_replace.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src-duktape/duktape.c
+)
+target_link_libraries(test_search_replace 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
+add_executable(test_file_io
+    tests/test_file_io.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/FileUtils.cpp
+)
+target_link_libraries(test_file_io 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
+add_executable(performance_benchmark
+    tests/performance_benchmark.cpp
+    src/PieceTable.cpp
+    src/Buffer.cpp
+    src/MemoryMappedFile.cpp
+    src/FileUtils.cpp
+)
+target_link_libraries(performance_benchmark 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
+add_executable(test_visual_wrap
+    tests/test_visual_wrap.cpp
+    src/EditorBufferRenderer.cpp
+    src/EditorBufferRenderer_Draw.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/FileUtils.cpp
+    src/Localization.cpp
+    src/SettingsManager.cpp
+    src/Editor.cpp
+)
+target_link_libraries(test_visual_wrap 
     user32 
     gdi32 
     shell32 
@@ -58,6 +155,14 @@ target_link_libraries(ecode
 # Output directory
 set(OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 set_target_properties(ecode PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_piecetable PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_piecetable_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_editor_core PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_undoredo_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_search_replace PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_file_io PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_visual_wrap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 
 # Installer
 find_program(ISCC_EXECUTABLE ISCC 
