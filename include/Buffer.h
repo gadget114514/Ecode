@@ -9,10 +9,7 @@
 
 enum class Encoding { UTF8, UTF16LE, UTF16BE, ANSI };
 
-enum class SelectionMode {
-    Normal,
-    Box
-};
+enum class SelectionMode { Normal, Box };
 
 class Buffer {
 public:
@@ -49,17 +46,31 @@ public:
 
   void SetSelectionMode(SelectionMode mode) { m_selectionMode = mode; }
   SelectionMode GetSelectionMode() const { return m_selectionMode; }
-  
+
   struct SelectionRange {
     size_t start;
     size_t end;
+    bool operator==(const SelectionRange &other) const {
+      return start == other.start && end == other.end;
+    }
+    bool operator!=(const SelectionRange &other) const {
+      return !(*this == other);
+    }
   };
   std::vector<SelectionRange> GetSelectionRanges() const;
 
   struct HighlightRange {
     size_t start;
     size_t length;
-    int type; // 0: normal, 1: keyword, 2: string, 3: number, 4: comment, 5: function
+    int type; // 0: normal, 1: keyword, 2: string, 3: number, 4: comment, 5:
+              // function
+    bool operator==(const HighlightRange &other) const {
+      return start == other.start && length == other.length &&
+             type == other.type;
+    }
+    bool operator!=(const HighlightRange &other) const {
+      return !(*this == other);
+    }
   };
   void SetHighlights(const std::vector<HighlightRange> &highlights) {
     m_highlights = highlights;
@@ -122,11 +133,16 @@ public:
   const std::set<size_t> &GetFoldedLines() const { return m_foldedLines; }
 
   std::string GetVisibleText() const;
+  std::string GetViewportText(size_t startVisualLine, size_t lineCount,
+                              size_t &outActualLines) const;
   size_t LogicalToVisualOffset(size_t logicalOffset) const;
   size_t VisualToLogicalOffset(size_t visualOffset) const;
   size_t GetPhysicalLine(size_t visualLineIndex) const;
 
+  void SetProgressCallback(std::function<void(float)> cb) { m_progressCb = cb; }
+
 private:
+  std::function<void(float)> m_progressCb;
   std::wstring m_filePath;
   std::unique_ptr<MemoryMappedFile> m_mmFile;
   PieceTable m_pieceTable;

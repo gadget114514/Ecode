@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Buffer.h"
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -8,6 +9,8 @@ class Editor {
 public:
   Editor();
   ~Editor();
+
+  void SetProgressCallback(std::function<void(float)> cb) { m_progressCb = cb; }
 
   size_t OpenFile(const std::wstring &path);
   void NewFile();
@@ -29,6 +32,7 @@ public:
   }
 
 private:
+  std::function<void(float)> m_progressCb;
   std::vector<std::unique_ptr<Buffer>> m_buffers;
   size_t m_activeBufferIndex;
 };

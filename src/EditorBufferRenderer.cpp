@@ -11,7 +11,7 @@ extern std::unique_ptr<Editor> g_editor;
 #pragma comment(lib, "dwrite.lib")
 
 EditorBufferRenderer::EditorBufferRenderer()
-    : m_hwnd(NULL), m_fontSize(12.0f), m_fontFamily(L"Consolas"), 
+    : m_hwnd(NULL), m_fontSize(12.0f), m_fontFamily(L"Consolas"),
       m_fontWeight(DWRITE_FONT_WEIGHT_NORMAL), m_enableLigatures(true) {}
 
 EditorBufferRenderer::~EditorBufferRenderer() {}
@@ -91,8 +91,9 @@ void EditorBufferRenderer::Resize(UINT width, UINT height) {
   }
 }
 
-size_t EditorBufferRenderer::GetPositionFromPoint(const std::string &text, float x,
-                                      float y) {
+size_t EditorBufferRenderer::GetPositionFromPoint(const std::string &text,
+                                                  float x, float y,
+                                                  size_t totalLinesInFile) {
   // Convert UTF-8 to UTF-16
   int len = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, NULL, 0);
   std::vector<wchar_t> wtext(len);
@@ -100,8 +101,7 @@ size_t EditorBufferRenderer::GetPositionFromPoint(const std::string &text, float
 
   float gutterWidth = 0.0f;
   if (m_showLineNumbers) {
-    size_t lineCount = std::count(text.begin(), text.end(), '\n') + 1;
-    int digits = (int)std::to_string(lineCount).length();
+    int digits = (int)std::to_string(totalLinesInFile).length();
     gutterWidth = (digits * 8.0f) + 15.0f;
   }
 
@@ -150,14 +150,14 @@ size_t EditorBufferRenderer::GetPositionFromPoint(const std::string &text, float
   return static_cast<size_t>(byteIndex);
 }
 
-bool EditorBufferRenderer::HitTestGutter(const std::string &text, float x, float y,
-                             size_t &lineIndex) {
+bool EditorBufferRenderer::HitTestGutter(float x, float y,
+                                         size_t totalLinesInFile,
+                                         size_t &lineIndex) {
   float gutterWidth = 0.0f;
   if (!m_showLineNumbers)
     return false;
 
-  size_t totalLines = std::count(text.begin(), text.end(), '\n') + 1;
-  int digits = (int)std::to_string(totalLines).length();
+  int digits = (int)std::to_string(totalLinesInFile).length();
   gutterWidth = (digits * 8.0f) + 15.0f;
 
   if (x >= 0 && x <= gutterWidth) {
@@ -206,7 +206,8 @@ float EditorBufferRenderer::GetTextWidth(const std::string &text) {
   return 0.0f;
 }
 
-void EditorBufferRenderer::SetFont(const std::wstring &familyName, float fontSize, DWRITE_FONT_WEIGHT weight) {
+void EditorBufferRenderer::SetFont(const std::wstring &familyName,
+                                   float fontSize, DWRITE_FONT_WEIGHT weight) {
   m_fontFamily = familyName;
   m_fontSize = fontSize;
   m_fontWeight = weight;
@@ -216,9 +217,8 @@ void EditorBufferRenderer::SetFont(const std::wstring &familyName, float fontSiz
 void EditorBufferRenderer::UpdateFontFormat() {
   m_textFormat.Reset();
   m_dwriteFactory->CreateTextFormat(
-      m_fontFamily.c_str(), NULL, m_fontWeight,
-      DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, m_fontSize,
-      L"en-us", &m_textFormat);
+      m_fontFamily.c_str(), NULL, m_fontWeight, DWRITE_FONT_STYLE_NORMAL,
+      DWRITE_FONT_STRETCH_NORMAL, m_fontSize, L"en-us", &m_textFormat);
 }
 
 void EditorBufferRenderer::ZoomIn() {
@@ -241,3 +241,21 @@ void EditorBufferRenderer::ZoomReset() {
 // Internal helper to create the HWND render target
 // We need the HWND from the Window
 // I'll add a SetHwnd or Modify Initialize
+
+size_t EditorBufferRenderer::CalculateVisibleLineCount() const {
+  if (!m_renderTarget)
+    return 50; // Default fallback
+
+  D2D1_SIZE_F size = m_renderTarget->GetSize();
+  float lineHeight = GetLineHeight();
+
+  if (lineHeight <= 0.0f)
+    return 50;
+
+  // Calculate how many lines fit in the viewport
+  float availableHeight = size.height - val_TopPadding;
+  size_t visibleLines = static_cast<size_t>(availableHeight / lineHeight) +
+                        2; // +2 for partial lines
+
+  return visibleLines;
+}

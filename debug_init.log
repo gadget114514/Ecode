@@ -1,0 +1,17 @@
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Editor Init
+WM_CREATE: Load Init Script
