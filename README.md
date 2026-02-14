@@ -90,7 +90,7 @@ Editor.setKeyBinding("Ctrl+D", "duplicate");
 ---
 
 ## 📜 License
-This project is licensed under the MIT License. See [LICENSE.txt](LICENSE.txt) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
