@@ -5,6 +5,7 @@
 ### 1.1 Core Engine & Data Management
 *   **FR-1.1.1: Piece Table Implementation**: The editor shall use a Piece Table data structure to manage text buffers, ensuring $O(1)$ complexity for inserts and deletes regardless of file size.
 *   **FR-1.1.2: Memory-Mapped Files**: Huge files shall be opened using Win32 Memory-Mapped Files (`CreateFileMapping`, `MapViewOfFile`) to allow editing files larger than available RAM without loading them entirely into memory.
+    Over size: over 4Gbytes file.
 *   **FR-1.1.3: Large File Support**: The system must remain responsive when handling files up to several gigabytes in size.
 
 ### 1.2 Text Rendering & Appearance
@@ -118,3 +119,5 @@ Buffers - list of open files
 Help - documentation, about
        documentation dialogue, about dialogue   
 
+
+###
