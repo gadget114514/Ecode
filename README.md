@@ -1,4 +1,4 @@
-# 🚀 Ecode: High-Performance Native Text Editor
+# 🚀 Ecode: High-Performance Win32 Native Text Editor
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-windows-blue)
