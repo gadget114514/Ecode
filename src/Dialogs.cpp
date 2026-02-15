@@ -3,15 +3,27 @@
 #include "../include/EditorBufferRenderer.h"
 #include "../include/Localization.h"
 #include "../include/ScriptEngine.h"
+#include "../include/SettingsManager.h"
 #include "../include/resource.h"
 #include <commdlg.h>
-#include <filesystem>
 #include <shellapi.h>
 #include <vector>
+
+#if defined(__has_include) && __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif defined(__has_include) && __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#else
+// Fallback or error
+#error "No filesystem support found"
+#endif
 
 extern std::unique_ptr<EditorBufferRenderer> g_renderer;
 extern std::unique_ptr<Editor> g_editor;
 extern std::unique_ptr<ScriptEngine> g_scriptEngine;
+extern int g_currentLogLevel;
 
 // Use fully qualified calls or ensure C++17
 
@@ -60,9 +72,8 @@ INT_PTR CALLBACK MacroGalleryDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     wchar_t appData[MAX_PATH];
     if (GetEnvironmentVariableW(L"APPDATA", appData, MAX_PATH)) {
       std::wstring macroDir = std::wstring(appData) + L"\\Ecode\\macros";
-      if (std::filesystem::exists(macroDir)) {
-        for (const auto &entry :
-             std::filesystem::directory_iterator(macroDir)) {
+      if (fs::exists(macroDir)) {
+        for (const auto &entry : fs::directory_iterator(macroDir)) {
           if (entry.path().extension() == L".js") {
             macroPaths.push_back(entry.path().wstring());
             SendMessage(hList, LB_ADDSTRING, 0,
@@ -177,6 +188,13 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                                     : BST_UNCHECKED);
     }
 
+    HWND hLog = GetDlgItem(hDlg, IDC_LOG_LEVEL);
+    SendMessage(hLog, CB_ADDSTRING, 0, (LPARAM)L"DEBUG");
+    SendMessage(hLog, CB_ADDSTRING, 0, (LPARAM)L"INFO");
+    SendMessage(hLog, CB_ADDSTRING, 0, (LPARAM)L"WARN");
+    SendMessage(hLog, CB_ADDSTRING, 0, (LPARAM)L"ERROR");
+    SendMessage(hLog, CB_SETCURSEL, (WPARAM)g_currentLogLevel, 0);
+
     HWND hCombo = GetDlgItem(hDlg, IDC_LANGUAGE);
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"English");
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Japanese");
@@ -220,6 +238,12 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       }
 
       Localization::Instance().SetLanguage((Language)lang);
+
+      int logLevel =
+          (int)SendMessage(GetDlgItem(hDlg, IDC_LOG_LEVEL), CB_GETCURSEL, 0, 0);
+      g_currentLogLevel = logLevel;
+      SettingsManager::Instance().SetLogLevel(logLevel);
+      SettingsManager::Instance().Save();
 
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;

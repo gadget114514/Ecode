@@ -113,3 +113,827 @@ WM_CHAR: 5 char=
 WM_CHAR: 5 char=
 WM_CHAR: 5 char=
 WM_CHAR: 22 char=
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: Editor Init
+WM_CREATE: ScriptEngine Init
+ScriptEngine::RunFile: path=D:\ws\Ecode\bin\Debug\scripts\emacs.js
+ScriptEngine::RunFile: Read 6264 bytes. Snippet: // Emacs-style Key Bindings
+console.log("Loading Emacs key bindi
+JS: Loading Emacs key bindings...
+ScriptEngine::RegisterBinding: Ctrl+N -> emacs_next_line
+ScriptEngine::RegisterBinding: Ctrl+P -> emacs_prev_line
+ScriptEngine::RegisterBinding: Ctrl+F -> emacs_forward_char
+ScriptEngine::RegisterBinding: Ctrl+B -> emacs_backward_char
+ScriptEngine::RegisterBinding: Ctrl+A -> emacs_line_start
+ScriptEngine::RegisterBinding: Ctrl+E -> emacs_line_end
+ScriptEngine::RegisterBinding: Ctrl+D -> emacs_delete_char
+ScriptEngine::RegisterBinding: Ctrl+H -> emacs_backspace
+ScriptEngine::RegisterBinding: Ctrl+K -> emacs_kill_line
+ScriptEngine::RegisterBinding: Ctrl+Y -> emacs_yank
+ScriptEngine::RegisterBinding: Ctrl+Space -> emacs_set_mark
+ScriptEngine::RegisterBinding: Ctrl+V -> emacs_scroll_down
+ScriptEngine::RegisterBinding: Alt+V -> emacs_scroll_up
+ScriptEngine::RegisterBinding: Ctrl+T -> emacs_transpose_chars
+ScriptEngine::RegisterBinding: Ctrl+S -> emacs_isearch_forward
+ScriptEngine::RegisterBinding: Ctrl+R -> emacs_isearch_backward
+ScriptEngine::RegisterBinding: Ctrl+G -> emacs_jump_to_line
+ScriptEngine::RegisterBinding: F12 -> tag_jump
+ScriptEngine::RunFile: Success
+LoadDefaultBindings: Successfully loaded emacs.js from D:\ws\Ecode\bin\Debug\scripts\emacs.js
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: path=C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: Read 1139 bytes. Snippet: 
+// Basic Emacs-like key bindings
+Editor.setKeyBinding("Ctrl+P",
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 44827214
+WM_SHOWWINDOW Received, wParam=1
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 98 char=b captured=N
+WM_CHAR: 98 char=b captured=N
+WM_CHAR: 98 char=b captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 100 char=d captured=N
+WM_CHAR: 100 char=d captured=N
+WM_CHAR: 100 char=d captured=N
+WM_CHAR: 100 char=d captured=N
+WM_CHAR: 100 char=d captured=N
+WM_CHAR: 100 char=d captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 102 char=f captured=N
+WM_CHAR: 102 char=f captured=N
+WM_CHAR: 102 char=f captured=N
+WM_CHAR: 102 char=f captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+Script error in moveCaretRight: ReferenceError: identifier 'moveCaretRight' undefined
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+N -> moveCaretDown
+Script error in moveCaretDown: ReferenceError: identifier 'moveCaretDown' undefined
+WM_CHAR: 14 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+N -> moveCaretDown
+Script error in moveCaretDown: ReferenceError: identifier 'moveCaretDown' undefined
+WM_CHAR: 14 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+P -> moveCaretUp
+Script error in moveCaretUp: ReferenceError: identifier 'moveCaretUp' undefined
+WM_CHAR: 16 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+P -> moveCaretUp
+Script error in moveCaretUp: ReferenceError: identifier 'moveCaretUp' undefined
+WM_CHAR: 16 char= captured=N
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: Editor Init
+WM_CREATE: ScriptEngine Init
+ScriptEngine::RunFile: path=D:\ws\Ecode\bin\Debug\scripts\emacs.js
+ScriptEngine::RunFile: Read 6132 bytes. Snippet: // Emacs-style Key Bindings
+console.log("Loading Emacs key bindi
+JS: Loading Emacs key bindings...
+ScriptEngine::RegisterBinding: Ctrl+N -> emacs_next_line
+ScriptEngine::RegisterBinding: Ctrl+P -> emacs_prev_line
+ScriptEngine::RegisterBinding: Ctrl+F -> emacs_forward_char
+ScriptEngine::RegisterBinding: Ctrl+B -> emacs_backward_char
+ScriptEngine::RegisterBinding: Ctrl+A -> emacs_line_start
+ScriptEngine::RegisterBinding: Ctrl+E -> emacs_line_end
+ScriptEngine::RegisterBinding: Ctrl+D -> emacs_delete_char
+ScriptEngine::RegisterBinding: Ctrl+H -> emacs_backspace
+ScriptEngine::RegisterBinding: Ctrl+K -> emacs_kill_line
+ScriptEngine::RegisterBinding: Ctrl+Y -> emacs_yank
+ScriptEngine::RegisterBinding: Ctrl+Space -> emacs_set_mark
+ScriptEngine::RegisterBinding: Ctrl+V -> emacs_scroll_down
+ScriptEngine::RegisterBinding: Alt+V -> emacs_scroll_up
+ScriptEngine::RegisterBinding: Ctrl+T -> emacs_transpose_chars
+ScriptEngine::RegisterBinding: Ctrl+S -> emacs_isearch_forward
+ScriptEngine::RegisterBinding: Ctrl+R -> emacs_isearch_backward
+ScriptEngine::RegisterBinding: Ctrl+G -> emacs_jump_to_line
+ScriptEngine::RegisterBinding: F12 -> tag_jump
+ScriptEngine::RunFile: Success
+LoadDefaultBindings: Successfully loaded emacs.js from D:\ws\Ecode\bin\Debug\scripts\emacs.js
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: path=C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: Read 1139 bytes. Snippet: 
+// Basic Emacs-like key bindings
+Editor.setKeyBinding("Ctrl+P",
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 1116128
+WM_SHOWWINDOW Received, wParam=1
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+A -> moveCaretHome
+WM_CHAR: 1 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+D -> emacs_delete_char
+WM_CHAR: 4 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 100 char=d captured=N
+WM_CHAR: 100 char=d captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+E -> moveCaretEnd
+WM_CHAR: 5 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+A -> moveCaretHome
+WM_CHAR: 1 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+A -> moveCaretHome
+WM_CHAR: 1 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+E -> moveCaretEnd
+WM_CHAR: 5 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+A -> moveCaretHome
+WM_CHAR: 1 char= captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+WM_CHAR: 97 char=a captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+P -> moveCaretUp
+WM_CHAR: 16 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+P -> moveCaretUp
+WM_CHAR: 16 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+P -> moveCaretUp
+WM_CHAR: 16 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+P -> moveCaretUp
+WM_CHAR: 16 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+N -> moveCaretDown
+WM_CHAR: 14 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+N -> moveCaretDown
+WM_CHAR: 14 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+N -> moveCaretDown
+WM_CHAR: 14 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+N -> moveCaretDown
+WM_CHAR: 14 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+F -> moveCaretRight
+WM_CHAR: 6 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 3 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+V -> emacs_scroll_down
+WM_CHAR: 22 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+V -> emacs_scroll_down
+WM_CHAR: 22 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+V -> emacs_scroll_down
+WM_CHAR: 22 char= captured=N
+WM_CHAR: 3 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+V -> emacs_scroll_down
+WM_CHAR: 22 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+V -> emacs_scroll_down
+WM_CHAR: 22 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+V -> emacs_scroll_down
+WM_CHAR: 22 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 13 char= captured=N
+WM_CHAR: 8 char= captured=N
+WM_CHAR: 8 char= captured=N
+WM_CHAR: 3 char= captured=N
+ScriptEngine::HandleBinding: Match found for Ctrl+V -> emacs_scroll_down
+WM_CHAR: 22 char= captured=N
+WM_CHAR: 26 char= captured=N
+WM_CHAR: 26 char= captured=N
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: Editor Init
+WM_CREATE: ScriptEngine Init
+ScriptEngine::RunFile: path=D:\ws\Ecode\bin\Debug\scripts\emacs.js
+ScriptEngine::RunFile: Read 10145 bytes. Snippet: // Emacs-style Key Bindings
+console.log("Loading Emacs key bindi
+JS: Loading Emacs key bindings...
+ScriptEngine::RegisterBinding: Ctrl+N -> emacs_next_line
+ScriptEngine::RegisterBinding: Ctrl+P -> emacs_prev_line
+ScriptEngine::RegisterBinding: Ctrl+F -> emacs_forward_char
+ScriptEngine::RegisterBinding: Ctrl+B -> emacs_backward_char
+ScriptEngine::RegisterBinding: Ctrl+A -> emacs_line_start
+ScriptEngine::RegisterBinding: Ctrl+E -> emacs_line_end
+ScriptEngine::RegisterBinding: Ctrl+D -> emacs_delete_char
+ScriptEngine::RegisterBinding: Ctrl+H -> emacs_backspace
+ScriptEngine::RegisterBinding: Ctrl+K -> emacs_kill_line
+ScriptEngine::RegisterBinding: Ctrl+Y -> emacs_yank
+ScriptEngine::RegisterBinding: Ctrl+Space -> emacs_set_mark
+ScriptEngine::RegisterBinding: Ctrl+V -> emacs_scroll_down
+ScriptEngine::RegisterBinding: Alt+V -> emacs_scroll_up
+ScriptEngine::RegisterBinding: Ctrl+T -> emacs_transpose_chars
+ScriptEngine::RegisterBinding: Ctrl+S -> emacs_isearch_forward
+ScriptEngine::RegisterBinding: Ctrl+R -> emacs_isearch_backward
+ScriptEngine::RegisterBinding: Ctrl+G -> emacs_jump_to_line
+ScriptEngine::RegisterBinding: Ctrl+W -> emacs_kill_region
+ScriptEngine::RegisterBinding: Alt+< -> emacs_beginning_of_buffer
+ScriptEngine::RegisterBinding: Alt+> -> emacs_end_of_buffer
+ScriptEngine::RegisterBinding: Alt+Y -> emacs_yank_pop
+ScriptEngine::RegisterBinding: Alt+W -> emacs_copy_region
+ScriptEngine::RegisterBinding: F12 -> tag_jump
+JS: Adding Windows CUA keybindings...
+ScriptEngine::RegisterBinding: Ctrl+X -> cua_cut
+ScriptEngine::RegisterBinding: Ctrl+C -> cua_copy
+ScriptEngine::RegisterBinding: Ctrl+Z -> cua_undo
+ScriptEngine::RunFile: Success
+LoadDefaultBindings: Successfully loaded emacs.js from D:\ws\Ecode\bin\Debug\scripts\emacs.js
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: path=C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: Read 1139 bytes. Snippet: 
+// Basic Emacs-like key bindings
+Editor.setKeyBinding("Ctrl+P",
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 3607026
+WM_SHOWWINDOW Received, wParam=1
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: Editor Init
+WM_CREATE: ScriptEngine Init
+ScriptEngine::RunFile: path=D:\ws\Ecode\bin\Debug\scripts\emacs.js
+ScriptEngine::RunFile: Read 11594 bytes. Snippet: // Emacs-style Key Bindings
+console.log("Loading Emacs key bindi
+JS: Loading Emacs key bindings...
+ScriptEngine::RegisterBinding: Ctrl+N -> emacs_next_line
+ScriptEngine::RegisterBinding: Ctrl+P -> emacs_prev_line
+ScriptEngine::RegisterBinding: Ctrl+F -> emacs_forward_char
+ScriptEngine::RegisterBinding: Ctrl+B -> emacs_backward_char
+ScriptEngine::RegisterBinding: Ctrl+A -> emacs_line_start
+ScriptEngine::RegisterBinding: Ctrl+E -> emacs_line_end
+ScriptEngine::RegisterBinding: Ctrl+D -> emacs_delete_char
+ScriptEngine::RegisterBinding: Ctrl+H -> emacs_backspace
+ScriptEngine::RegisterBinding: Ctrl+K -> emacs_kill_line
+ScriptEngine::RegisterBinding: Ctrl+Y -> emacs_yank
+ScriptEngine::RegisterBinding: Ctrl+Space -> emacs_set_mark
+ScriptEngine::RegisterBinding: Ctrl+V -> emacs_scroll_down
+ScriptEngine::RegisterBinding: Alt+V -> emacs_scroll_up
+ScriptEngine::RegisterBinding: Ctrl+T -> emacs_transpose_chars
+ScriptEngine::RegisterBinding: Ctrl+S -> emacs_isearch_forward
+ScriptEngine::RegisterBinding: Ctrl+R -> emacs_isearch_backward
+ScriptEngine::RegisterBinding: Ctrl+G -> emacs_jump_to_line
+ScriptEngine::RegisterBinding: Ctrl+W -> emacs_kill_region
+ScriptEngine::RegisterBinding: Alt+< -> emacs_beginning_of_buffer
+ScriptEngine::RegisterBinding: Alt+> -> emacs_end_of_buffer
+ScriptEngine::RegisterBinding: Alt+Y -> emacs_yank_pop
+ScriptEngine::RegisterBinding: Alt+W -> emacs_copy_region
+ScriptEngine::RegisterBinding: F12 -> tag_jump
+JS: Adding Windows CUA keybindings...
+ScriptEngine::RegisterBinding: Ctrl+X -> cua_cut
+ScriptEngine::RegisterBinding: Ctrl+C -> cua_copy
+ScriptEngine::RegisterBinding: Ctrl+Z -> cua_undo
+ScriptEngine::RegisterBinding: Alt+X -> emacs_execute_command
+ScriptEngine::RunFile: Success
+LoadDefaultBindings: Successfully loaded emacs.js from D:\ws\Ecode\bin\Debug\scripts\emacs.js
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: path=C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+ScriptEngine::RunFile: Read 1139 bytes. Snippet: 
+// Basic Emacs-like key bindings
+Editor.setKeyBinding("Ctrl+P",
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 70322434
+WM_SHOWWINDOW Received, wParam=1
+WM_CHAR: 115 char=s captured=N
+WM_CHAR: 104 char=h captured=N
+WM_CHAR: 101 char=e captured=N
+WM_CHAR: 108 char=l captured=N
+WM_CHAR: 8 char= captured=N
+WM_CHAR: 8 char= captured=N
+WM_CHAR: 8 char= captured=N
+WM_CHAR: 8 char= captured=N
+WM_CHAR: 27 char= captured=N
+WM_CHAR: 120 char=x captured=N
+WM_CHAR: 27 char= captured=N
+WM_CHAR: 120 char=x captured=N
+wWinMain Entry
+InitCommonControlsEx Done
+Before RegisterClass
+Before CreateWindowEx
+WM_CREATE Received
+WM_CREATE: Common Controls Init
+WM_CREATE: Status Bar
+WM_CREATE: Mini Buffer
+WM_CREATE: Renderer Init
+WM_CREATE: Editor Init
+WM_CREATE: ScriptEngine Init
+WM_CREATE: Load Init Script
+ScriptEngine::RunFile: Starting
+ScriptEngine::RunFile: Code size = 1172
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+WM_CREATE: Settings Load
+After CreateWindowEx, hwnd: 4262018
+WM_SHOWWINDOW Received, wParam=1
+WM_CHAR: 27 char= captured=N
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: X
+WM_CHAR: 120 char=x captured=N
+ScriptEngine::RunFile: Starting
+ScriptEngine::RunFile: Code size = 1172
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::RunFile: Starting
+ScriptEngine::RunFile: Code size = 1172
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Ctrl+F
+  Found binding -> moveCaretRight
+ScriptEngine::HandleBinding: Ctrl+F
+  Found binding -> moveCaretRight
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+B
+  Found binding -> moveCaretLeft
+ScriptEngine::HandleBinding: Ctrl+B
+  Found binding -> moveCaretLeft
+ScriptEngine::HandleBinding: Ctrl+B
+  Found binding -> moveCaretLeft
+ScriptEngine::HandleBinding: Ctrl+B
+  Found binding -> moveCaretLeft
+ScriptEngine::HandleBinding: Ctrl+B
+  Found binding -> moveCaretLeft
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+F
+  Found binding -> moveCaretRight
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::RunFile: Starting
+ScriptEngine::RunFile: Code size = 1172
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+F
+  Found binding -> moveCaretRight
+ScriptEngine::HandleBinding: Ctrl+F
+  Found binding -> moveCaretRight
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::RunFile: Starting
+ScriptEngine::RunFile: Code size = 1172
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Ctrl+F
+  Found binding -> moveCaretRight
+ScriptEngine::HandleBinding: Ctrl+F
+  Found binding -> moveCaretRight
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+S
+ScriptEngine::HandleBinding: Ctrl+S
+ScriptEngine::HandleBinding: Ctrl+W
+ScriptEngine::HandleBinding: Ctrl+W
+ScriptEngine::HandleBinding: Ctrl+S
+ScriptEngine::HandleBinding: Ctrl+S
+ScriptEngine::HandleBinding: Ctrl+F
+  Found binding -> moveCaretRight
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::RunFile: Starting
+ScriptEngine::RunFile: Code size = 1172
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Alt+X
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+A
+  Found binding -> moveCaretHome
+ScriptEngine::HandleBinding: Ctrl+P
+  Found binding -> moveCaretUp
+ScriptEngine::HandleBinding: Ctrl+P
+  Found binding -> moveCaretUp
+ScriptEngine::HandleBinding: Ctrl+P
+  Found binding -> moveCaretUp
+ScriptEngine::HandleBinding: Ctrl+N
+  Found binding -> moveCaretDown
+ScriptEngine::HandleBinding: Ctrl+N
+  Found binding -> moveCaretDown
+ScriptEngine::HandleBinding: Ctrl+P
+  Found binding -> moveCaretUp
+ScriptEngine::HandleBinding: Ctrl+P
+  Found binding -> moveCaretUp
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+E
+  Found binding -> moveCaretEnd
+ScriptEngine::HandleBinding: Ctrl+Q
+ScriptEngine::HandleBinding: Ctrl+S
+ScriptEngine::RunFile: Starting
+ScriptEngine::RunFile: Code size = 1172
+ScriptEngine::RegisterBinding: Ctrl+P -> moveCaretUp
+ScriptEngine::RegisterBinding: Ctrl+N -> moveCaretDown
+ScriptEngine::RegisterBinding: Ctrl+B -> moveCaretLeft
+ScriptEngine::RegisterBinding: Ctrl+F -> moveCaretRight
+ScriptEngine::RegisterBinding: Ctrl+A -> moveCaretHome
+ScriptEngine::RegisterBinding: Ctrl+E -> moveCaretEnd
+ScriptEngine::RunFile: Success
+ScriptEngine::HandleBinding: Alt+X
+[INFO] ScriptEngine::RunFile: Starting
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] ScriptEngine::RunFile: Starting
+[INFO] ScriptEngine::RunFile: Success
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> moveCaretHome
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> moveCaretHome
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> moveCaretHome
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> moveCaretHome
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> moveCaretHome
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> moveCaretHome
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> moveCaretHome
+[INFO] ScriptEngine::HandleBinding: Ctrl+E
+[INFO]   Found binding -> moveCaretEnd
+[INFO] ScriptEngine::HandleBinding: Ctrl+E
+[INFO]   Found binding -> moveCaretEnd
+[INFO] ScriptEngine::HandleBinding: Ctrl+E
+[INFO]   Found binding -> moveCaretEnd
+[INFO] ScriptEngine::HandleBinding: Ctrl+E
+[INFO]   Found binding -> moveCaretEnd
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> moveCaretRight
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] ScriptEngine::RunFile: Starting
+[INFO] ScriptEngine::RunFile: Success
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] ScriptEngine::RunFile: Starting
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] ScriptEngine::RunFile: Starting
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] ScriptEngine::RunFile: Starting
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] ScriptEngine::RunFile: Starting
+[INFO] JS: Loading Emacs key bindings...
+[INFO] JS: Adding Windows CUA keybindings...
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleKeyDown: final chord [Alt+X]
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   Found binding -> emacs_execute_command
+[INFO] --> Entering js_editor_show_minibuffer
+[INFO] js_editor_show_minibuffer: prompt=M-x  mode=1
+[INFO]   g_mainHwnd=1510568 g_minibufferHwnd=19008440
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=1
+[INFO]   Minibuffer Layout: mbTop=786 mbHeight=24 promptWidth=31
+[INFO]   WM_SIZE sent, result=0
+[INFO]   ShowWindow mb=24 prompt=24
+[INFO] <-- Exiting js_editor_show_minibuffer

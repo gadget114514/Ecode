@@ -15,7 +15,11 @@ size_t CountNewlines(const char *data, size_t length) {
     __m128i chunk = _mm_loadu_si128((__m128i *)(data + i));
     __m128i cmp = _mm_cmpeq_epi8(chunk, newline);
     int mask = _mm_movemask_epi8(cmp);
-    count += __popcnt(mask); // Count set bits
+    // Safer bit counting to avoid CPU feature dependency issues
+    for (int b = 0; b < 16; ++b) {
+      if ((mask >> b) & 1)
+        count++;
+    }
   }
 #endif
 

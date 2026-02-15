@@ -32,6 +32,8 @@ public:
   void SetEnableLigatures(bool enable) { m_enableLigatures = enable; }
   bool IsShowStatusBar() const { return m_showStatusBar; }
   void SetShowStatusBar(bool show) { m_showStatusBar = show; }
+  int GetLogLevel() const { return m_logLevel; }
+  void SetLogLevel(int level) { m_logLevel = level; }
 
   const std::vector<std::wstring> &GetRecentFiles() const {
     return m_recentFiles;
@@ -51,5 +53,6 @@ private:
   int m_fontWeight;
   bool m_enableLigatures;
   bool m_showStatusBar;
+  int m_logLevel;
   std::vector<std::wstring> m_recentFiles;
 };
