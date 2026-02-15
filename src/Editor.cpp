@@ -1,4 +1,12 @@
 #include "../include/Editor.h"
+#include "../include/Process.h"
+
+#define WM_SHELL_OUTPUT (WM_USER + 101)
+
+struct ShellOutput {
+  Buffer *buffer;
+  std::string text;
+};
 
 Editor::Editor() : m_activeBufferIndex(0) {}
 
@@ -23,6 +31,29 @@ void Editor::NewFile() {
   // New file has empty original and added buffers
   m_buffers.push_back(std::move(buffer));
   m_activeBufferIndex = m_buffers.size() - 1;
+}
+
+size_t Editor::OpenShell(const std::wstring &cmd) {
+  auto buffer = std::make_unique<Buffer>();
+  buffer->SetPath(L"*shell*");
+  buffer->SetScratch(true);
+  buffer->SetShell(true);
+
+  Buffer *bRaw = buffer.get();
+  auto process = std::make_unique<Process>();
+
+  if (process->Start(cmd, [bRaw](const std::string &text) {
+        ShellOutput *output = new ShellOutput();
+        output->buffer = bRaw;
+        output->text = text;
+        PostMessage(g_mainHwnd, WM_SHELL_OUTPUT, (WPARAM)output, 0);
+      })) {
+    buffer->SetShellProcess(std::move(process));
+    m_buffers.push_back(std::move(buffer));
+    m_activeBufferIndex = m_buffers.size() - 1;
+    return m_activeBufferIndex;
+  }
+  return static_cast<size_t>(-1);
 }
 
 void Editor::CloseBuffer(size_t index) {

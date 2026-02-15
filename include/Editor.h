@@ -4,6 +4,9 @@
 #include <functional>
 #include <memory>
 #include <vector>
+#include <windows.h>
+
+extern HWND g_mainHwnd;
 
 class Editor {
 public:
@@ -14,6 +17,7 @@ public:
 
   size_t OpenFile(const std::wstring &path);
   void NewFile();
+  size_t OpenShell(const std::wstring &cmd);
   void CloseBuffer(size_t index);
 
   void SwitchToBuffer(size_t index);

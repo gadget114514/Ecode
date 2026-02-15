@@ -11,6 +11,8 @@ enum class Encoding { UTF8, UTF16LE, UTF16BE, ANSI };
 
 enum class SelectionMode { Normal, Box };
 
+class Process;
+
 class Buffer {
 public:
   Buffer();
@@ -142,6 +144,13 @@ public:
 
   void SetProgressCallback(std::function<void(float)> cb) { m_progressCb = cb; }
 
+  // Shell support
+  void SetShell(bool isShell) { m_isShell = isShell; }
+  bool IsShell() const { return m_isShell; }
+  void SetShellProcess(std::unique_ptr<Process> process);
+  Process *GetShellProcess() const { return m_process.get(); }
+  void SendToShell(const std::string &input);
+
 private:
   std::function<void(float)> m_progressCb;
   std::wstring m_filePath;
@@ -159,4 +168,6 @@ private:
   std::vector<HighlightRange> m_highlights;
   bool m_isDirty;
   bool m_isScratch;
+  bool m_isShell = false;
+  std::unique_ptr<Process> m_process;
 };

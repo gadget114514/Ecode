@@ -1,4 +1,5 @@
 #include "../include/Buffer.h"
+#include "../include/Process.h"
 
 // Undefine Windows min/max macros to avoid conflicts with std::min/std::max
 #undef min
@@ -296,7 +297,23 @@ std::string Buffer::GetSelectedText() const {
 void Buffer::UpdateDesiredColumn() {
   size_t line = GetLineAtOffset(m_caretPos);
   size_t lineStart = GetLineOffset(line);
-  m_desiredColumn = m_caretPos - lineStart;
+  std::string text = GetText(lineStart, m_caretPos - lineStart);
+  size_t charCount = 0;
+  for (size_t i = 0; i < text.length();) {
+    unsigned char c = (unsigned char)text[i];
+    if (c < 0x80)
+      i += 1;
+    else if ((c & 0xE0) == 0xC0)
+      i += 2;
+    else if ((c & 0xF0) == 0xE0)
+      i += 3;
+    else if ((c & 0xF8) == 0xF0)
+      i += 4;
+    else
+      i += 1;
+    charCount++;
+  }
+  m_desiredColumn = charCount;
 }
 
 void Buffer::MoveCaretUp() {
@@ -304,11 +321,37 @@ void Buffer::MoveCaretUp() {
   if (line > 0) {
     size_t prevLine = line - 1;
     size_t prevStart = GetLineOffset(prevLine);
-    size_t nextStart = GetLineOffset(line);
-    size_t lineLen = nextStart - prevStart - 1; // -1 for newline
+    size_t currentLineStart = GetLineOffset(line);
+    size_t fullLen = currentLineStart - prevStart;
 
-    size_t newCol = (std::min)(m_desiredColumn, lineLen);
-    SetCaretPos(prevStart + newCol);
+    std::string text = GetText(prevStart, fullLen);
+    size_t visibleLen = fullLen;
+    if (visibleLen > 0 && text.back() == '\n') {
+      visibleLen--;
+      if (visibleLen > 0 && text[visibleLen - 1] == '\r')
+        visibleLen--;
+    }
+
+    size_t byteOffset = 0;
+    size_t charIndex = 0;
+    while (charIndex < m_desiredColumn && byteOffset < visibleLen) {
+      unsigned char c = (unsigned char)text[byteOffset];
+      size_t charLen = 1;
+      if (c < 0x80)
+        charLen = 1;
+      else if ((c & 0xE0) == 0xC0)
+        charLen = 2;
+      else if ((c & 0xF0) == 0xE0)
+        charLen = 3;
+      else if ((c & 0xF8) == 0xF0)
+        charLen = 4;
+
+      if (byteOffset + charLen > visibleLen)
+        break;
+      byteOffset += charLen;
+      charIndex++;
+    }
+    SetCaretPos(prevStart + byteOffset);
   }
 }
 
@@ -318,13 +361,39 @@ void Buffer::MoveCaretDown() {
   if (line < totalLines - 1) {
     size_t nextLine = line + 1;
     size_t lineStart = GetLineOffset(nextLine);
-    size_t nextLineStart = (nextLine < totalLines - 1)
-                               ? GetLineOffset(nextLine + 1)
-                               : GetTotalLength() + 1;
-    size_t lineLen = nextLineStart - lineStart - 1;
+    size_t nextLineEnd = (nextLine < totalLines - 1)
+                             ? GetLineOffset(nextLine + 1)
+                             : GetTotalLength();
+    size_t fullLen = nextLineEnd - lineStart;
 
-    size_t newCol = (std::min)(m_desiredColumn, lineLen);
-    SetCaretPos(lineStart + newCol);
+    std::string text = GetText(lineStart, fullLen);
+    size_t visibleLen = fullLen;
+    if (visibleLen > 0 && text.back() == '\n') {
+      visibleLen--;
+      if (visibleLen > 0 && text[visibleLen - 1] == '\r')
+        visibleLen--;
+    }
+
+    size_t byteOffset = 0;
+    size_t charIndex = 0;
+    while (charIndex < m_desiredColumn && byteOffset < visibleLen) {
+      unsigned char c = (unsigned char)text[byteOffset];
+      size_t charLen = 1;
+      if (c < 0x80)
+        charLen = 1;
+      else if ((c & 0xE0) == 0xC0)
+        charLen = 2;
+      else if ((c & 0xF0) == 0xE0)
+        charLen = 3;
+      else if ((c & 0xF8) == 0xF0)
+        charLen = 4;
+
+      if (byteOffset + charLen > visibleLen)
+        break;
+      byteOffset += charLen;
+      charIndex++;
+    }
+    SetCaretPos(lineStart + byteOffset);
   }
 }
 
@@ -338,8 +407,18 @@ void Buffer::MoveCaretEnd() {
   size_t line = GetLineAtOffset(m_caretPos);
   size_t totalLines = GetTotalLines();
   size_t nextStart =
-      (line < totalLines - 1) ? GetLineOffset(line + 1) : GetTotalLength() + 1;
-  SetCaretPos(nextStart - 1);
+      (line < totalLines - 1) ? GetLineOffset(line + 1) : GetTotalLength();
+  size_t pos = nextStart;
+  if (pos > 0) {
+    // Check for \n or \r\n
+    std::string tail = GetText(pos - (std::min)(pos, (size_t)2), 2);
+    if (!tail.empty() && tail.back() == '\n') {
+      pos--;
+      if (tail.size() >= 2 && tail[tail.size() - 2] == '\r')
+        pos--;
+    }
+  }
+  SetCaretPos(pos);
   UpdateDesiredColumn();
 }
 
@@ -414,7 +493,29 @@ void Buffer::MoveCaretByChar(int delta) {
     pos = chunkStart + localPos;
   }
 
-  SetCaretPos((std::min)(pos, totalLength));
+  pos = (std::min)(pos, totalLength);
+
+  if (delta > 0) {
+    while (pos < totalLength && m_foldedLines.count(GetLineAtOffset(pos))) {
+      size_t nextLine = GetLineAtOffset(pos) + 1;
+      pos = GetLineOffset(nextLine);
+      if (pos == 0) {
+        pos = totalLength;
+        break;
+      }
+    }
+  } else {
+    while (pos > 0 && m_foldedLines.count(GetLineAtOffset(pos))) {
+      size_t currentLine = GetLineAtOffset(pos);
+      if (currentLine == 0) {
+        pos = 0;
+        break;
+      }
+      pos = GetLineOffset(currentLine) - 1; // End of previous line
+    }
+  }
+
+  m_caretPos = pos;
   UpdateDesiredColumn();
 }
 
@@ -652,4 +753,14 @@ std::vector<Buffer::SelectionRange> Buffer::GetSelectionRanges() const {
     }
   }
   return ranges;
+}
+
+void Buffer::SetShellProcess(std::unique_ptr<Process> process) {
+  m_process = std::move(process);
+}
+
+void Buffer::SendToShell(const std::string &input) {
+  if (m_process) {
+    m_process->Write(input);
+  }
 }

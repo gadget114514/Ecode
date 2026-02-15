@@ -17,7 +17,20 @@ Editor.setKeyBinding("Ctrl+T", "emacs_transpose_chars");
 Editor.setKeyBinding("Ctrl+S", "emacs_isearch_forward");
 Editor.setKeyBinding("Ctrl+R", "emacs_isearch_backward");
 Editor.setKeyBinding("Ctrl+G", "emacs_jump_to_line");
+Editor.setKeyBinding("Ctrl+W", "emacs_kill_region");
+Editor.setKeyBinding("Alt+<", "emacs_beginning_of_buffer");
+Editor.setKeyBinding("Alt+>", "emacs_end_of_buffer");
+Editor.setKeyBinding("Alt+Y", "emacs_yank_pop");
+Editor.setKeyBinding("Alt+W", "emacs_copy_region");
 Editor.setKeyBinding("F12", "tag_jump");
+
+// Kill ring implementation (Emacs-style kill/yank system)
+var killRing = [];
+var killRingMax = 60;
+var killRingYankPointer = 0;
+var lastYankStart = -1;
+var lastYankEnd = -1;
+var lastCommandWasYank = false;
 
 var isearchQuery = "";
 var isearchStartPos = 0;
@@ -111,14 +124,8 @@ function emacs_forward_char() { Editor.moveCaretByChar(1); }
 function emacs_backward_char() { Editor.moveCaretByChar(-1); }
 function emacs_line_start() { Editor.moveCaretHome(); }
 function emacs_line_end() { Editor.moveCaretEnd(); }
-function emacs_delete_char() { Editor.delete(Editor.getCaretPos(), 1); }
-function emacs_backspace() {
-    var pos = Editor.getCaretPos();
-    if (pos > 0) {
-        Editor.setCaretPos(pos - 1);
-        Editor.delete(pos - 1, 1);
-    }
-}
+function emacs_delete_char() { Editor.deleteChar(); }
+function emacs_backspace() { Editor.backspace(); }
 function emacs_kill_line() {
     var pos = Editor.getCaretPos();
     var lineIdx = Editor.getLineAtOffset(pos);
@@ -130,19 +137,69 @@ function emacs_kill_line() {
         var text = Editor.getText(pos, len);
         var newlinePos = text.indexOf('\n');
         if (newlinePos == 0) {
+            pushToKillRing("\n");
             Editor.delete(pos, 1);
         } else if (newlinePos > 0) {
-            Editor.setSelectionAnchor(pos);
-            Editor.setCaretPos(pos + newlinePos);
-            Editor.cut();
+            var killText = text.substring(0, newlinePos);
+            pushToKillRing(killText);
+            Editor.delete(pos, newlinePos);
         } else {
-            Editor.setSelectionAnchor(pos);
-            Editor.setCaretPos(pos + len);
-            Editor.cut();
+            pushToKillRing(text);
+            Editor.delete(pos, len);
         }
     }
+    lastCommandWasYank = false;
 }
-function emacs_yank() { Editor.paste(); }
+
+function pushToKillRing(text) {
+    if (text && text.length > 0) {
+        // Remove duplicates of the same text at front
+        if (killRing.length > 0 && killRing[0] === text) {
+            return; // Don't add duplicate
+        }
+        // Add to front of ring
+        killRing.unshift(text);
+        // Limit ring size
+        if (killRing.length > killRingMax) {
+            killRing.pop();
+        }
+        killRingYankPointer = 0;
+    }
+}
+
+function emacs_yank() {
+    if (killRing.length > 0) {
+        var text = killRing[0];
+        var startPos = Editor.getCaretPos();
+        Editor.insert(startPos, text);
+        lastYankStart = startPos;
+        lastYankEnd = startPos + text.length;
+        Editor.setCaretPos(lastYankEnd);
+        killRingYankPointer = 0;
+        lastCommandWasYank = true;
+    }
+}
+
+function emacs_yank_pop() {
+    if (!lastCommandWasYank || killRing.length < 2) {
+        return; // yank-pop only works after yank
+    }
+    // Remove the previously yanked text
+    if (lastYankStart >= 0 && lastYankEnd >= lastYankStart) {
+        Editor.delete(lastYankStart, lastYankEnd - lastYankStart);
+        Editor.setCaretPos(lastYankStart);
+    }
+    // Cycle to next item in kill ring
+    killRingYankPointer = (killRingYankPointer + 1) % killRing.length;
+    var text = killRing[killRingYankPointer];
+    var startPos = Editor.getCaretPos();
+    Editor.insert(startPos, text);
+    lastYankStart = startPos;
+    lastYankEnd = startPos + text.length;
+    Editor.setCaretPos(lastYankEnd);
+    lastCommandWasYank = true;
+}
+
 function emacs_set_mark() { Editor.setSelectionAnchor(Editor.getCaretPos()); }
 
 function emacs_scroll_up() {
@@ -181,4 +238,216 @@ function tag_jump() {
     }
 }
 
+
+function emacs_kill_region() {
+    if (Editor.hasSelection && Editor.hasSelection()) {
+        var startPos = Editor.getSelectionStart ? Editor.getSelectionStart() : Editor.getCaretPos();
+        var endPos = Editor.getSelectionEnd ? Editor.getSelectionEnd() : Editor.getSelectionAnchor ? Editor.getSelectionAnchor() : Editor.getCaretPos();
+        if (startPos > endPos) {
+            var tmp = startPos;
+            startPos = endPos;
+            endPos = tmp;
+        }
+        var text = Editor.getText(startPos, endPos - startPos);
+        pushToKillRing(text);
+    }
+    Editor.cut();
+    lastCommandWasYank = false;
+}
+
+function emacs_copy_region() {
+    if (Editor.hasSelection && Editor.hasSelection()) {
+        var startPos = Editor.getSelectionStart ? Editor.getSelectionStart() : Editor.getCaretPos();
+        var endPos = Editor.getSelectionEnd ? Editor.getSelectionEnd() : Editor.getSelectionAnchor ? Editor.getSelectionAnchor() : Editor.getCaretPos();
+        if (startPos > endPos) {
+            var tmp = startPos;
+            startPos = endPos;
+            endPos = tmp;
+        }
+        var text = Editor.getText(startPos, endPos - startPos);
+        pushToKillRing(text);
+    }
+    Editor.copy();
+    lastCommandWasYank = false;
+}
+
+function emacs_beginning_of_buffer() {
+    Editor.setCaretPos(0);
+    Editor.setSelectionAnchor(0);
+}
+
+function emacs_end_of_buffer() {
+    var endPos = Editor.getLength();
+    Editor.setCaretPos(endPos);
+    Editor.setSelectionAnchor(endPos);
+}
+
 function emacs_jump_to_line() { Editor.showJumpToLine(); }
+
+// Standard Windows CUA (Common User Access) keybindings
+// Ctrl+V and Ctrl+Y are preserved as Emacs bindings (scroll down and yank)
+console.log("Adding Windows CUA keybindings...");
+Editor.setKeyBinding("Ctrl+X", "cua_cut");
+Editor.setKeyBinding("Ctrl+C", "cua_copy");
+Editor.setKeyBinding("Ctrl+Z", "cua_undo");
+
+function cua_cut() { Editor.cut(); }
+function cua_copy() { Editor.copy(); }
+function cua_undo() { Editor.undo(); }
+
+// Shell mode
+function emacs_shell() {
+    Editor.openShell("cmd.exe");
+    lastCommandWasYank = false;
+}
+
+Editor.setKeyBinding("Alt+X", "emacs_execute_command");
+
+// M-x command registry
+var emacs_mx_commands = {
+    "shell": emacs_shell,
+    "eval": function () { Editor.showMinibuffer("Eval: ", "eval"); },
+    "switch-to-buffer": emacs_switch_to_buffer,
+    "find-file": emacs_find_file,
+    "kill-buffer": emacs_kill_buffer
+};
+
+// M-x: show minibuffer with prompt "M-x " in MX command mode
+function emacs_execute_command() {
+    Editor.showMinibuffer("M-x ", "mx");
+}
+
+// C-x prefix implementation
+Editor.setKeyBinding("Ctrl+X", "emacs_ctrl_x_prefix");
+
+function emacs_ctrl_x_prefix() {
+    Editor.setCaptureKeyboard(true);
+    Editor.setStatusText("C-x-");
+    Editor.setKeyHandler(function (key, isChar) {
+        Editor.setCaptureKeyboard(false);
+        Editor.setKeyHandler(null);
+        Editor.setStatusText("");
+
+        if (key === "f" || key === "Ctrl+F") {
+            emacs_find_file();
+            return true;
+        } else if (key === "b" || key === "Ctrl+B") {
+            emacs_switch_to_buffer();
+            return true;
+        } else if (key === "k" || key === "Ctrl+K") {
+            emacs_kill_buffer();
+            return true;
+        } else if (key === "Ctrl+S") {
+            Editor.save();
+            return true;
+        } else if (key === "Ctrl+C") {
+            // Emacs exit? For now just exit... 
+            // In a real editor this might prompt.
+            return true;
+        } else if (key === "Ctrl+G") {
+            Editor.setStatusText("Quit");
+            return true;
+        }
+        return false;
+    });
+}
+
+function emacs_switch_to_buffer() {
+    Editor.showMinibuffer("Switch to buffer: ", "callback", "on_switch_buffer_input");
+}
+
+function on_switch_buffer_input(input) {
+    if (!input) return;
+    var buffers = Editor.getBuffers();
+    var target = input.trim();
+
+    // Search by name or index
+    for (var i = 0; i < buffers.length; i++) {
+        var b = buffers[i];
+        if (b.path.endsWith(target) || b.path === target) {
+            Editor.switchBuffer(b.index);
+            return;
+        }
+    }
+
+    // If not found, maybe it's an index
+    var idx = parseInt(target);
+    if (!isNaN(idx) && idx >= 0 && idx < buffers.length) {
+        Editor.switchBuffer(idx);
+    } else {
+        Editor.setStatusText("No buffer matching: " + target);
+    }
+}
+
+// Completion for switch-to-buffer
+function on_switch_buffer_input_complete(input) {
+    var buffers = Editor.getBuffers();
+    var matches = [];
+    for (var i = 0; i < buffers.length; i++) {
+        var name = buffers[i].path;
+        if (!name) name = buffers[i].isScratch ? "*scratch*" : "Untitled";
+
+        // Strip path for easier matching
+        var lastSlash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+        var shortName = (lastSlash != -1) ? name.substring(lastSlash + 1) : name;
+
+        if (shortName.startsWith(input)) matches.push(shortName);
+        else if (name.startsWith(input)) matches.push(name);
+    }
+
+    if (matches.length == 0) return "";
+    if (matches.length == 1) return matches[0];
+
+    // Find common prefix
+    var common = matches[0];
+    for (var i = 1; i < matches.length; i++) {
+        while (matches[i].indexOf(common) !== 0) common = common.substring(0, common.length - 1);
+    }
+    return common;
+}
+
+function emacs_find_file() {
+    var path = Editor.openDialog();
+    if (path) {
+        Editor.open(path);
+    }
+}
+
+function emacs_kill_buffer() {
+    Editor.close();
+}
+
+// Goto line M-g g
+Editor.setKeyBinding("Alt+G", "emacs_goto_line_prefix");
+function emacs_goto_line_prefix() {
+    Editor.setCaptureKeyboard(true);
+    Editor.setStatusText("M-g-");
+    Editor.setKeyHandler(function (key, isChar) {
+        Editor.setCaptureKeyboard(false);
+        Editor.setKeyHandler(null);
+        Editor.setStatusText("");
+        if (key === "g" || key === "G") {
+            Editor.showMinibuffer("Goto line: ", "callback", "on_goto_line_input");
+            return true;
+        }
+        return false;
+    });
+}
+
+function on_goto_line_input(input) {
+    var line = parseInt(input);
+    if (!isNaN(line)) {
+        Editor.jumpToLine(line);
+    }
+}
+
+// M-! shell-command
+Editor.setKeyBinding("Alt+Shift+1", "emacs_shell_command"); // Alt+!
+function emacs_shell_command() {
+    Editor.showMinibuffer("Shell command: ", "callback", "on_shell_command_input");
+}
+
+function on_shell_command_input(input) {
+    if (!input) return;
+    Editor.openShell("cmd.exe /c " + input);
+}

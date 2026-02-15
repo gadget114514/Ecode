@@ -20,8 +20,12 @@ public:
   // Keyboard Capture
   void SetCaptureKeyboard(bool capture) { m_captureKeyboard = capture; }
   bool IsKeyboardCaptured() const { return m_captureKeyboard; }
-  void SetKeyHandler(const std::string &jsFuncName) { m_keyHandler = jsFuncName; }
+  void SetKeyHandler(const std::string &jsFuncName) {
+    m_keyHandler = jsFuncName;
+  }
   bool HandleKeyEvent(const std::string &key, bool isChar);
+  void SetBypassCache(bool bypass) { m_bypassCache = bypass; }
+  void CompileAllScripts();
 
 private:
   void LoadDefaultBindings();
@@ -29,4 +33,5 @@ private:
   std::map<std::string, std::string> m_keyBindings;
   bool m_captureKeyboard = false;
   std::string m_keyHandler;
+  bool m_bypassCache = false;
 };

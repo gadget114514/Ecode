@@ -95,4 +95,36 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
+echo Running Kill Ring JS Tests...
+bin\Debug\ecode.exe -headless -e "load('tests/killring_test.js'); Editor.setStatusText('Kill Ring JS Tests Completed')"
+if %ERRORLEVEL% NEQ 0 (
+    echo Kill Ring JS Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Multi-byte Character JS Tests...
+bin\Debug\ecode.exe -headless -e "load('tests/multibyte_test.js'); Editor.setStatusText('Multi-byte JS Tests Completed')"
+if %ERRORLEVEL% NEQ 0 (
+    echo Multi-byte JS Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Emacs Navigation JS Tests...
+bin\Debug\ecode.exe -headless -e "load('tests/emacs_navigation_test.js'); Editor.setStatusText('Emacs Navigation JS Tests Completed')"
+if %ERRORLEVEL% NEQ 0 (
+    echo Emacs Navigation JS Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Messages Buffer JS Tests...
+bin\Debug\ecode.exe -headless -e "load('tests/messages_buffer_test.js'); Editor.setStatusText('Messages Buffer JS Tests Completed')"
+if %ERRORLEVEL% NEQ 0 (
+    echo Messages Buffer JS Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
 echo === ALL TESTS PASSED ===

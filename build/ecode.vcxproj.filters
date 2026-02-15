@@ -28,6 +28,9 @@
     <ClCompile Include="D:\ws\Ecode\src\PieceTable.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\Process.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\ScriptEngine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

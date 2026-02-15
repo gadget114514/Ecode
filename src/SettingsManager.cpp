@@ -9,7 +9,7 @@ SettingsManager &SettingsManager::Instance() {
 SettingsManager::SettingsManager()
     : m_maximized(false), m_fontFamily(L"Consolas"), m_fontSize(12.0f),
       m_language(0), m_wordWrap(false), m_fontWeight(400),
-      m_enableLigatures(true), m_showStatusBar(true) {
+      m_enableLigatures(true), m_showStatusBar(true), m_logLevel(1) {
   m_windowRect = {100, 100, 900, 700};
 }
 
@@ -56,6 +56,7 @@ void SettingsManager::Load() {
                                             path.c_str()) != 0;
   m_showStatusBar =
       GetPrivateProfileIntW(L"Editor", L"ShowStatusBar", 1, path.c_str()) != 0;
+  m_logLevel = GetPrivateProfileIntW(L"Editor", L"LogLevel", 1, path.c_str());
 
   m_recentFiles.clear();
   for (int i = 1; i <= 10; ++i) {
@@ -91,6 +92,7 @@ void SettingsManager::Save() {
   WriteInt(L"Editor", L"FontWeight", m_fontWeight);
   WriteInt(L"Editor", L"EnableLigatures", m_enableLigatures ? 1 : 0);
   WriteInt(L"Editor", L"ShowStatusBar", m_showStatusBar ? 1 : 0);
+  WriteInt(L"Editor", L"LogLevel", m_logLevel);
 
   for (size_t i = 0; i < m_recentFiles.size(); ++i) {
     std::wstring key = L"Recent" + std::to_wstring(i + 1);
