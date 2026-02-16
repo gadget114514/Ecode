@@ -350,8 +350,41 @@ void Buffer::MoveCaretUp() {
         break;
       byteOffset += charLen;
       charIndex++;
+    size_t lineStart = GetLineOffset(prevLine);
+    size_t lineEnd = GetLineOffset(line); // End of prev line (start of current)
+
+    size_t fullLen = lineEnd - lineStart;
+    std::string text = GetText(lineStart, fullLen);
+    size_t visibleLen = fullLen;
+
+    if (visibleLen > 0 && text.back() == '\n') {
+      visibleLen--;
+      if (visibleLen > 0 && text[visibleLen - 1] == '\r')
+        visibleLen--;
     }
-    SetCaretPos(prevStart + byteOffset);
+
+    size_t byteOffset = 0;
+    size_t charIndex = 0;
+    while (charIndex < m_desiredColumn && byteOffset < visibleLen) {
+      unsigned char c = (unsigned char)text[byteOffset];
+      size_t charLen = 1;
+      if (c < 0x80)
+        charLen = 1;
+      else if ((c & 0xE0) == 0xC0)
+        charLen = 2;
+      else if ((c & 0xF0) == 0xE0)
+        charLen = 3;
+      else if ((c & 0xF8) == 0xF0)
+        charLen = 4;
+
+      if (byteOffset + charLen > visibleLen)
+        break;
+      byteOffset += charLen;
+      charIndex++;
+    }
+    SetCaretPos(lineStart + byteOffset);
+  } else {
+    SetCaretPos(0);
   }
 }
 
