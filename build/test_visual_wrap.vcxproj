@@ -342,6 +342,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="D:\ws\Ecode\src\Localization.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\SettingsManager.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Editor.cpp" />
+    <ClCompile Include="D:\ws\Ecode\src\Process.cpp" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>

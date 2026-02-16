@@ -35,6 +35,7 @@ add_executable(test_editor_core
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
+    src/Process.cpp
     src-duktape/duktape.c
 )
 target_link_libraries(test_editor_core 
@@ -68,6 +69,7 @@ add_executable(test_search_replace
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
+    src/Process.cpp
     src-duktape/duktape.c
 )
 target_link_libraries(test_search_replace 
@@ -87,6 +89,7 @@ add_executable(test_file_io
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
     src/FileUtils.cpp
+    src/Process.cpp
 )
 target_link_libraries(test_file_io 
     user32 
@@ -105,6 +108,7 @@ add_executable(performance_benchmark
     src/Buffer.cpp
     src/MemoryMappedFile.cpp
     src/FileUtils.cpp
+    src/Process.cpp
 )
 target_link_libraries(performance_benchmark 
     user32 
@@ -128,6 +132,7 @@ add_executable(test_visual_wrap
     src/Localization.cpp
     src/SettingsManager.cpp
     src/Editor.cpp
+    src/Process.cpp
 )
 target_link_libraries(test_visual_wrap 
     user32 
