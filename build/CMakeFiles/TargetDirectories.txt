@@ -1,4 +1,5 @@
 D:/ws/Ecode/build/CMakeFiles/ecode.dir
+D:/ws/Ecode/build/CMakeFiles/ecode_console.dir
 D:/ws/Ecode/build/CMakeFiles/test_piecetable.dir
 D:/ws/Ecode/build/CMakeFiles/test_piecetable_stress.dir
 D:/ws/Ecode/build/CMakeFiles/test_editor_core.dir

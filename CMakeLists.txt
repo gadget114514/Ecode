@@ -16,8 +16,12 @@ list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/test_piecetable.cpp")
 set(DUKTAPE_SOURCES "src-duktape/duktape.c")
 set(RESOURCES "src/Ecode.rc")
 
-# Executable
+# Executable (GUI)
 add_executable(ecode WIN32 ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
+
+# Executable (Console for testing)
+add_executable(ecode_console ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
+target_compile_definitions(ecode_console PRIVATE ECODE_CONSOLE_BUILD)
 
 # Test executables
 add_executable(test_piecetable 
@@ -158,9 +162,22 @@ target_link_libraries(ecode
     imm32
 )
 
+target_link_libraries(ecode_console 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32 
+    comctl32 
+    d2d1 
+    dwrite
+    imm32
+)
+
 # Output directory
 set(OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 set_target_properties(ecode PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(ecode_console PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_piecetable PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_piecetable_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_editor_core PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
@@ -175,6 +192,12 @@ add_custom_command(TARGET ecode POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
     "$<TARGET_FILE_DIR:ecode>/scripts"
+    COMMENT "Copying scripts to output directory..."
+)
+add_custom_command(TARGET ecode_console POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
+    "$<TARGET_FILE_DIR:ecode_console>/scripts"
     COMMENT "Copying scripts to output directory..."
 )
 

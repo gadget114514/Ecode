@@ -50,8 +50,24 @@ static duk_ret_t js_editor_open(duk_context *ctx) {
   }
   std::wstring wpath = StringToWString(path);
   if (g_editor) {
+    Buffer *existing = g_editor->GetBufferByName(wpath);
+    if (existing) {
+      const auto &buffers = g_editor->GetBuffers();
+      for (size_t i = 0; i < buffers.size(); ++i) {
+        if (buffers[i].get() == existing) {
+          g_editor->SwitchToBuffer(i);
+          UpdateMenu(g_mainHwnd);
+          InvalidateRect(g_mainHwnd, NULL, FALSE);
+          duk_push_boolean(ctx, true);
+          return 1;
+        }
+      }
+    }
+
     size_t index = g_editor->OpenFile(wpath);
     if (index != static_cast<size_t>(-1)) {
+      UpdateMenu(g_mainHwnd);
+      InvalidateRect(g_mainHwnd, NULL, FALSE);
       duk_push_boolean(ctx, true);
       return 1;
     }

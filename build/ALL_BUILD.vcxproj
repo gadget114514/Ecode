@@ -178,6 +178,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{C6DF2BB9-1726-30CE-A7E9-2E8B58F2FDFC}</Project>
       <Name>ecode</Name>
     </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\ecode_console.vcxproj">
+      <Project>{7F1FF8BC-D469-392D-AFFE-A4F4E748AA00}</Project>
+      <Name>ecode_console</Name>
+    </ProjectReference>
     <ProjectReference Include="D:\ws\Ecode\build\performance_benchmark.vcxproj">
       <Project>{5FD67924-776D-3F09-A3FC-505DA5543468}</Project>
       <Name>performance_benchmark</Name>

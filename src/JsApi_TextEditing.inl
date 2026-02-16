@@ -40,6 +40,7 @@ static duk_ret_t js_editor_insert(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->Insert(pos, text);
+    buf->UpdateDesiredColumn();
     duk_push_boolean(ctx, true);
     return 1;
   }
@@ -53,6 +54,7 @@ static duk_ret_t js_editor_delete(duk_context *ctx) {
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->Delete(pos, len);
+    buf->UpdateDesiredColumn();
     duk_push_boolean(ctx, true);
     return 1;
   }
@@ -90,11 +92,21 @@ static duk_ret_t js_editor_get_caret_pos(duk_context *ctx) {
   return 0;
 }
 
+static duk_ret_t js_editor_get_selection_anchor(duk_context *ctx) {
+  Buffer *buf = g_editor->GetActiveBuffer();
+  if (buf) {
+    duk_push_number(ctx, (double)buf->GetSelectionAnchor());
+    return 1;
+  }
+  return 0;
+}
+
 static duk_ret_t js_editor_set_caret_pos(duk_context *ctx) {
   size_t pos = (size_t)duk_get_number(ctx, 0);
   Buffer *buf = g_editor->GetActiveBuffer();
   if (buf) {
     buf->SetCaretPos(pos);
+    buf->UpdateDesiredColumn();
     duk_push_boolean(ctx, true);
     return 1;
   }
@@ -236,6 +248,7 @@ static duk_ret_t js_editor_delete_char(duk_context *ctx) {
             nextPos = pos + 1;
         }
         buf->Delete(pos, (std::min)(nextPos - pos, total - pos));
+        buf->UpdateDesiredColumn();
       }
     }
     duk_push_boolean(ctx, true);
@@ -256,6 +269,7 @@ static duk_ret_t js_editor_backspace(duk_context *ctx) {
         buf->MoveCaretByChar(-1);
         size_t newPos = buf->GetCaretPos();
         buf->Delete(newPos, pos - newPos);
+        buf->UpdateDesiredColumn();
       }
     }
     duk_push_boolean(ctx, true);
