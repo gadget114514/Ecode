@@ -160,7 +160,6 @@ static LRESULT HandleChar(HWND hwnd, WPARAM wParam) {
 }
 
 static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
-  DebugLog("HandleKeyDown: wParam=" + std::to_string(wParam), LOG_INFO);
   static bool s_inEscapeSequence = false;
 
   // 1. Unified mapping from VK_ code to string name
@@ -289,23 +288,17 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   }
 
   Buffer *activeBuffer = g_editor->GetActiveBuffer();
-  if (!activeBuffer) DebugLog("HandleKeyDown: No Active Buffer", LOG_WARN);
-  if (!chord.empty()) DebugLog("HandleKeyDown: Chord not empty: " + chord, LOG_INFO);
-
   if (activeBuffer && chord.empty()) {
-    DebugLog("HandleKeyDown: Movement check - VK=" + std::to_string(wParam), LOG_INFO);
     bool movement = true;
     if (wParam == VK_LEFT)
       activeBuffer->MoveCaret(-1);
     else if (wParam == VK_RIGHT)
       activeBuffer->MoveCaret(1);
-    else if (wParam == VK_UP) {
-      DebugLog("HandleKeyDown: Calling MoveCaretUp", LOG_INFO);
+    else if (wParam == VK_UP)
       activeBuffer->MoveCaretUp();
-    } else if (wParam == VK_DOWN) {
-      DebugLog("HandleKeyDown: Calling MoveCaretDown", LOG_INFO);
+    else if (wParam == VK_DOWN)
       activeBuffer->MoveCaretDown();
-    } else if (wParam == VK_HOME)
+    else if (wParam == VK_HOME)
       activeBuffer->MoveCaretHome();
     else if (wParam == VK_END)
       activeBuffer->MoveCaretEnd();
@@ -366,9 +359,7 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   }
 
   if (!chord.empty() && !keyName.empty()) {
-    DebugLog("HandleKeyDown: final chord [" + chord + keyName + "]", LOG_INFO);
     if (g_scriptEngine->HandleBinding(chord + keyName)) {
-      DebugLog("HandleKeyDown: Binding Handled", LOG_INFO);
       InvalidateRect(hwnd, NULL, FALSE);
       return 0;
     }
