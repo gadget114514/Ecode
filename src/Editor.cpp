@@ -12,6 +12,17 @@ Editor::Editor() : m_activeBufferIndex(0) {}
 
 Editor::~Editor() {}
 
+static std::wstring StringToWString(const std::string &s) {
+  if (s.empty())
+    return L"";
+  int size_needed =
+      MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), NULL, 0);
+  std::wstring wstrTo(size_needed, 0);
+  MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), &wstrTo[0],
+                      size_needed);
+  return wstrTo;
+}
+
 size_t Editor::OpenFile(const std::wstring &path) {
   auto buffer = std::make_unique<Buffer>();
   if (m_progressCb)
