@@ -230,6 +230,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     UpdateMenu(hwnd);
   }
 
+  // Ensure at least one buffer exists
+  if (g_editor->GetBuffers().empty()) {
+    g_editor->NewFile("Untitled");
+    UpdateMenu(hwnd);
+  }
+
   if (headless)
     return 0;
   ShowWindow(hwnd, nCmdShow);

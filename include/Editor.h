@@ -16,7 +16,7 @@ public:
   void SetProgressCallback(std::function<void(float)> cb) { m_progressCb = cb; }
 
   size_t OpenFile(const std::wstring &path);
-  void NewFile();
+  void NewFile(const std::string &name = "Untitled");
   size_t OpenShell(const std::wstring &cmd);
   void CloseBuffer(size_t index);
 

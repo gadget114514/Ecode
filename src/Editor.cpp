@@ -24,10 +24,15 @@ size_t Editor::OpenFile(const std::wstring &path) {
   return static_cast<size_t>(-1);
 }
 
-void Editor::NewFile() {
+void Editor::NewFile(const std::string &name) {
   auto buffer = std::make_unique<Buffer>();
   if (m_progressCb)
     buffer->SetProgressCallback(m_progressCb);
+  
+  // Set the name if provided
+  std::wstring wname = StringToWString(name);
+  buffer->SetPath(wname);
+  
   // New file has empty original and added buffers
   m_buffers.push_back(std::move(buffer));
   m_activeBufferIndex = m_buffers.size() - 1;

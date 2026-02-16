@@ -6,25 +6,26 @@
 
 static duk_ret_t js_console_log(duk_context *ctx) {
   int n = duk_get_top(ctx);
-  std::string out;
+  std::string msg;
   for (int i = 0; i < n; i++) {
-    out += duk_safe_to_string(ctx, i);
-    if (i < n - 1)
-      out += " ";
+    if (i < n - 1) {
+      msg += " "; // Add space between arguments
+    }
   }
-  std::string outWithPrefix = "JS: " + out;
-  DebugLog(outWithPrefix);
-  OutputDebugStringA((outWithPrefix + "\n").c_str());
-  std::cout << outWithPrefix << std::endl; // Ensure stdout output for tests
-  std::cerr << outWithPrefix << std::endl;
+
+  std::string outWithPrefix = "JS: " + msg;
+  DebugLog(outWithPrefix, LOG_INFO);
+  
+  // Also print to stdout for console tests
+  std::cout << outWithPrefix << std::endl; 
 
   // Show in status bar
-  std::wstring ws = StringToWString(out);
+  std::wstring ws = StringToWString(msg);
   if (g_statusHwnd)
     SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)ws.c_str());
 
   if (g_editor) {
-    g_editor->LogMessage("JS: " + out);
+    g_editor->LogMessage("JS: " + msg);
   }
 
   return 0;
