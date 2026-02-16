@@ -242,3 +242,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   }
   return 0;
 }
+
+
+// Entry point for Console subsystem (for testing/debug)
+#ifdef ECODE_CONSOLE_BUILD
+int main() {
+  return wWinMain(GetModuleHandle(NULL), NULL, GetCommandLineW(), SW_SHOW);
+}
+#endif

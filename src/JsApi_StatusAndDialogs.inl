@@ -15,6 +15,7 @@ static duk_ret_t js_console_log(duk_context *ctx) {
   std::string outWithPrefix = "JS: " + out;
   DebugLog(outWithPrefix);
   OutputDebugStringA((outWithPrefix + "\n").c_str());
+  std::cout << outWithPrefix << std::endl; // Ensure stdout output for tests
   std::cerr << outWithPrefix << std::endl;
 
   // Show in status bar

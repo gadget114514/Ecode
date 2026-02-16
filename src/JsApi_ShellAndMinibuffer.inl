@@ -11,6 +11,15 @@ extern std::string g_minibufferPrompt;
 extern int g_minibufferMode; // 0=EVAL, 1=MX_COMMAND, 2=CALLBACK
 extern std::string g_minibufferJsCallback;
 
+static duk_ret_t js_editor_get_buffer_count(duk_context *ctx) {
+  if (g_editor) {
+    duk_push_number(ctx, (double)g_editor->GetBuffers().size());
+    return 1;
+  }
+  duk_push_number(ctx, 0);
+  return 1;
+}
+
 static duk_ret_t js_editor_show_minibuffer(duk_context *ctx) {
   DebugLog("--> Entering js_editor_show_minibuffer", LOG_INFO);
   const char *prompt = duk_get_string(ctx, 0);

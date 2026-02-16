@@ -8,6 +8,9 @@
       <FullPath>D:\ws\Ecode\bin\Debug\ecode.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Debug\ecode_console.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>D:\ws\Ecode\bin\Debug\performance_benchmark.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>

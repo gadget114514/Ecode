@@ -114,6 +114,8 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "getCaretPos");
   duk_push_c_function(m_ctx, js_editor_set_caret_pos, 1);
   duk_put_prop_string(m_ctx, -2, "setCaretPos");
+  duk_push_c_function(m_ctx, js_editor_get_selection_anchor, 0);
+  duk_put_prop_string(m_ctx, -2, "getSelectionAnchor");
   duk_push_c_function(m_ctx, js_editor_move_caret, 2);
   duk_put_prop_string(m_ctx, -2, "moveCaret");
   duk_push_c_function(m_ctx, js_editor_move_caret_by_char, 2);
@@ -204,6 +206,8 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "setWrapWidth");
   duk_push_c_function(m_ctx, js_editor_get_buffers, 0);
   duk_put_prop_string(m_ctx, -2, "getBuffers");
+  duk_push_c_function(m_ctx, js_editor_get_buffer_count, 0);
+  duk_put_prop_string(m_ctx, -2, "getBufferCount");
   duk_push_c_function(m_ctx, js_editor_jump_to_line, 1);
   duk_put_prop_string(m_ctx, -2, "jumpToLine");
   duk_push_c_function(m_ctx, js_editor_show_jump_to_line, 0);
