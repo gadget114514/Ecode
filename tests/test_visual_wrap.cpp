@@ -11,6 +11,7 @@
 
 // Mocks and requirements for EditorBufferRenderer
 std::unique_ptr<Editor> g_editor;
+HWND g_mainHwnd = NULL;
 
 #define VERIFY(cond, msg)                                                      \
   if (!(cond)) {                                                               \

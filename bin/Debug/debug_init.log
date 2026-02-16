@@ -937,3 +937,46 @@ ScriptEngine::HandleBinding: Alt+X
 [INFO]   WM_SIZE sent, result=0
 [INFO]   ShowWindow mb=24 prompt=24
 [INFO] <-- Exiting js_editor_show_minibuffer
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleKeyDown: final chord [Alt+X]
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   No binding found for: Alt+X
+[INFO] HandleKeyDown: final chord [Alt+X]
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   No binding found for: Alt+X
+[INFO] HandleKeyDown: final chord [Alt+X]
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   No binding found for: Alt+X
+[INFO] HandleKeyDown: final chord [Alt+X]
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   No binding found for: Alt+X
+[INFO] HandleKeyDown: final chord [Alt+X]
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   No binding found for: Alt+X
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   No binding found for: Alt+X
+[INFO] HandleKeyDown: final chord [Ctrl+A]
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   No binding found for: Ctrl+A
+[INFO] HandleKeyDown: final chord [Ctrl+A]
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   No binding found for: Ctrl+A
+[INFO] HandleKeyDown: final chord [Ctrl+A]
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   No binding found for: Ctrl+A
+[INFO] HandleKeyDown: final chord [Ctrl+A]
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   No binding found for: Ctrl+A
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0

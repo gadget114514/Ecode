@@ -13,6 +13,9 @@
     <ClCompile Include="D:\ws\Ecode\src\MemoryMappedFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\Process.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src-duktape\duktape.c">
       <Filter>Source Files</Filter>
     </ClCompile>
