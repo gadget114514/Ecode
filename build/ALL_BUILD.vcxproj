@@ -194,6 +194,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{7314ACF5-2C29-33DC-B020-5CA7EBE7C0DF}</Project>
       <Name>test_file_io</Name>
     </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\test_find_in_files.vcxproj">
+      <Project>{76E25E2C-E7FF-3FB9-9619-8B8AE25DE3A1}</Project>
+      <Name>test_find_in_files</Name>
+    </ProjectReference>
     <ProjectReference Include="D:\ws\Ecode\build\test_piecetable.vcxproj">
       <Project>{7B19E317-D4B5-3B7A-89D8-EB257CB009F5}</Project>
       <Name>test_piecetable</Name>
@@ -205,6 +209,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ProjectReference Include="D:\ws\Ecode\build\test_search_replace.vcxproj">
       <Project>{94B4FF8F-B37B-3941-8AE1-F71EAABF448E}</Project>
       <Name>test_search_replace</Name>
+    </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\test_shortcuts.vcxproj">
+      <Project>{7779C890-B3F5-3C43-990C-B77581398EC4}</Project>
+      <Name>test_shortcuts</Name>
     </ProjectReference>
     <ProjectReference Include="D:\ws\Ecode\build\test_undoredo_stress.vcxproj">
       <Project>{E0B7703B-F4C2-3304-B5D5-337744F60AD9}</Project>

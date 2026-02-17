@@ -1,0 +1,36 @@
+MoveCaretDown: pos=65 line=1 total=46 desiredCol=20
+  next=2 start=96 end=98
+  Draft New Pos: 97
+MoveCaretDown: pos=97 line=2 total=46 desiredCol=20
+  next=3 start=98 end=123
+  Draft New Pos: 118
+MoveCaretDown: pos=118 line=3 total=46 desiredCol=20
+  next=4 start=123 end=124
+  Draft New Pos: 123
+MoveCaretDown: pos=0 line=0 total=46 desiredCol=0
+  next=1 start=45 end=96
+  Draft New Pos: 45
+MoveCaretDown: pos=45 line=1 total=46 desiredCol=0
+  next=2 start=96 end=98
+  Draft New Pos: 96
+MoveCaretDown: pos=96 line=2 total=46 desiredCol=0
+  next=3 start=98 end=123
+  Draft New Pos: 98
+MoveCaretDown: pos=98 line=3 total=46 desiredCol=0
+  next=4 start=123 end=124
+  Draft New Pos: 123
+MoveCaretDown: pos=123 line=4 total=46 desiredCol=0
+  next=5 start=124 end=149
+  Draft New Pos: 124
+MoveCaretDown: pos=124 line=5 total=46 desiredCol=0
+  next=6 start=149 end=211
+  Draft New Pos: 149
+MoveCaretDown: pos=149 line=6 total=46 desiredCol=0
+  next=7 start=211 end=280
+  Draft New Pos: 211
+MoveCaretDown: pos=211 line=7 total=46 desiredCol=0
+  next=8 start=280 end=282
+  Draft New Pos: 280
+MoveCaretDown: pos=280 line=8 total=46 desiredCol=0
+  next=9 start=282 end=308
+  Draft New Pos: 282

@@ -34,6 +34,10 @@ public:
   void SetShowStatusBar(bool show) { m_showStatusBar = show; }
   int GetLogLevel() const { return m_logLevel; }
   void SetLogLevel(int level) { m_logLevel = level; }
+  bool IsCaretBlinking() const { return m_caretBlinking; }
+  void SetCaretBlinking(bool blink) { m_caretBlinking = blink; }
+  int GetShellEncoding() const { return m_shellEncoding; }
+  void SetShellEncoding(int encoding) { m_shellEncoding = encoding; }
 
   const std::vector<std::wstring> &GetRecentFiles() const {
     return m_recentFiles;
@@ -55,4 +59,6 @@ private:
   bool m_showStatusBar;
   int m_logLevel;
   std::vector<std::wstring> m_recentFiles;
+  bool m_caretBlinking;
+  int m_shellEncoding; // 0=UTF8, 1=ShiftJIS
 };

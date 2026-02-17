@@ -1,5 +1,7 @@
 #include "../include/Buffer.h"
 #include "../include/Process.h"
+#include "../include/SettingsManager.h"
+#include "../include/StringHelpers.h"
 
 // Undefine Windows min/max macros to avoid conflicts with std::min/std::max
 #undef min
@@ -8,7 +10,7 @@
 Buffer::Buffer()
     : m_caretPos(0), m_selectionAnchor(0), m_scrollLine(0), m_scrollX(0.0f),
       m_desiredColumn(0), m_encoding(Encoding::UTF8), m_isDirty(false),
-      m_isScratch(false) {
+      m_isScratch(false), m_inputStart(0) {
   m_mmFile = std::make_unique<MemoryMappedFile>();
 }
 
@@ -350,39 +352,8 @@ void Buffer::MoveCaretUp() {
         break;
       byteOffset += charLen;
       charIndex++;
-    size_t lineStart = GetLineOffset(prevLine);
-    size_t lineEnd = GetLineOffset(line); // End of prev line (start of current)
-
-    size_t fullLen = lineEnd - lineStart;
-    std::string text = GetText(lineStart, fullLen);
-    size_t visibleLen = fullLen;
-
-    if (visibleLen > 0 && text.back() == '\n') {
-      visibleLen--;
-      if (visibleLen > 0 && text[visibleLen - 1] == '\r')
-        visibleLen--;
     }
-
-    size_t byteOffset = 0;
-    size_t charIndex = 0;
-    while (charIndex < m_desiredColumn && byteOffset < visibleLen) {
-      unsigned char c = (unsigned char)text[byteOffset];
-      size_t charLen = 1;
-      if (c < 0x80)
-        charLen = 1;
-      else if ((c & 0xE0) == 0xC0)
-        charLen = 2;
-      else if ((c & 0xF0) == 0xE0)
-        charLen = 3;
-      else if ((c & 0xF8) == 0xF0)
-        charLen = 4;
-
-      if (byteOffset + charLen > visibleLen)
-        break;
-      byteOffset += charLen;
-      charIndex++;
-    }
-    SetCaretPos(lineStart + byteOffset);
+    SetCaretPos(prevStart + byteOffset);
   } else {
     SetCaretPos(0);
   }
@@ -794,6 +765,59 @@ void Buffer::SetShellProcess(std::unique_ptr<Process> process) {
 
 void Buffer::SendToShell(const std::string &input) {
   if (m_process) {
-    m_process->Write(input);
+    int enc = SettingsManager::Instance().GetShellEncoding();
+    if (enc == 1) { // Shift-JIS
+      m_process->Write(StringHelpers::Utf8ToShiftJis(input));
+    } else {
+      m_process->Write(input);
+    }
   }
+}
+
+void Buffer::AddShellHistory(const std::string &cmd) {
+  if (cmd.empty())
+    return;
+  // Don't add duplicate consecutive commands
+  if (!m_shellHistory.empty() && m_shellHistory.back() == cmd) {
+    m_shellHistoryIndex = -1;
+    return;
+  }
+  m_shellHistory.push_back(cmd);
+  m_shellHistoryIndex = -1;
+}
+
+void Buffer::ShellHistoryUp() {
+  if (m_shellHistory.empty())
+    return;
+
+  if (m_shellHistoryIndex == -1) {
+    m_shellHistoryIndex = (int)m_shellHistory.size() - 1;
+  } else if (m_shellHistoryIndex > 0) {
+    m_shellHistoryIndex--;
+  } else {
+    // Already at oldest history
+    return;
+  }
+
+  Replace(m_inputStart, GetTotalLength(), m_shellHistory[m_shellHistoryIndex]);
+  SetCaretPos(GetTotalLength());
+  SetSelectionAnchor(GetTotalLength());
+}
+
+void Buffer::ShellHistoryDown() {
+  if (m_shellHistoryIndex == -1)
+    return;
+
+  if (m_shellHistoryIndex < (int)m_shellHistory.size() - 1) {
+    m_shellHistoryIndex++;
+    Replace(m_inputStart, GetTotalLength(),
+            m_shellHistory[m_shellHistoryIndex]);
+  } else {
+    // Moved past newest history, clear input
+    m_shellHistoryIndex = -1;
+    Replace(m_inputStart, GetTotalLength(), "");
+  }
+
+  SetCaretPos(GetTotalLength());
+  SetSelectionAnchor(GetTotalLength());
 }

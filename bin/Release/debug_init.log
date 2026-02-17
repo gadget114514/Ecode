@@ -1,0 +1,74 @@
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Release\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Release\scripts\emacs.js
+[INFO] JS: 
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   Found binding -> emacs_execute_command
+[INFO] --> Entering js_editor_show_minibuffer
+[INFO] js_editor_show_minibuffer: prompt=M-x  mode=1
+[INFO]   g_mainHwnd=527822 g_minibufferHwnd=1183016
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=1
+[INFO]   Minibuffer Layout: mbTop=495 mbHeight=24 promptWidth=31
+[INFO]   WM_SIZE sent, result=0
+[INFO]   ShowWindow mb=24 prompt=24
+[INFO] <-- Exiting js_editor_show_minibuffer
+[INFO] Minibuffer: Return pressed. Input='shell' Mode=1
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Release\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Release\scripts\emacs.js
+[INFO] JS: 
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Release\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Release\scripts\emacs.js
+[INFO] JS: 
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0

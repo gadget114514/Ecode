@@ -114,11 +114,92 @@ void TestBufferSearchReplace() {
   std::cout << "Test Passed: Buffer Search & Replace" << std::endl;
 }
 
+
+void TestBufferShellHistory() {
+  Buffer buf;
+  buf.SetShell(true);
+  buf.SetInputStart(0);
+
+  // Initial state logic check
+  // Simulate prompt "C:\> "
+  buf.Insert(0, "C:\\> ");
+  buf.SetInputStart(5);
+  buf.SetCaretPos(5);
+
+  // 1. Add history
+  buf.AddShellHistory("ls");
+  buf.AddShellHistory("cd ..");
+  buf.AddShellHistory("dir");
+
+  // 2. Test Up (traverse back)
+  // Stack: [ls, cd .., dir] (newest at back)
+  // Index starts at -1.
+
+  // First UP -> "dir" (index 2)
+  buf.ShellHistoryUp();
+  // Expect "C:\> dir"
+  std::string text = buf.GetText(0, buf.GetTotalLength());
+  VERIFY(text == "C:\\> dir", "History Up 1 failed: expected 'dir'");
+
+  // Second UP -> "cd .." (index 1)
+  buf.ShellHistoryUp();
+  text = buf.GetText(0, buf.GetTotalLength());
+  VERIFY(text == "C:\\> cd ..", "History Up 2 failed: expected 'cd ..'");
+
+  // Third UP -> "ls" (index 0)
+  buf.ShellHistoryUp();
+  text = buf.GetText(0, buf.GetTotalLength());
+  VERIFY(text == "C:\\> ls", "History Up 3 failed: expected 'ls'");
+
+  // Fourth UP -> "ls" (clamped at index 0)
+  buf.ShellHistoryUp();
+  text = buf.GetText(0, buf.GetTotalLength());
+  VERIFY(text == "C:\\> ls", "History Up 4 failed: expected 'ls'");
+
+  // 3. Test Down (traverse forward)
+  
+  // First DOWN -> "cd .." (index 1)
+  buf.ShellHistoryDown();
+  text = buf.GetText(0, buf.GetTotalLength());
+  VERIFY(text == "C:\\> cd ..", "History Down 1 failed: expected 'cd ..'");
+
+  // Second DOWN -> "dir" (index 2)
+  buf.ShellHistoryDown();
+  text = buf.GetText(0, buf.GetTotalLength());
+  VERIFY(text == "C:\\> dir", "History Down 2 failed: expected 'dir'");
+
+  // Third DOWN -> empty (index -1, reset)
+  buf.ShellHistoryDown();
+  text = buf.GetText(0, buf.GetTotalLength());
+  // Assuming ShellHistoryDown clears input when going past new
+  VERIFY(text == "C:\\> ", "History Down 3 failed: expected empty prompt");
+
+  // Fourth DOWN -> empty
+  buf.ShellHistoryDown();
+  text = buf.GetText(0, buf.GetTotalLength());
+  VERIFY(text == "C:\\> ", "History Down 4 failed: expected empty prompt");
+
+  // 4. Test Add Duplicate and Reset
+  buf.AddShellHistory("dir"); // Duplicate of last command, effectively
+  // But our implementation allows duplicates if they are not consecutive *adds*.
+  // Wait, my implementation:
+  // if (!m_shellHistory.empty() && m_shellHistory.back() == cmd) return;
+  // So adding "dir" again when "dir" is at back will do nothing to the vector, just reset index.
+  
+  buf.ShellHistoryUp();
+  text = buf.GetText(0, buf.GetTotalLength());
+  VERIFY(text == "C:\\> dir", "History Post-Add Up failed");
+
+  std::cout << "Test Passed: Buffer Shell History" << std::endl;
+}
+
 int main() {
   try {
     TestBufferFolding();
     TestBufferSearchReplace();
+    TestBufferShellHistory();
     std::cout << "=== ALL CORE TESTS PASSED ===" << std::endl;
+
   } catch (const std::exception &e) {
     std::cerr << "Test suite failed: " << e.what() << std::endl;
     return 1;

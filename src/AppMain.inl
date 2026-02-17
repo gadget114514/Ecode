@@ -83,16 +83,24 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   }
   case WM_TIMER:
     if (wParam == 1) {
-      static bool caretVisible = true;
-      caretVisible = !caretVisible;
-      g_renderer->SetCaretVisible(caretVisible);
-      InvalidateRect(hwnd, NULL, FALSE);
+      if (g_renderer->GetCaretBlinking()) {
+        static bool caretVisible = true;
+        caretVisible = !caretVisible;
+        g_renderer->SetCaretVisible(caretVisible);
+        InvalidateRect(hwnd, NULL, FALSE);
+      } else {
+        // Ensure it is visible if blinking is off
+        g_renderer->SetCaretVisible(true);
+        // We might want to InvalidateRect once if we just switched modes, but
+        // for now this ensures it stays visible.
+      }
     }
     return 0;
   case WM_SHELL_OUTPUT: {
     ShellOutput *output = (ShellOutput *)wParam;
     if (output) {
       output->buffer->Insert(output->buffer->GetTotalLength(), output->text);
+      output->buffer->SetInputStart(output->buffer->GetTotalLength());
       if (g_editor->GetActiveBuffer() == output->buffer) {
         output->buffer->SetCaretPos(output->buffer->GetTotalLength());
         output->buffer->SetSelectionAnchor(output->buffer->GetCaretPos());

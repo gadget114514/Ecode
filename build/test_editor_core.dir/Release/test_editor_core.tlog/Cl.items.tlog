@@ -2,4 +2,6 @@ D:\ws\Ecode\tests\test_editor_core.cpp;D:\ws\Ecode\build\test_editor_core.dir\Re
 D:\ws\Ecode\src\Buffer.cpp;D:\ws\Ecode\build\test_editor_core.dir\Release\Buffer.obj
 D:\ws\Ecode\src\PieceTable.cpp;D:\ws\Ecode\build\test_editor_core.dir\Release\PieceTable.obj
 D:\ws\Ecode\src\MemoryMappedFile.cpp;D:\ws\Ecode\build\test_editor_core.dir\Release\MemoryMappedFile.obj
+D:\ws\Ecode\src\Process.cpp;D:\ws\Ecode\build\test_editor_core.dir\Release\Process.obj
+D:\ws\Ecode\src\SettingsManager.cpp;D:\ws\Ecode\build\test_editor_core.dir\Release\SettingsManager.obj
 D:\ws\Ecode\src-duktape\duktape.c;D:\ws\Ecode\build\test_editor_core.dir\Release\duktape.obj

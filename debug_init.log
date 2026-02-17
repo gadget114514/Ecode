@@ -225,3 +225,93 @@ WM_SHOWWINDOW Received, wParam=1
 [INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
 [INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
 [INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> emacs_line_start
+[INFO] ScriptEngine::HandleBinding: Ctrl+E
+[INFO]   Found binding -> emacs_line_end
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> emacs_line_start
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+F
+[INFO]   Found binding -> emacs_forward_char
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line

@@ -8,13 +8,37 @@
       <FullPath>D:\ws\Ecode\bin\Release\ecode.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>D:\ws\Ecode\build\Release\performance_benchmark.exe</FullPath>
+      <FullPath>D:\ws\Ecode\bin\Release\ecode_console.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>D:\ws\Ecode\build\Release\test_editor_core.exe</FullPath>
+      <FullPath>D:\ws\Ecode\bin\Release\performance_benchmark.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>D:\ws\Ecode\build\Release\test_piecetable.exe</FullPath>
+      <FullPath>D:\ws\Ecode\bin\Release\test_editor_core.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Release\test_file_io.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Release\test_find_in_files.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Release\test_piecetable.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Release\test_piecetable_stress.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Release\test_search_replace.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Release\test_shortcuts.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Release\test_undoredo_stress.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\ws\Ecode\bin\Release\test_visual_wrap.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
       <FullPath>D:\ws\Ecode\build\x64\Release\ALL_BUILD</FullPath>

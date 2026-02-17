@@ -149,6 +149,7 @@ void Localization::LoadTranslations() {
   jp["menu_buffers"] = L"バッファ(&B)";
   jp["menu_help"] = L"ヘルプ(&H)";
   jp["menu_help_doc"] = L"ドキュメント(&D)";
+  jp["menu_help_keybindings"] = L"キーバインド(&K)";
   jp["menu_help_about"] = L"バージョン情報(&A)";
 
   // Spanish
