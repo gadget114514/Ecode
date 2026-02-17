@@ -7,6 +7,13 @@
 #include "../include/resource.h"
 #include <commdlg.h>
 #include <shellapi.h>
+#include <shlobj.h>
+#include <string>
+
+enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
+void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
+std::string GetWin32ErrorString(DWORD errorCode);
+#include <objbase.h>
 #include <vector>
 
 #if defined(__has_include) && __has_include(<filesystem>)
@@ -125,6 +132,11 @@ std::wstring Dialogs::OpenFileDialog(HWND hwnd) {
 
   if (GetOpenFileNameW(&ofn)) {
     return fileName;
+  } else {
+    DWORD err = CommDlgExtendedError();
+    if (err != 0) {
+        DebugLog("OpenFileDialog failed with extended error: " + std::to_string(err), LOG_ERROR);
+    }
   }
   return L"";
 }
@@ -142,6 +154,11 @@ std::wstring Dialogs::SaveFileDialog(HWND hwnd) {
 
   if (GetSaveFileNameW(&ofn)) {
     return fileName;
+  } else {
+    DWORD err = CommDlgExtendedError();
+    if (err != 0) {
+        DebugLog("SaveFileDialog failed with extended error: " + std::to_string(err), LOG_ERROR);
+    }
   }
   return L"";
 }
@@ -184,7 +201,7 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                   (static_cast<int>(g_renderer->GetCaretStyle())), 0);
 
       CheckDlgButton(hDlg, IDC_CARET_BLINKING,
-                     g_renderer->GetCaretBlinking() ? BST_CHECKED
+                     SettingsManager::Instance().IsCaretBlinking() ? BST_CHECKED
                                                     : BST_UNCHECKED);
     }
 
@@ -232,8 +249,10 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 
         int caretStyle =
             (int)SendDlgItemMessage(hDlg, IDC_CARET_STYLE, CB_GETCURSEL, 0, 0);
-        BOOL caretBlinking = IsDlgButtonChecked(hDlg, IDC_CARET_BLINKING);
         g_renderer->SetCaretStyle((EditorBufferRenderer::CaretStyle)caretStyle);
+      }
+      BOOL caretBlinking = IsDlgButtonChecked(hDlg, IDC_CARET_BLINKING);
+      if (g_renderer) {
         g_renderer->SetCaretBlinking(caretBlinking == BST_CHECKED);
       }
 
@@ -243,6 +262,9 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           (int)SendMessage(GetDlgItem(hDlg, IDC_LOG_LEVEL), CB_GETCURSEL, 0, 0);
       g_currentLogLevel = logLevel;
       SettingsManager::Instance().SetLogLevel(logLevel);
+      g_currentLogLevel = logLevel;
+      SettingsManager::Instance().SetLogLevel(logLevel);
+      SettingsManager::Instance().SetCaretBlinking(caretBlinking == BST_CHECKED);
       SettingsManager::Instance().Save();
 
       EndDialog(hDlg, IDOK);
@@ -274,6 +296,44 @@ void Dialogs::ShowFindReplaceDialog(HWND hwnd, bool replaceMode) {
               type.c_str(), MB_OK);
 }
 
+INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                    LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG:
+    SetDlgItemTextW(hDlg, IDC_FIND_DIR, L".");
+    return (INT_PTR)TRUE;
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDOK) {
+      wchar_t pattern[256];
+      wchar_t dir[MAX_PATH];
+      GetDlgItemTextW(hDlg, IDC_FIND_PATTERN, pattern, 256);
+      GetDlgItemTextW(hDlg, IDC_FIND_DIR, dir, MAX_PATH);
+
+      if (g_editor) {
+        g_editor->FindInFiles(dir, pattern);
+      }
+      EndDialog(hDlg, IDOK);
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_FIND_BROWSE) {
+        std::wstring path = Dialogs::BrowseForFolder(hDlg);
+        if (!path.empty()) {
+            SetDlgItemTextW(hDlg, IDC_FIND_DIR, path.c_str());
+        }
+        return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void Dialogs::ShowFindInFilesDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_FIND_IN_FILES), hwnd,
+             FindInFilesDlgProc);
+}
+
 Dialogs::ConfirmationResult
 Dialogs::ShowSaveConfirmationDialog(HWND hwnd, const std::wstring &filename) {
   std::wstring name = filename.empty() ? L"Untitled" : filename;
@@ -285,4 +345,39 @@ Dialogs::ShowSaveConfirmationDialog(HWND hwnd, const std::wstring &filename) {
   if (result == IDNO)
     return ConfirmationResult::Discard;
   return ConfirmationResult::Cancel;
+}
+
+std::wstring Dialogs::BrowseForFolder(HWND hwnd) {
+  std::wstring folderPath;
+  IFileOpenDialog *pfd = nullptr;
+  HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER,
+                                 IID_PPV_ARGS(&pfd));
+  if (SUCCEEDED(hr)) {
+    DWORD dwOptions;
+    if (SUCCEEDED(hr = pfd->GetOptions(&dwOptions))) {
+      pfd->SetOptions(dwOptions | FOS_PICKFOLDERS);
+    }
+    hr = pfd->Show(hwnd);
+    if (SUCCEEDED(hr)) {
+      IShellItem *psi = nullptr;
+      if (SUCCEEDED(hr = pfd->GetResult(&psi))) {
+        PWSTR pszPath = nullptr;
+        if (SUCCEEDED(hr = psi->GetDisplayName(SIGDN_FILESYSPATH, &pszPath))) {
+          folderPath = pszPath;
+          CoTaskMemFree(pszPath);
+        } else {
+          DebugLog("BrowseForFolder - GetDisplayName failed: hr=" + std::to_string(hr), LOG_ERROR);
+        }
+        psi->Release();
+      } else {
+        DebugLog("BrowseForFolder - GetResult failed: hr=" + std::to_string(hr), LOG_ERROR);
+      }
+    } else if (hr != HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+      DebugLog("BrowseForFolder - pfd->Show failed: hr=" + std::to_string(hr), LOG_ERROR);
+    }
+    pfd->Release();
+  } else {
+    DebugLog("BrowseForFolder - CoCreateInstance failed: hr=" + std::to_string(hr), LOG_ERROR);
+  }
+  return folderPath;
 }

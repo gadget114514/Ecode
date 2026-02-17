@@ -1031,3 +1031,353 @@ ScriptEngine::HandleBinding: Alt+X
 [INFO]   No binding found for: Alt+X
 [INFO] ScriptEngine::HandleBinding: Alt+X
 [INFO]   No binding found for: Alt+X
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleKeyDown: wParam=18
+[INFO] HandleKeyDown: Chord not empty: Alt+
+[INFO] HandleKeyDown: wParam=88
+[INFO] HandleKeyDown: Chord not empty: Alt+
+[INFO] HandleKeyDown: final chord [Alt+X]
+[INFO] ScriptEngine::HandleBinding: Alt+X
+[INFO]   Found binding -> emacs_execute_command
+[INFO] --> Entering js_editor_show_minibuffer
+[INFO] js_editor_show_minibuffer: prompt=M-x  mode=1
+[INFO]   g_mainHwnd=723612 g_minibufferHwnd=2886120
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=1
+[INFO]   Minibuffer Layout: mbTop=495 mbHeight=24 promptWidth=31
+[INFO]   WM_SIZE sent, result=0
+[INFO]   ShowWindow mb=24 prompt=24
+[INFO] <-- Exiting js_editor_show_minibuffer
+[INFO] HandleKeyDown: Binding Handled
+[INFO] Minibuffer: Return pressed. Input='shell' Mode=1
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleKeyDown: wParam=76
+[INFO] HandleKeyDown: Movement check - VK=76
+[INFO] HandleKeyDown: wParam=83
+[INFO] HandleKeyDown: Movement check - VK=83
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=68
+[INFO] HandleKeyDown: Movement check - VK=68
+[INFO] HandleKeyDown: wParam=73
+[INFO] HandleKeyDown: Movement check - VK=73
+[INFO] HandleKeyDown: wParam=82
+[INFO] HandleKeyDown: Movement check - VK=82
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=68
+[INFO] HandleKeyDown: Movement check - VK=68
+[INFO] HandleKeyDown: wParam=73
+[INFO] HandleKeyDown: Movement check - VK=73
+[INFO] HandleKeyDown: wParam=82
+[INFO] HandleKeyDown: Movement check - VK=82
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=80
+[INFO] HandleKeyDown: Movement check - VK=80
+[INFO] HandleKeyDown: wParam=87
+[INFO] HandleKeyDown: Movement check - VK=87
+[INFO] HandleKeyDown: wParam=68
+[INFO] HandleKeyDown: Movement check - VK=68
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=67
+[INFO] HandleKeyDown: Movement check - VK=67
+[INFO] HandleKeyDown: wParam=68
+[INFO] HandleKeyDown: Movement check - VK=68
+[INFO] HandleKeyDown: wParam=32
+[INFO] HandleKeyDown: Movement check - VK=32
+[INFO] HandleKeyDown: wParam=190
+[INFO] HandleKeyDown: Movement check - VK=190
+[INFO] HandleKeyDown: wParam=190
+[INFO] HandleKeyDown: Movement check - VK=190
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=68
+[INFO] HandleKeyDown: Movement check - VK=68
+[INFO] HandleKeyDown: wParam=73
+[INFO] HandleKeyDown: Movement check - VK=73
+[INFO] HandleKeyDown: wParam=82
+[INFO] HandleKeyDown: Movement check - VK=82
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=76
+[INFO] HandleKeyDown: Movement check - VK=76
+[INFO] HandleKeyDown: wParam=83
+[INFO] HandleKeyDown: Movement check - VK=83
+[INFO] HandleKeyDown: wParam=8
+[INFO] HandleKeyDown: Movement check - VK=8
+[INFO] HandleKeyDown: wParam=8
+[INFO] HandleKeyDown: Movement check - VK=8
+[INFO] HandleKeyDown: wParam=67
+[INFO] HandleKeyDown: Movement check - VK=67
+[INFO] HandleKeyDown: wParam=76
+[INFO] HandleKeyDown: Movement check - VK=76
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=68
+[INFO] HandleKeyDown: Movement check - VK=68
+[INFO] HandleKeyDown: wParam=73
+[INFO] HandleKeyDown: Movement check - VK=73
+[INFO] HandleKeyDown: wParam=82
+[INFO] HandleKeyDown: Movement check - VK=82
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=84
+[INFO] HandleKeyDown: Movement check - VK=84
+[INFO] HandleKeyDown: wParam=8
+[INFO] HandleKeyDown: Movement check - VK=8
+[INFO] HandleKeyDown: wParam=68
+[INFO] HandleKeyDown: Movement check - VK=68
+[INFO] HandleKeyDown: wParam=8
+[INFO] HandleKeyDown: Movement check - VK=8
+[INFO] HandleKeyDown: wParam=65
+[INFO] HandleKeyDown: Movement check - VK=65
+[INFO] HandleKeyDown: wParam=65
+[INFO] HandleKeyDown: Movement check - VK=65
+[INFO] HandleKeyDown: wParam=65
+[INFO] HandleKeyDown: Movement check - VK=65
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleKeyDown: wParam=65
+[INFO] HandleKeyDown: Movement check - VK=65
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleKeyDown: wParam=69
+[INFO] HandleKeyDown: Movement check - VK=69
+[INFO] HandleKeyDown: wParam=67
+[INFO] HandleKeyDown: Movement check - VK=67
+[INFO] HandleKeyDown: wParam=72
+[INFO] HandleKeyDown: Movement check - VK=72
+[INFO] HandleKeyDown: wParam=79
+[INFO] HandleKeyDown: Movement check - VK=79
+[INFO] HandleKeyDown: wParam=32
+[INFO] HandleKeyDown: Movement check - VK=32
+[INFO] HandleKeyDown: wParam=16
+[INFO] HandleKeyDown: Chord not empty: Shift+
+[INFO] HandleKeyDown: wParam=53
+[INFO] HandleKeyDown: Chord not empty: Shift+
+[INFO] HandleKeyDown: final chord [Shift+%]
+[INFO] ScriptEngine::HandleBinding: Shift+%
+[INFO]   No binding found for: Shift+%
+[INFO] HandleKeyDown: wParam=80
+[INFO] HandleKeyDown: Chord not empty: Shift+
+[INFO] HandleKeyDown: final chord [Shift+P]
+[INFO] ScriptEngine::HandleBinding: Shift+P
+[INFO]   No binding found for: Shift+P
+[INFO] HandleKeyDown: wParam=65
+[INFO] HandleKeyDown: Chord not empty: Shift+
+[INFO] HandleKeyDown: final chord [Shift+A]
+[INFO] ScriptEngine::HandleBinding: Shift+A
+[INFO]   No binding found for: Shift+A
+[INFO] HandleKeyDown: wParam=84
+[INFO] HandleKeyDown: Chord not empty: Shift+
+[INFO] HandleKeyDown: final chord [Shift+T]
+[INFO] ScriptEngine::HandleBinding: Shift+T
+[INFO]   No binding found for: Shift+T
+[INFO] HandleKeyDown: wParam=72
+[INFO] HandleKeyDown: Chord not empty: Shift+
+[INFO] HandleKeyDown: final chord [Shift+H]
+[INFO] ScriptEngine::HandleBinding: Shift+H
+[INFO]   No binding found for: Shift+H
+[INFO] HandleKeyDown: wParam=16
+[INFO] HandleKeyDown: Chord not empty: Shift+
+[INFO] HandleKeyDown: wParam=53
+[INFO] HandleKeyDown: Chord not empty: Shift+
+[INFO] HandleKeyDown: final chord [Shift+%]
+[INFO] ScriptEngine::HandleBinding: Shift+%
+[INFO]   No binding found for: Shift+%
+[INFO] HandleKeyDown: wParam=13
+[INFO] HandleKeyDown: Movement check - VK=13
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleKeyDown: wParam=37
+[INFO] HandleKeyDown: Movement check - VK=37
+[INFO] HandleKeyDown: wParam=37
+[INFO] HandleKeyDown: Movement check - VK=37
+[INFO] HandleKeyDown: wParam=37
+[INFO] HandleKeyDown: Movement check - VK=37
+[INFO] HandleKeyDown: wParam=37
+[INFO] HandleKeyDown: Movement check - VK=37
+[INFO] HandleKeyDown: wParam=37
+[INFO] HandleKeyDown: Movement check - VK=37
+[INFO] HandleKeyDown: wParam=37
+[INFO] HandleKeyDown: Movement check - VK=37
+[INFO] HandleKeyDown: wParam=37
+[INFO] HandleKeyDown: Movement check - VK=37
+[INFO] HandleKeyDown: wParam=39
+[INFO] HandleKeyDown: Movement check - VK=39
+[INFO] HandleKeyDown: wParam=38
+[INFO] HandleKeyDown: Movement check - VK=38
+[INFO] HandleKeyDown: Calling MoveCaretUp
+[INFO] HandleKeyDown: wParam=38
+[INFO] HandleKeyDown: Movement check - VK=38
+[INFO] HandleKeyDown: Calling MoveCaretUp
+[INFO] HandleKeyDown: wParam=38
+[INFO] HandleKeyDown: Movement check - VK=38
+[INFO] HandleKeyDown: Calling MoveCaretUp
+[INFO] HandleKeyDown: wParam=38
+[INFO] HandleKeyDown: Movement check - VK=38
+[INFO] HandleKeyDown: Calling MoveCaretUp
+[INFO] HandleKeyDown: wParam=17
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Movement check - VK=78
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Movement check - VK=78
+[INFO] HandleKeyDown: wParam=17
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=80
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+P]
+[INFO] ScriptEngine::HandleBinding: Ctrl+P
+[INFO]   Found binding -> emacs_prev_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=80
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+P]
+[INFO] ScriptEngine::HandleBinding: Ctrl+P
+[INFO]   Found binding -> emacs_prev_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=80
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+P]
+[INFO] ScriptEngine::HandleBinding: Ctrl+P
+[INFO]   Found binding -> emacs_prev_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=80
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+P]
+[INFO] ScriptEngine::HandleBinding: Ctrl+P
+[INFO]   Found binding -> emacs_prev_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=80
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+P]
+[INFO] ScriptEngine::HandleBinding: Ctrl+P
+[INFO]   Found binding -> emacs_prev_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=65
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+A]
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> emacs_line_start
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=69
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+E]
+[INFO] ScriptEngine::HandleBinding: Ctrl+E
+[INFO]   Found binding -> emacs_line_end
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=69
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+E]
+[INFO] ScriptEngine::HandleBinding: Ctrl+E
+[INFO]   Found binding -> emacs_line_end
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=65
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+A]
+[INFO] ScriptEngine::HandleBinding: Ctrl+A
+[INFO]   Found binding -> emacs_line_start
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled
+[INFO] HandleKeyDown: wParam=78
+[INFO] HandleKeyDown: Chord not empty: Ctrl+
+[INFO] HandleKeyDown: final chord [Ctrl+N]
+[INFO] ScriptEngine::HandleBinding: Ctrl+N
+[INFO]   Found binding -> emacs_next_line
+[INFO] HandleKeyDown: Binding Handled

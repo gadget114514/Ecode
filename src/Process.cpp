@@ -1,4 +1,9 @@
 #include "../include/Process.h"
+#include <vector>
+
+enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
+void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
+std::string GetWin32ErrorString(DWORD errorCode);
 
 Process::Process()
     : m_hProcess(NULL), m_hInWrite(NULL), m_hOutRead(NULL), m_hThread(NULL),
@@ -37,9 +42,12 @@ bool Process::Start(const std::wstring &cmd,
   saAttr.lpSecurityDescriptor = NULL;
 
   HANDLE hOutWrite = NULL;
-  if (!CreatePipe(&m_hOutRead, &hOutWrite, &saAttr, 0))
+  if (!CreatePipe(&m_hOutRead, &hOutWrite, &saAttr, 0)) {
+    DebugLog("Process::Start - CreatePipe (out) failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
     return false;
+  }
   if (!SetHandleInformation(m_hOutRead, HANDLE_FLAG_INHERIT, 0)) {
+    DebugLog("Process::Start - SetHandleInformation (out) failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
     CloseHandle(m_hOutRead);
     CloseHandle(hOutWrite);
     return false;
@@ -47,11 +55,13 @@ bool Process::Start(const std::wstring &cmd,
 
   HANDLE hInRead = NULL;
   if (!CreatePipe(&hInRead, &m_hInWrite, &saAttr, 0)) {
+    DebugLog("Process::Start - CreatePipe (in) failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
     CloseHandle(m_hOutRead);
     CloseHandle(hOutWrite);
     return false;
   }
   if (!SetHandleInformation(m_hInWrite, HANDLE_FLAG_INHERIT, 0)) {
+    DebugLog("Process::Start - SetHandleInformation (in) failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
     CloseHandle(m_hOutRead);
     CloseHandle(hOutWrite);
     CloseHandle(hInRead);
@@ -75,6 +85,7 @@ bool Process::Start(const std::wstring &cmd,
 
   if (!CreateProcessW(NULL, cmdLine.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW,
                       NULL, NULL, &siStartInfo, &piProcInfo)) {
+    DebugLog("Process::Start - CreateProcessW failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
     CloseHandle(m_hOutRead);
     CloseHandle(hOutWrite);
     CloseHandle(hInRead);
@@ -90,6 +101,12 @@ bool Process::Start(const std::wstring &cmd,
 
   m_running = true;
   m_hThread = CreateThread(NULL, 0, ReadThreadProc, this, 0, NULL);
+  if (!m_hThread) {
+    DebugLog("Process::Start - CreateThread failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+    m_running = false;
+    Stop(); // Cleanup
+    return false;
+  }
 
   return true;
 }

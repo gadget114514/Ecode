@@ -83,6 +83,9 @@ void HandleDestroy(HWND hwnd);
 #define IDM_TOOLS_RUN_MACRO 501
 #define IDM_TOOLS_CONSOLE 502
 #define IDM_TOOLS_MACRO_GALLERY 503
+#define IDM_SHELL_ENC_UTF8 504
+#define IDM_SHELL_ENC_SJIS 505
+#define IDM_EDIT_FIND_IN_FILES 506
 
 #define IDM_LANG_EN 601
 #define IDM_LANG_JP 602
@@ -97,6 +100,7 @@ void HandleDestroy(HWND hwnd);
 #define IDM_HELP_DOC 801
 #define IDM_HELP_ABOUT 802
 #define IDM_HELP_MESSAGES 803
+#define IDM_HELP_KEYBINDINGS 804
 
 #define WM_SHELL_OUTPUT (WM_USER + 101)
 
@@ -133,11 +137,24 @@ extern int g_historyIndex;
 extern WNDPROC g_oldMinibufferProc;
 
 // Utility functions
-static std::wstring StringToWString(const std::string &s) {
-  int len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, NULL, 0);
-  if (len <= 0)
-    return L"";
-  std::wstring ws(len - 1, '\0');
-  MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &ws[0], len);
   return ws;
+}
+
+inline std::string GetWin32ErrorString(DWORD errorCode) {
+  LPSTR messageBuffer = nullptr;
+  size_t size = FormatMessageA(
+      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+          FORMAT_MESSAGE_IGNORE_INSERTS,
+      NULL, errorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+      (LPSTR)&messageBuffer, 0, NULL);
+  if (size > 0 && messageBuffer) {
+    std::string message(messageBuffer, size);
+    LocalFree(messageBuffer);
+    // Remove trailing newlines
+    while (!message.empty() && (message.back() == '\r' || message.back() == '\n')) {
+        message.pop_back();
+    }
+    return message;
+  }
+  return "Unknown error (" + std::to_string(errorCode) + ")";
 }

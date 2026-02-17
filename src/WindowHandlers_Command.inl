@@ -77,9 +77,73 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     }
     break;
   }
+  case IDM_HELP_DOC: {
+      char buffer[MAX_PATH];
+      GetModuleFileNameA(NULL, buffer, MAX_PATH);
+      std::string exePath(buffer);
+      std::string dir = exePath.substr(0, exePath.find_last_of("\\/"));
+      
+      std::string filename = "documentation.md";
+      Language lang = Localization::Instance().GetCurrentLanguage();
+      if (lang == Language::Japanese) filename = "documentation_jp.md";
+      else if (lang == Language::Spanish) filename = "documentation_es.md";
+      else if (lang == Language::French) filename = "documentation_fr.md";
+      else if (lang == Language::German) filename = "documentation_de.md";
+      
+      std::string docPath = dir + "/../doc/" + filename;
+      
+      std::ifstream f(docPath);
+      if (!f.good()) {
+          // Try dev path
+          std::string devPath = "d:/ws/Ecode/doc/" + filename;
+          std::ifstream f2(devPath);
+          if (f2.good()) {
+              docPath = devPath;
+          } else {
+              DebugLog("HandleCommand - Documentation file not found: " + filename, LOG_ERROR);
+              MessageBoxA(hwnd, ("Could not find documentation file: " + filename).c_str(), "Error", MB_ICONERROR);
+          }
+      }
+      
+      g_editor->OpenFile(StringToWString(docPath));
+      break;
+  }
+
   case IDM_HELP_ABOUT:
     Dialogs::ShowAboutDialog(hwnd);
     break;
+
+  case IDM_HELP_KEYBINDINGS: {
+      char buffer[MAX_PATH];
+      GetModuleFileNameA(NULL, buffer, MAX_PATH);
+      std::string exePath(buffer);
+      std::string dir = exePath.substr(0, exePath.find_last_of("\\/"));
+      
+      std::string filename = "keybindings.md";
+      Language lang = Localization::Instance().GetCurrentLanguage();
+      if (lang == Language::Japanese) filename = "keybindings_jp.md";
+      else if (lang == Language::Spanish) filename = "keybindings_es.md";
+      else if (lang == Language::French) filename = "keybindings_fr.md";
+      else if (lang == Language::German) filename = "keybindings_de.md";
+      
+      std::string docPath = dir + "/../doc/" + filename;
+      
+      std::ifstream f(docPath);
+      if (!f.good()) {
+          // Try dev path
+          std::string devPath = "d:/ws/Ecode/doc/" + filename;
+          std::ifstream f2(devPath);
+          if (f2.good()) {
+              docPath = devPath;
+          } else {
+              DebugLog("HandleCommand - Keybindings file not found: " + filename, LOG_ERROR);
+              MessageBoxA(hwnd, ("Could not find keybindings file: " + filename).c_str(), "Error", MB_ICONERROR);
+          }
+      }
+      
+      g_editor->OpenFile(StringToWString(docPath));
+      break;
+  }
 
   case IDM_FILE_CLOSE:
     if (g_editor->GetActiveBuffer()) {
@@ -124,6 +188,9 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   case IDM_EDIT_GOTO:
     Dialogs::ShowJumpToLineDialog(hwnd);
     break;
+  case IDM_EDIT_FIND_IN_FILES:
+    Dialogs::ShowFindInFilesDialog(hwnd);
+    break;
   case IDM_EDIT_REPLACE: {
     ZeroMemory(&g_fr, sizeof(g_fr));
     g_fr.lStructSize = sizeof(g_fr);
@@ -153,6 +220,16 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   case IDM_CONFIG_SETTINGS:
     Dialogs::ShowSettingsDialog(hwnd);
     break;
+  case IDM_SHELL_ENC_UTF8:
+    SettingsManager::Instance().SetShellEncoding(0);
+    SettingsManager::Instance().Save();
+    UpdateMenu(hwnd);
+    break;
+  case IDM_SHELL_ENC_SJIS:
+    SettingsManager::Instance().SetShellEncoding(1);
+    SettingsManager::Instance().Save();
+    UpdateMenu(hwnd);
+    break;
   case IDM_TOOLS_MACRO_GALLERY:
     Dialogs::ShowMacroGalleryDialog(hwnd);
     break;
@@ -168,6 +245,11 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         }
       }
     }
+    break;
+  }
+  case IDM_TOOLS_CONSOLE: {
+    g_editor->OpenShell(L"cmd");
+    UpdateMenu(hwnd);
     break;
   }
 

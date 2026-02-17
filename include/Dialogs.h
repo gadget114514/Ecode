@@ -10,8 +10,10 @@ public:
   static void ShowAboutDialog(HWND hwnd);
   static void ShowSettingsDialog(HWND hwnd);
   static void ShowFindReplaceDialog(HWND hwnd, bool replaceMode);
+  static void ShowFindInFilesDialog(HWND hwnd);
   static void ShowJumpToLineDialog(HWND hwnd);
   static void ShowMacroGalleryDialog(HWND hwnd);
+  static std::wstring BrowseForFolder(HWND hwnd);
 
   enum class ConfirmationResult { Save, Discard, Cancel };
   static ConfirmationResult

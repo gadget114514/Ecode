@@ -40,6 +40,7 @@ add_executable(test_editor_core
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
     src/Process.cpp
+    src/SettingsManager.cpp
     src-duktape/duktape.c
 )
 target_link_libraries(test_editor_core 
@@ -74,6 +75,7 @@ add_executable(test_search_replace
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
     src/Process.cpp
+    src/SettingsManager.cpp
     src-duktape/duktape.c
 )
 target_link_libraries(test_search_replace 
@@ -94,6 +96,7 @@ add_executable(test_file_io
     src/MemoryMappedFile.cpp
     src/FileUtils.cpp
     src/Process.cpp
+    src/SettingsManager.cpp
 )
 target_link_libraries(test_file_io 
     user32 
@@ -113,6 +116,7 @@ add_executable(performance_benchmark
     src/MemoryMappedFile.cpp
     src/FileUtils.cpp
     src/Process.cpp
+    src/SettingsManager.cpp
 )
 target_link_libraries(performance_benchmark 
     user32 
@@ -139,6 +143,52 @@ add_executable(test_visual_wrap
     src/Process.cpp
 )
 target_link_libraries(test_visual_wrap 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
+add_executable(test_find_in_files
+    tests/test_find_in_files.cpp
+    src/Editor.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src/FileUtils.cpp
+    src-duktape/duktape.c
+)
+target_link_libraries(test_find_in_files 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
+add_executable(test_shortcuts
+    tests/test_shortcuts.cpp
+    src/Editor.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src/FileUtils.cpp
+    src/Localization.cpp
+    src/EditorBufferRenderer.cpp
+    src/EditorBufferRenderer_Draw.cpp
+)
+target_link_libraries(test_shortcuts 
     user32 
     gdi32 
     shell32 
@@ -185,6 +235,8 @@ set_target_properties(test_undoredo_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "
 set_target_properties(test_search_replace PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_file_io PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_visual_wrap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_find_in_files PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_shortcuts PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 
 # Copy scripts directory to output

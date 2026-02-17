@@ -18,6 +18,7 @@ public:
   size_t OpenFile(const std::wstring &path);
   void NewFile(const std::string &name = "Untitled");
   size_t OpenShell(const std::wstring &cmd);
+  void FindInFiles(const std::wstring &dir, const std::wstring &pattern);
   void CloseBuffer(size_t index);
 
   void SwitchToBuffer(size_t index);

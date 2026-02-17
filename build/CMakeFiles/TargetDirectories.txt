@@ -8,6 +8,7 @@ D:/ws/Ecode/build/CMakeFiles/test_search_replace.dir
 D:/ws/Ecode/build/CMakeFiles/test_file_io.dir
 D:/ws/Ecode/build/CMakeFiles/performance_benchmark.dir
 D:/ws/Ecode/build/CMakeFiles/test_visual_wrap.dir
-D:/ws/Ecode/build/CMakeFiles/installer.dir
+D:/ws/Ecode/build/CMakeFiles/test_find_in_files.dir
+D:/ws/Ecode/build/CMakeFiles/test_shortcuts.dir
 D:/ws/Ecode/build/CMakeFiles/ALL_BUILD.dir
 D:/ws/Ecode/build/CMakeFiles/ZERO_CHECK.dir

@@ -150,6 +150,13 @@ public:
   void SetShellProcess(std::unique_ptr<Process> process);
   Process *GetShellProcess() const { return m_process.get(); }
   void SendToShell(const std::string &input);
+  
+  size_t GetInputStart() const { return m_inputStart; }
+  void SetInputStart(size_t pos) { m_inputStart = pos; }
+
+  void AddShellHistory(const std::string &cmd);
+  void ShellHistoryUp();
+  void ShellHistoryDown();
 
 private:
   std::function<void(float)> m_progressCb;
@@ -170,4 +177,7 @@ private:
   bool m_isScratch;
   bool m_isShell = false;
   std::unique_ptr<Process> m_process;
+  size_t m_inputStart = 0;
+  std::vector<std::string> m_shellHistory;
+  int m_shellHistoryIndex = -1;
 };
