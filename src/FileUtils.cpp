@@ -1,10 +1,14 @@
-#include <functional>
-#include <string>
-#include <windows.h>
+#include "Globals.inl"
 
-enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
-void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
-std::string GetWin32ErrorString(DWORD errorCode);
+void DebugLog(const std::string &msg, LogLevel level) {
+  if (level < g_currentLogLevel)
+    return;
+  std::ofstream ofs("debug_init.log", std::ios::app);
+  const char *levelStr[] = {"DEBUG", "INFO", "WARN", "ERROR"};
+  ofs << "[" << levelStr[level] << "] " << msg << std::endl;
+  if (g_logCallback)
+    g_logCallback(msg, level);
+}
 
 bool SafeSave(const std::wstring &targetPath, const std::string &content) {
   std::wstring tempPath = targetPath + L".tmp";
@@ -12,14 +16,18 @@ bool SafeSave(const std::wstring &targetPath, const std::string &content) {
   HANDLE hFile = CreateFileW(tempPath.c_str(), GENERIC_WRITE, 0, NULL,
                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
   if (hFile == INVALID_HANDLE_VALUE) {
-    DebugLog("SafeSave - CreateFileW failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+    DebugLog("SafeSave - CreateFileW failed: " +
+                 GetWin32ErrorString(GetLastError()),
+             LOG_ERROR);
     return false;
   }
 
   DWORD bytesWritten;
   if (!WriteFile(hFile, content.c_str(), static_cast<DWORD>(content.length()),
                  &bytesWritten, NULL)) {
-    DebugLog("SafeSave - WriteFile failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+    DebugLog("SafeSave - WriteFile failed: " +
+                 GetWin32ErrorString(GetLastError()),
+             LOG_ERROR);
     CloseHandle(hFile);
     DeleteFileW(tempPath.c_str());
     return false;
@@ -34,12 +42,15 @@ bool SafeSave(const std::wstring &targetPath, const std::string &content) {
     if (err == ERROR_FILE_NOT_FOUND) {
       if (!MoveFileExW(tempPath.c_str(), targetPath.c_str(),
                        MOVEFILE_REPLACE_EXISTING)) {
-        DebugLog("SafeSave - MoveFileExW failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+        DebugLog("SafeSave - MoveFileExW failed: " +
+                     GetWin32ErrorString(GetLastError()),
+                 LOG_ERROR);
         DeleteFileW(tempPath.c_str());
         return false;
       }
     } else {
-      DebugLog("SafeSave - ReplaceFileW failed: " + GetWin32ErrorString(err), LOG_ERROR);
+      DebugLog("SafeSave - ReplaceFileW failed: " + GetWin32ErrorString(err),
+               LOG_ERROR);
       DeleteFileW(tempPath.c_str());
       return false;
     }
@@ -57,7 +68,9 @@ bool SafeSaveStreaming(
   HANDLE hFile = CreateFileW(tempPath.c_str(), GENERIC_WRITE, 0, NULL,
                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
   if (hFile == INVALID_HANDLE_VALUE) {
-    DebugLog("SafeSaveStreaming - CreateFileW failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+    DebugLog("SafeSaveStreaming - CreateFileW failed: " +
+                 GetWin32ErrorString(GetLastError()),
+             LOG_ERROR);
     return false;
   }
 
@@ -68,7 +81,9 @@ bool SafeSaveStreaming(
     DWORD bytesWritten;
     if (!WriteFile(hFile, data, static_cast<DWORD>(length), &bytesWritten,
                    NULL)) {
-      DebugLog("SafeSaveStreaming - WriteFile failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+      DebugLog("SafeSaveStreaming - WriteFile failed: " +
+                   GetWin32ErrorString(GetLastError()),
+               LOG_ERROR);
       success = false;
     }
   });
@@ -86,12 +101,16 @@ bool SafeSaveStreaming(
     if (err == ERROR_FILE_NOT_FOUND) {
       if (!MoveFileExW(tempPath.c_str(), targetPath.c_str(),
                        MOVEFILE_REPLACE_EXISTING)) {
-        DebugLog("SafeSaveStreaming - MoveFileExW failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+        DebugLog("SafeSaveStreaming - MoveFileExW failed: " +
+                     GetWin32ErrorString(GetLastError()),
+                 LOG_ERROR);
         DeleteFileW(tempPath.c_str());
         return false;
       }
     } else {
-      DebugLog("SafeSaveStreaming - ReplaceFileW failed: " + GetWin32ErrorString(err), LOG_ERROR);
+      DebugLog("SafeSaveStreaming - ReplaceFileW failed: " +
+                   GetWin32ErrorString(err),
+               LOG_ERROR);
       DeleteFileW(tempPath.c_str());
       return false;
     }

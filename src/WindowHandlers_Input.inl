@@ -170,20 +170,34 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
   // 1. Unified mapping from VK_ code to string name
   std::string keyName;
-  if (wParam == VK_ESCAPE) keyName = "Esc";
-  else if (wParam == VK_RETURN) keyName = "Enter";
-  else if (wParam == VK_BACK) keyName = "Backspace";
-  else if (wParam == VK_DELETE) keyName = "Delete";
-  else if (wParam == VK_UP) keyName = "Up";
-  else if (wParam == VK_DOWN) keyName = "Down";
-  else if (wParam == VK_LEFT) keyName = "Left";
-  else if (wParam == VK_RIGHT) keyName = "Right";
-  else if (wParam == VK_PRIOR) keyName = "PageUp";
-  else if (wParam == VK_NEXT) keyName = "PageDown";
-  else if (wParam == VK_HOME) keyName = "Home";
-  else if (wParam == VK_END) keyName = "End";
-  else if (wParam == VK_TAB) keyName = "Tab";
-  else if (wParam >= 'A' && wParam <= 'Z') keyName = (char)wParam;
+  if (wParam == VK_ESCAPE)
+    keyName = "Esc";
+  else if (wParam == VK_RETURN)
+    keyName = "Enter";
+  else if (wParam == VK_BACK)
+    keyName = "Backspace";
+  else if (wParam == VK_DELETE)
+    keyName = "Delete";
+  else if (wParam == VK_UP)
+    keyName = "Up";
+  else if (wParam == VK_DOWN)
+    keyName = "Down";
+  else if (wParam == VK_LEFT)
+    keyName = "Left";
+  else if (wParam == VK_RIGHT)
+    keyName = "Right";
+  else if (wParam == VK_PRIOR)
+    keyName = "PageUp";
+  else if (wParam == VK_NEXT)
+    keyName = "PageDown";
+  else if (wParam == VK_HOME)
+    keyName = "Home";
+  else if (wParam == VK_END)
+    keyName = "End";
+  else if (wParam == VK_TAB)
+    keyName = "Tab";
+  else if (wParam >= 'A' && wParam <= 'Z')
+    keyName = (char)wParam;
   else if (wParam >= '0' && wParam <= '9') {
     if (g_getKeyState(VK_SHIFT) & 0x8000) {
       const char *shiftDigits = ")!@#$%^&*(";
@@ -191,18 +205,30 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     } else {
       keyName = (char)wParam;
     }
-  } else if (wParam == VK_OEM_COMMA) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "<" : ",";
-  else if (wParam == VK_OEM_PERIOD) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? ">" : ".";
-  else if (wParam == VK_OEM_1) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? ":" : ";";
-  else if (wParam == VK_OEM_2) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "?" : "/";
-  else if (wParam == VK_OEM_3) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "~" : "`";
-  else if (wParam == VK_OEM_4) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "{" : "[";
-  else if (wParam == VK_OEM_5) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "|" : "\\";
-  else if (wParam == VK_OEM_6) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "}" : "]";
-  else if (wParam == VK_OEM_7) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "\"" : "'";
-  else if (wParam == VK_OEM_PLUS) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "+" : "=";
-  else if (wParam == VK_OEM_MINUS) keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "_" : "-";
-  else if (wParam >= VK_F1 && wParam <= VK_F12) keyName = "F" + std::to_string(wParam - VK_F1 + 1);
+  } else if (wParam == VK_OEM_COMMA)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "<" : ",";
+  else if (wParam == VK_OEM_PERIOD)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? ">" : ".";
+  else if (wParam == VK_OEM_1)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? ":" : ";";
+  else if (wParam == VK_OEM_2)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "?" : "/";
+  else if (wParam == VK_OEM_3)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "~" : "`";
+  else if (wParam == VK_OEM_4)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "{" : "[";
+  else if (wParam == VK_OEM_5)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "|" : "\\";
+  else if (wParam == VK_OEM_6)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "}" : "]";
+  else if (wParam == VK_OEM_7)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "\"" : "'";
+  else if (wParam == VK_OEM_PLUS)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "+" : "=";
+  else if (wParam == VK_OEM_MINUS)
+    keyName = (g_getKeyState(VK_SHIFT) & 0x8000) ? "_" : "-";
+  else if (wParam >= VK_F1 && wParam <= VK_F12)
+    keyName = "F" + std::to_string(wParam - VK_F1 + 1);
 
   // 2. Global Quit (Ctrl+G) - Checked early to allow canceling prefixes
   if ((g_getKeyState(VK_CONTROL) & 0x8000) && wParam == 'G') {
@@ -218,7 +244,7 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     }
     s_inEscapeSequence = false;
     s_inCtrlX = false; // Reset prefix
-    
+
     Buffer *buf = g_editor->GetActiveBuffer();
     if (buf)
       buf->SetSelectionAnchor(buf->GetCaretPos());
@@ -256,26 +282,41 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
   // Emacs Prefix Handling (Ctrl+X)
   if (s_inCtrlX) {
-      s_inCtrlX = false; // Reset after next key
-      
-      // Ctrl+X ...
-      if ((g_getKeyState(VK_CONTROL) & 0x8000)) {
-          if (wParam == 'F') { SendMessage(hwnd, WM_COMMAND, IDM_FILE_OPEN, 0); return 0; }
-          if (wParam == 'S') { SendMessage(hwnd, WM_COMMAND, IDM_FILE_SAVE, 0); return 0; }
-          if (wParam == 'W') { SendMessage(hwnd, WM_COMMAND, IDM_FILE_SAVE_AS, 0); return 0; }
-          if (wParam == 'C') { SendMessage(hwnd, WM_COMMAND, IDM_FILE_EXIT, 0); return 0; }
+    s_inCtrlX = false; // Reset after next key
+
+    // Ctrl+X ...
+    if ((g_getKeyState(VK_CONTROL) & 0x8000)) {
+      if (wParam == 'F') {
+        SendMessage(hwnd, WM_COMMAND, IDM_FILE_OPEN, 0);
+        return 0;
       }
-      if (wParam == 'K') { SendMessage(hwnd, WM_COMMAND, IDM_FILE_CLOSE, 0); return 0; }
-      
-      // Fallthrough or handle other C-x bindings?
+      if (wParam == 'S') {
+        SendMessage(hwnd, WM_COMMAND, IDM_FILE_SAVE, 0);
+        return 0;
+      }
+      if (wParam == 'W') {
+        SendMessage(hwnd, WM_COMMAND, IDM_FILE_SAVE_AS, 0);
+        return 0;
+      }
+      if (wParam == 'C') {
+        SendMessage(hwnd, WM_COMMAND, IDM_FILE_EXIT, 0);
+        return 0;
+      }
+    }
+    if (wParam == 'K') {
+      SendMessage(hwnd, WM_COMMAND, IDM_FILE_CLOSE, 0);
       return 0;
+    }
+
+    // Fallthrough or handle other C-x bindings?
+    return 0;
   }
-  
+
   // Set Prefix
   if ((g_getKeyState(VK_CONTROL) & 0x8000) && wParam == 'X') {
-      s_inCtrlX = true;
-      SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)L"C-x");
-      return 0;
+    s_inCtrlX = true;
+    SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)L"C-x");
+    return 0;
   }
 
   // Handle Shortcuts
@@ -283,104 +324,168 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   // Emacs Navigation
   // Handle Shortcuts
   // Emacs Navigation
-  if ((g_getKeyState(VK_CONTROL) & 0x8000) && !(g_getKeyState(VK_MENU) & 0x8000) && !(g_getKeyState(VK_SHIFT) & 0x8000)) {
-       // Emacs Navigation
-       if (wParam == 'F') { 
-           // Move Forward (Right)
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { buf->MoveCaret(1); EnsureCaretVisible(hwnd); InvalidateRect(hwnd, NULL, FALSE); }
-           return 0; 
-       }
-       if (wParam == 'B') { 
-           // Move Backward (Left)
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { buf->MoveCaret(-1); EnsureCaretVisible(hwnd); InvalidateRect(hwnd, NULL, FALSE); }
-           return 0; 
-       }
-       if (wParam == 'N') { 
-           // Move Next (Down)
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { buf->MoveCaretDown(); EnsureCaretVisible(hwnd); InvalidateRect(hwnd, NULL, FALSE); }
-           return 0; 
-       }
-       if (wParam == 'P') { 
-           // Move Previous (Up)
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { buf->MoveCaretUp(); EnsureCaretVisible(hwnd); InvalidateRect(hwnd, NULL, FALSE); }
-           return 0; 
-       }
-       if (wParam == 'A') { 
-           // Move Beginning of Line (Home)
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { buf->MoveCaretHome(); EnsureCaretVisible(hwnd); InvalidateRect(hwnd, NULL, FALSE); }
-           return 0; 
-       }
-       if (wParam == 'E') { 
-           // Move End of Line (End)
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { buf->MoveCaretEnd(); EnsureCaretVisible(hwnd); InvalidateRect(hwnd, NULL, FALSE); }
-           return 0; 
-       }
-       if (wParam == 'V') {
-           // Page Down
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { buf->MoveCaretPageDown(20); EnsureCaretVisible(hwnd); InvalidateRect(hwnd, NULL, FALSE); }
-           return 0;
-       }
+  if ((g_getKeyState(VK_CONTROL) & 0x8000) &&
+      !(g_getKeyState(VK_MENU) & 0x8000) &&
+      !(g_getKeyState(VK_SHIFT) & 0x8000)) {
+    // Emacs Navigation
+    if (wParam == 'F') {
+      // Move Forward (Right)
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->MoveCaret(1);
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
+    if (wParam == 'B') {
+      // Move Backward (Left)
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->MoveCaret(-1);
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
+    if (wParam == 'N') {
+      // Move Next (Down)
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->MoveCaretDown();
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
+    if (wParam == 'P') {
+      // Move Previous (Up)
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->MoveCaretUp();
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
+    if (wParam == 'A') {
+      // Move Beginning of Line (Home)
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->MoveCaretHome();
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
+    if (wParam == 'E') {
+      // Move End of Line (End)
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->MoveCaretEnd();
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
+    if (wParam == 'V') {
+      // Page Down
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->MoveCaretPageDown(20);
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
 
-       // Emacs Editing
-       if (wParam == 'S') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_FIND, 0); return 0; } // Find
-       if (wParam == 'W') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_CUT, 0); return 0; }  // Cut
-       if (wParam == 'Y') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_PASTE, 0); return 0; } // Paste
-       if (wParam == 'Z') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_UNDO, 0); return 0; } // Undo
-       if (wParam == 'C') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_COPY, 0); return 0; } // Copy (standard)
-       
-       if (wParam == 'D') {
-           // Delete Char
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { 
-               buf->Delete(buf->GetCaretPos(), 1); 
-               EnsureCaretVisible(hwnd); 
-               InvalidateRect(hwnd, NULL, FALSE); 
-           }
-           return 0;
-       }
-       if (wParam == 'K') {
-           // Kill Line
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { 
-               size_t startPos = buf->GetCaretPos();
-               buf->MoveCaretEnd();
-               size_t endPos = buf->GetCaretPos();
-               buf->SetCaretPos(startPos);
-               if (endPos > startPos) {
-                   buf->Delete(startPos, endPos - startPos);
-               } else {
-                   if (startPos < buf->GetTotalLength())
-                       buf->Delete(startPos, 1);
-               }
-               EnsureCaretVisible(hwnd); 
-               InvalidateRect(hwnd, NULL, FALSE); 
-           }
-           return 0;
-       }
+    // Emacs Editing
+    if (wParam == 'S') {
+      SendMessage(hwnd, WM_COMMAND, IDM_EDIT_FIND, 0);
+      return 0;
+    } // Find
+    if (wParam == 'W') {
+      SendMessage(hwnd, WM_COMMAND, IDM_EDIT_CUT, 0);
+      return 0;
+    } // Cut
+    if (wParam == 'Y') {
+      SendMessage(hwnd, WM_COMMAND, IDM_EDIT_PASTE, 0);
+      return 0;
+    } // Paste
+    if (wParam == 'Z') {
+      SendMessage(hwnd, WM_COMMAND, IDM_EDIT_UNDO, 0);
+      return 0;
+    } // Undo
+    if (wParam == 'C') {
+      SendMessage(hwnd, WM_COMMAND, IDM_EDIT_COPY, 0);
+      return 0;
+    } // Copy (standard)
 
-       if (wParam == 0xBD) { SendMessage(hwnd, WM_COMMAND, IDM_VIEW_ZOOM_OUT, 0); return 0; } // -
-       if (wParam == 0xBB) { SendMessage(hwnd, WM_COMMAND, IDM_VIEW_ZOOM_IN, 0); return 0; }  // +
+    if (wParam == 'D') {
+      // Delete Char
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->Delete(buf->GetCaretPos(), 1);
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
+    if (wParam == 'K') {
+      // Kill Line
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        size_t startPos = buf->GetCaretPos();
+        buf->MoveCaretEnd();
+        size_t endPos = buf->GetCaretPos();
+        buf->SetCaretPos(startPos);
+        if (endPos > startPos) {
+          buf->Delete(startPos, endPos - startPos);
+        } else {
+          if (startPos < buf->GetTotalLength())
+            buf->Delete(startPos, 1);
+        }
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
+
+    if (wParam == 0xBD) {
+      SendMessage(hwnd, WM_COMMAND, IDM_VIEW_ZOOM_OUT, 0);
+      return 0;
+    } // -
+    if (wParam == 0xBB) {
+      SendMessage(hwnd, WM_COMMAND, IDM_VIEW_ZOOM_IN, 0);
+      return 0;
+    } // +
   }
 
   // Alt+V for Page Up
-  if (!(g_getKeyState(VK_CONTROL) & 0x8000) && (g_getKeyState(VK_MENU) & 0x8000) && !(g_getKeyState(VK_SHIFT) & 0x8000)) {
-       if (wParam == 'V') {
-           Buffer* buf = g_editor->GetActiveBuffer();
-           if (buf) { buf->MoveCaretPageUp(20); EnsureCaretVisible(hwnd); InvalidateRect(hwnd, NULL, FALSE); }
-           return 0;
-       }
+  if (!(g_getKeyState(VK_CONTROL) & 0x8000) &&
+      (g_getKeyState(VK_MENU) & 0x8000) &&
+      !(g_getKeyState(VK_SHIFT) & 0x8000)) {
+    if (wParam == 'V') {
+      Buffer *buf = g_editor->GetActiveBuffer();
+      if (buf) {
+        buf->MoveCaretPageUp(20);
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      return 0;
+    }
   }
-  if ((g_getKeyState(VK_CONTROL) & 0x8000) && (g_getKeyState(VK_SHIFT) & 0x8000)) {
-      if (wParam == 'F') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_FIND_IN_FILES, 0); return 0; }
+  if ((g_getKeyState(VK_CONTROL) & 0x8000) &&
+      (g_getKeyState(VK_SHIFT) & 0x8000)) {
+    if (wParam == 'F') {
+      SendMessage(hwnd, WM_COMMAND, IDM_EDIT_FIND_IN_FILES, 0);
+      return 0;
+    }
   }
-  if (wParam == VK_F11) { SendMessage(hwnd, WM_COMMAND, IDM_VIEW_TOGGLE_UI, 0); return 0; }
+  if (wParam == VK_F11) {
+    SendMessage(hwnd, WM_COMMAND, IDM_VIEW_TOGGLE_UI, 0);
+    return 0;
+  }
 
   // 5. Special Escape handling: start sequence or quit minibuffer
   if (wParam == VK_ESCAPE) {
@@ -399,7 +504,8 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
   Buffer *activeBuffer = g_editor->GetActiveBuffer();
 
-  if (activeBuffer && activeBuffer->IsShell() && activeBuffer->GetCaretPos() >= activeBuffer->GetInputStart()) {
+  if (activeBuffer && activeBuffer->IsShell() &&
+      activeBuffer->GetCaretPos() >= activeBuffer->GetInputStart()) {
     if (wParam == VK_UP && chord.empty()) {
       activeBuffer->ShellHistoryUp();
       InvalidateRect(hwnd, NULL, FALSE);
@@ -436,8 +542,13 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       movement = false;
 
     if (movement) {
-      if (!(GetKeyState(VK_SHIFT) & 0x8000))
+      if ((g_getKeyState(VK_MENU) & 0x8000) &&
+          (g_getKeyState(VK_SHIFT) & 0x8000)) {
+        activeBuffer->SetSelectionMode(SelectionMode::Box);
+      } else if (!(g_getKeyState(VK_SHIFT) & 0x8000)) {
+        activeBuffer->SetSelectionMode(SelectionMode::Normal);
         activeBuffer->SetSelectionAnchor(activeBuffer->GetCaretPos());
+      }
       InvalidateRect(hwnd, NULL, FALSE);
       EnsureCaretVisible(hwnd);
       return 0;
@@ -496,18 +607,21 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     size_t caretPos = activeBuffer->GetCaretPos();
     size_t lineEnd = activeBuffer->GetTotalLength();
     size_t inputStart = activeBuffer->GetInputStart();
-    if (inputStart > lineEnd) inputStart = lineEnd; // Safety check
-    
-    std::string lineText = activeBuffer->GetText(inputStart, lineEnd - inputStart);
-    
+    if (inputStart > lineEnd)
+      inputStart = lineEnd; // Safety check
+
+    std::string lineText =
+        activeBuffer->GetText(inputStart, lineEnd - inputStart);
+
     // Trim newlines from the end
     while (!lineText.empty() &&
            (lineText.back() == '\n' || lineText.back() == '\r'))
       lineText.pop_back();
-      
+
     activeBuffer->AddShellHistory(lineText);
     activeBuffer->SendToShell(lineText + "\n");
-    activeBuffer->SetInputStart(activeBuffer->GetTotalLength() + 1); // +1 for the newline we are about to insert
+    activeBuffer->SetInputStart(activeBuffer->GetTotalLength() +
+                                1); // +1 for the newline we are about to insert
     size_t endPos = activeBuffer->GetTotalLength();
     activeBuffer->SetCaretPos(endPos);
     activeBuffer->Insert(endPos, "\n");

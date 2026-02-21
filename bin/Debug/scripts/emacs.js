@@ -317,8 +317,9 @@ function cua_copy() { Editor.copy(); }
 function cua_undo() { Editor.undo(); }
 
 // Shell mode
+var emacs_shell_cmd = "cmd.exe";
 function emacs_shell() {
-    Editor.openShell("cmd.exe");
+    Editor.openShell(emacs_shell_cmd);
     lastCommandWasYank = false;
 }
 

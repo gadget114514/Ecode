@@ -56,6 +56,8 @@ This document tracks the detailed progress of Ecode features based on [REQUIREME
   - [x] Mouse clicking in gutter for line selection.
 - [x] **FR-1.2.6: Caret Blinking**: Use a Win32 timer (`SetTimer`) to toggle caret visibility.
 - [x] **FR-1.9.1: Settings Persistence**: Save/Load window position, active language, theme to a config file.
+- [x] **Tabbed Settings Dialogue**: Modern UI for General and AI settings.
+- [x] **AI Server Configuration**: Configure Gemini, OpenAI, and Local LLMs (Ollama) via UI.
 - [x] **FR-1.2.7: Line Folding**: Virtual folding of text lines (logical display suppression).
 - [x] **FR-1.2.8: Visual Indicators for Folding**: Icons/buttons in the gutter to toggle folding.
 
@@ -71,6 +73,19 @@ This document tracks the detailed progress of Ecode features based on [REQUIREME
   - [x] Win32 Vertical (`SB_VERT`) scrollbar integration.
   - [x] Handle `WM_VSCROLL` and `WM_MOUSEWHEEL` messages.
   - [x] Horizontal (`SB_HORZ`) scrollbar.
+- [x] **FR-1.7.5: AI Assisted Coding**:
+  - [x] Expose shell command API (`Editor.runCommand`).
+  - [x] Implement AI completion script using Gemini API (`scripts/ai.js`).
+  - [x] Add AI Assistant to Tools menu and map to `Alt+A`.
+  - [x] Implement conversational AI Console (`Alt+I`).
+  - [x] Secure API Key storage in JSON config.
+  - [x] Structured multi-file edit protocol (`@@@REPLACE ... @@@`).
+  - [x] Multi-server support (Gemini, OpenAI compatible).
+  - [x] Per-buffer conversation context (Session history).
+  - [x] Unlimited history storage with sliding window for API prompts.
+  - [x] **Gemini Context Caching**: Explicit server-side caching for long histories (cost/token optimization).
+  - [x] **Asynchronous Shell API**: `Editor.runAsync` for non-blocking background AI tasks.
+  - [x] **@buffer workspace references** in console prompts.
 
 ---
-*Last Updated: 2026-02-13*
+*Last Updated: 2026-02-19*

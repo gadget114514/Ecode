@@ -5,19 +5,7 @@
 
 #include <functional>
 
-// Mock for SafeSave as it used in Buffer.cpp
-bool SafeSave(const std::wstring &targetPath, const std::string &content) {
-  return true;
-}
-
-bool SafeSaveStreaming(
-    const std::wstring &targetPath,
-    const std::function<void(std::function<void(const char *, size_t)>)>
-        &source) {
-  // Just consume the data to avoid "unused" warnings or logic issues
-  source([](const char *, size_t) {});
-  return true;
-}
+// SafeSave is now in FileUtils.cpp, which is linked in.
 
 #define VERIFY(cond, msg)                                                      \
   if (!(cond)) {                                                               \
@@ -114,7 +102,6 @@ void TestBufferSearchReplace() {
   std::cout << "Test Passed: Buffer Search & Replace" << std::endl;
 }
 
-
 void TestBufferShellHistory() {
   Buffer buf;
   buf.SetShell(true);
@@ -157,7 +144,7 @@ void TestBufferShellHistory() {
   VERIFY(text == "C:\\> ls", "History Up 4 failed: expected 'ls'");
 
   // 3. Test Down (traverse forward)
-  
+
   // First DOWN -> "cd .." (index 1)
   buf.ShellHistoryDown();
   text = buf.GetText(0, buf.GetTotalLength());
@@ -181,11 +168,11 @@ void TestBufferShellHistory() {
 
   // 4. Test Add Duplicate and Reset
   buf.AddShellHistory("dir"); // Duplicate of last command, effectively
-  // But our implementation allows duplicates if they are not consecutive *adds*.
-  // Wait, my implementation:
-  // if (!m_shellHistory.empty() && m_shellHistory.back() == cmd) return;
-  // So adding "dir" again when "dir" is at back will do nothing to the vector, just reset index.
-  
+  // But our implementation allows duplicates if they are not consecutive
+  // *adds*. Wait, my implementation: if (!m_shellHistory.empty() &&
+  // m_shellHistory.back() == cmd) return; So adding "dir" again when "dir" is
+  // at back will do nothing to the vector, just reset index.
+
   buf.ShellHistoryUp();
   text = buf.GetText(0, buf.GetTotalLength());
   VERIFY(text == "C:\\> dir", "History Post-Add Up failed");

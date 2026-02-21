@@ -124,6 +124,69 @@ static duk_ret_t js_editor_send_to_shell(duk_context *ctx) {
   return 1;
 }
 
+static duk_ret_t js_editor_run_async(duk_context *ctx) {
+  const char *cmd = duk_get_string(ctx, 0);
+  const char *cbName = duk_get_string(ctx, 1);
+  if (!cmd || !g_editor) {
+    duk_push_boolean(ctx, false);
+    return 1;
+  }
+
+  Buffer *active = g_editor->GetActiveBuffer();
+  if (!active) {
+    duk_push_boolean(ctx, false);
+    return 1;
+  }
+
+  std::wstring wcmd = StringToWString(cmd);
+  std::string sCbName = cbName ? cbName : "";
+
+  auto process = std::make_unique<Process>();
+  Process *pRaw = process.get();
+
+  if (process->Start(wcmd, [active, sCbName](const std::string &out) {
+        if (g_scriptEngine) {
+          ShellOutput *output = new ShellOutput();
+          output->buffer = active;
+          output->text = out;
+          output->callback = sCbName;
+          PostMessage(g_mainHwnd, WM_SHELL_OUTPUT, (WPARAM)output, (LPARAM)1);
+        }
+      })) {
+    active->AddProcess(std::move(process));
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_run_command(duk_context *ctx) {
+  const char *cmd = duk_get_string(ctx, 0);
+  if (!cmd) {
+    duk_push_string(ctx, "");
+    return 1;
+  }
+
+  std::wstring wcmd = StringToWString(cmd);
+  std::string output;
+  Process proc;
+  bool success =
+      proc.Start(wcmd, [&](const std::string &out) { output += out; });
+
+  if (success) {
+    // Wait for the process to finish
+    while (proc.IsRunning()) {
+      Sleep(10);
+    }
+    duk_push_string(ctx, output.c_str());
+  } else {
+    duk_push_string(ctx, "Error: Failed to start process");
+  }
+  return 1;
+}
+
 static duk_ret_t js_editor_is_shell_buffer(duk_context *ctx) {
   if (!g_editor)
     return 0;

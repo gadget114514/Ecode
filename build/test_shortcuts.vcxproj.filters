@@ -4,6 +4,12 @@
     <ClCompile Include="D:\ws\Ecode\tests\test_shortcuts.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\tests\TestGlobals.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\Editor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -20,9 +26,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\SettingsManager.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\Localization.cpp">

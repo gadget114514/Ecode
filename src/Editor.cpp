@@ -2,41 +2,13 @@
 #include "../include/Process.h"
 #include "../include/SettingsManager.h"
 #include "../include/StringHelpers.h"
+#include "Globals.inl"
 
-enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
-void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
-std::string GetWin32ErrorString(DWORD errorCode);
-
-#define WM_SHELL_OUTPUT (WM_USER + 101)
-
-#include <fstream>
-#if defined(__has_include) && __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#elif defined(__has_include) && __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
-
-struct ShellOutput {
-  Buffer *buffer;
-  std::string text;
-};
+// namespace fs alias is already in Globals.inl
 
 Editor::Editor() : m_activeBufferIndex(0) {}
-
 Editor::~Editor() {}
-
-static std::wstring StringToWString(const std::string &s) {
-  if (s.empty())
-    return L"";
-  int size_needed =
-      MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), NULL, 0);
-  std::wstring wstrTo(size_needed, 0);
-  MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), &wstrTo[0],
-                      size_needed);
-  return wstrTo;
-}
 
 size_t Editor::OpenFile(const std::wstring &path) {
   auto buffer = std::make_unique<Buffer>();
@@ -54,11 +26,11 @@ void Editor::NewFile(const std::string &name) {
   auto buffer = std::make_unique<Buffer>();
   if (m_progressCb)
     buffer->SetProgressCallback(m_progressCb);
-  
+
   // Set the name if provided
   std::wstring wname = StringToWString(name);
   buffer->SetPath(wname);
-  
+
   // New file has empty original and added buffers
   m_buffers.push_back(std::move(buffer));
   m_activeBufferIndex = m_buffers.size() - 1;
@@ -76,14 +48,14 @@ size_t Editor::OpenShell(const std::wstring &cmd) {
   if (process->Start(cmd, [bRaw](const std::string &text) {
         ShellOutput *output = new ShellOutput();
         output->buffer = bRaw;
-        
+
         int enc = SettingsManager::Instance().GetShellEncoding();
         if (enc == 1) { // Shift-JIS
           output->text = StringHelpers::ShiftJisToUtf8(text);
         } else {
           output->text = text;
         }
-        
+
         PostMessage(g_mainHwnd, WM_SHELL_OUTPUT, (WPARAM)output, 0);
       })) {
     buffer->SetShellProcess(std::move(process));
@@ -106,48 +78,52 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern) {
   } else {
     resultsBuf->Delete(0, resultsBuf->GetTotalLength());
   }
-  
+
   // Switch to results buffer
-  for(size_t i=0; i<m_buffers.size(); ++i) {
-      if(m_buffers[i].get() == resultsBuf) {
-          SwitchToBuffer(i);
-          break;
-      }
+  for (size_t i = 0; i < m_buffers.size(); ++i) {
+    if (m_buffers[i].get() == resultsBuf) {
+      SwitchToBuffer(i);
+      break;
+    }
   }
 
   std::string patternUtf8 = StringHelpers::Utf16ToUtf8(pattern);
   std::string dirUtf8 = StringHelpers::Utf16ToUtf8(dir);
-  
-  resultsBuf->Insert(0, "Searching for \"" + patternUtf8 + "\" in " + dirUtf8 + "...\n");
-  
+
+  resultsBuf->Insert(0, "Searching for \"" + patternUtf8 + "\" in " + dirUtf8 +
+                            "...\n");
+
   std::wstring searchDir = dir;
-  
+
   // Simple recursive search (blocking for now)
   try {
-      if (fs::exists(searchDir) && fs::is_directory(searchDir)) {
-          for (const auto& entry : fs::recursive_directory_iterator(searchDir)) {
-              if (entry.is_regular_file()) {
-                  std::ifstream file(entry.path());
-                  if (file) {
-                      std::string line;
-                      int lineNum = 0;
-                      while (std::getline(file, line)) {
-                          lineNum++;
-                          if (line.find(patternUtf8) != std::string::npos) {
-                              std::string out = entry.path().string() + "(" + std::to_string(lineNum) + "): " + line + "\n";
-                              resultsBuf->Insert(resultsBuf->GetTotalLength(), out);
-                          }
-                      }
-                  }
+    if (fs::exists(searchDir) && fs::is_directory(searchDir)) {
+      for (const auto &entry : fs::recursive_directory_iterator(searchDir)) {
+        if (fs::is_regular_file(entry.status())) {
+          std::ifstream file(entry.path());
+          if (file) {
+            std::string line;
+            int lineNum = 0;
+            while (std::getline(file, line)) {
+              lineNum++;
+              if (line.find(patternUtf8) != std::string::npos) {
+                std::string out = entry.path().string() + "(" +
+                                  std::to_string(lineNum) + "): " + line + "\n";
+                resultsBuf->Insert(resultsBuf->GetTotalLength(), out);
               }
+            }
           }
+        }
       }
-  } catch (const std::exception& e) {
-      DebugLog("Editor::FindInFiles - Exception: " + std::string(e.what()), LOG_ERROR);
-      resultsBuf->Insert(resultsBuf->GetTotalLength(), "Error during search: " + std::string(e.what()) + "\n");
+    }
+  } catch (const std::exception &e) {
+    DebugLog("Editor::FindInFiles - Exception: " + std::string(e.what()),
+             LOG_ERROR);
+    resultsBuf->Insert(resultsBuf->GetTotalLength(),
+                       "Error during search: " + std::string(e.what()) + "\n");
   } catch (...) {
-      DebugLog("Editor::FindInFiles - Unknown error", LOG_ERROR);
-      resultsBuf->Insert(resultsBuf->GetTotalLength(), "Error during search.\n");
+    DebugLog("Editor::FindInFiles - Unknown error", LOG_ERROR);
+    resultsBuf->Insert(resultsBuf->GetTotalLength(), "Error during search.\n");
   }
   resultsBuf->Insert(resultsBuf->GetTotalLength(), "Done.\n");
 }
@@ -174,6 +150,14 @@ Buffer *Editor::GetActiveBuffer() const {
     return m_buffers[m_activeBufferIndex].get();
   }
   return nullptr;
+}
+
+bool Editor::IsValidBuffer(Buffer *buf) const {
+  for (const auto &b : m_buffers) {
+    if (b.get() == buf)
+      return true;
+  }
+  return false;
 }
 
 void Editor::Undo() {
@@ -212,7 +196,9 @@ void Editor::Copy(HWND hwnd) {
         MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, pMem, len);
         GlobalUnlock(hMem);
         if (!SetClipboardData(CF_UNICODETEXT, hMem)) {
-          DebugLog("Editor::Copy - SetClipboardData failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+          DebugLog("Editor::Copy - SetClipboardData failed: " +
+                       GetWin32ErrorString(GetLastError()),
+                   LOG_ERROR);
           GlobalFree(hMem);
         }
       } else {
@@ -220,11 +206,15 @@ void Editor::Copy(HWND hwnd) {
         GlobalFree(hMem);
       }
     } else {
-      DebugLog("Editor::Copy - GlobalAlloc failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+      DebugLog("Editor::Copy - GlobalAlloc failed: " +
+                   GetWin32ErrorString(GetLastError()),
+               LOG_ERROR);
     }
     CloseClipboard();
   } else {
-    DebugLog("Editor::Copy - OpenClipboard failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+    DebugLog("Editor::Copy - OpenClipboard failed: " +
+                 GetWin32ErrorString(GetLastError()),
+             LOG_ERROR);
   }
 }
 
@@ -283,11 +273,15 @@ void Editor::Paste(HWND hwnd) {
         }
       }
     } else {
-        DebugLog("Editor::Paste - GetClipboardData failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+      DebugLog("Editor::Paste - GetClipboardData failed: " +
+                   GetWin32ErrorString(GetLastError()),
+               LOG_ERROR);
     }
     CloseClipboard();
   } else {
-    DebugLog("Editor::Paste - OpenClipboard failed: " + GetWin32ErrorString(GetLastError()), LOG_ERROR);
+    DebugLog("Editor::Paste - OpenClipboard failed: " +
+                 GetWin32ErrorString(GetLastError()),
+             LOG_ERROR);
   }
 }
 void Editor::LogMessage(const std::string &msg) {

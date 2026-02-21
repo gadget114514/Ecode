@@ -760,16 +760,28 @@ std::vector<Buffer::SelectionRange> Buffer::GetSelectionRanges() const {
 }
 
 void Buffer::SetShellProcess(std::unique_ptr<Process> process) {
-  m_process = std::move(process);
+  if (m_processes.empty()) {
+    m_processes.push_back(std::move(process));
+  } else {
+    m_processes[0] = std::move(process);
+  }
+}
+
+Process *Buffer::GetShellProcess() const {
+  return m_processes.empty() ? nullptr : m_processes[0].get();
+}
+
+void Buffer::AddProcess(std::unique_ptr<Process> process) {
+  m_processes.push_back(std::move(process));
 }
 
 void Buffer::SendToShell(const std::string &input) {
-  if (m_process) {
+  if (!m_processes.empty() && m_processes[0]) {
     int enc = SettingsManager::Instance().GetShellEncoding();
     if (enc == 1) { // Shift-JIS
-      m_process->Write(StringHelpers::Utf8ToShiftJis(input));
+      m_processes[0]->Write(StringHelpers::Utf8ToShiftJis(input));
     } else {
-      m_process->Write(input);
+      m_processes[0]->Write(input);
     }
   }
 }

@@ -4,6 +4,12 @@
     <ClCompile Include="D:\ws\Ecode\tests\test_editor_core.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\tests\TestGlobals.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\Buffer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
