@@ -1,17 +1,7 @@
-#include "../include/Buffer.h"
-#include "../include/Editor.h"
-#include "../include/EditorBufferRenderer.h"
-#include <d2d1.h>
-#include <dwrite.h>
+#include "../src/Globals.inl"
 #include <iostream>
-#include <memory>
-#include <string>
-#include <vector>
-#include <windows.h>
 
-// Mocks and requirements for EditorBufferRenderer
-std::unique_ptr<Editor> g_editor;
-HWND g_mainHwnd = NULL;
+// Mocks are now in TestGlobals.cpp
 
 #define VERIFY(cond, msg)                                                      \
   if (!(cond)) {                                                               \
@@ -37,7 +27,7 @@ HWND CreateHiddenWindow() {
 }
 
 void TestTextWrapping() {
-  g_editor = std::make_unique<Editor>();
+  g_editor = new Editor();
   g_editor->NewFile();
 
   HWND hwnd = CreateHiddenWindow();

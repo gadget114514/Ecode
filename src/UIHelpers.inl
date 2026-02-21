@@ -144,15 +144,23 @@ void UpdateMenu(HWND hwnd) {
 
   // File Menu
   HMENU hFile = CreatePopupMenu();
-  AppendMenu(hFile, MF_STRING, IDM_FILE_NEW, L"New\tCtrl+N"); // Keep Ctrl+N for New? Emacs is usually C-x C-f for new file too if it doesn't exist. Let's keep Ctrl+N as alternative or just C-x C-f. User said "file operation keybindings use emacs like key bindings". Let's stick to the plan: Open, Save, Save As, Close, Exit.
-  // Actually, I'll keep Ctrl+N for New as it wasn't explicitly mapped to something else in my plan, but maybe C-x C-f does it all.
-  // The plan said: Open: C-x C-f, Save: C-x C-s, Save As: C-x C-w, Close: C-x k, Exit: C-x C-c.
+  AppendMenu(
+      hFile, MF_STRING, IDM_FILE_NEW,
+      L"New\tCtrl+N"); // Keep Ctrl+N for New? Emacs is usually C-x C-f for new
+                       // file too if it doesn't exist. Let's keep Ctrl+N as
+                       // alternative or just C-x C-f. User said "file operation
+                       // keybindings use emacs like key bindings". Let's stick
+                       // to the plan: Open, Save, Save As, Close, Exit.
+  // Actually, I'll keep Ctrl+N for New as it wasn't explicitly mapped to
+  // something else in my plan, but maybe C-x C-f does it all. The plan said:
+  // Open: C-x C-f, Save: C-x C-s, Save As: C-x C-w, Close: C-x k, Exit: C-x
+  // C-c.
   AppendMenu(hFile, MF_STRING, IDM_FILE_NEW, L"New\tCtrl+N");
   AppendMenu(hFile, MF_STRING, IDM_FILE_OPEN, L"Open\tC-x C-f");
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE, L"Save\tC-x C-s");
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE_AS, L"Save As\tC-x C-w");
   AppendMenu(hFile, MF_STRING, IDM_FILE_CLOSE, L"Close\tC-x k");
-  
+
   HMENU hRecent = CreatePopupMenu();
   const auto &recent = SettingsManager::Instance().GetRecentFiles();
   if (recent.empty()) {
@@ -170,38 +178,23 @@ void UpdateMenu(HWND hwnd) {
 
   // Edit Menu
   HMENU hEdit = CreatePopupMenu();
-  
-  // Emacs style shortcuts display
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_UNDO, L"Undo\tCtrl+Z"); // or C-/ if we implemented it, but kept Z
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REDO, L"Redo\tCtrl+Y"); // Actually Paste is C-Y in Emacs (Yank). Redo is usually not simple.
-  // Wait, I mapped Ctrl+Y to Paste in WindowHandlers_Input.inl: if (wParam == 'Y') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_PASTE, 0); }
-  // So Redo is now orphaned from Ctrl+Y?
-  // I should check WindowHandlers again.
-  // Step 591: if (wParam == 'Y') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_PASTE, 0); }
-  // So yes, Ctrl+Y is Paste. Redo has no shortcut in my implementation (unless I add one).
-  // Standard Emacs Redo is complex (C-g followed by undo, or C-_).
-  // I'll leave Redo without a shortcut in the menu for now, or just not mention it.
-  
+
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_UNDO, L"Undo\tC-z");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REDO, L"Redo"); 
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REDO, L"Redo");
   AppendMenu(hEdit, MF_SEPARATOR, 0, NULL);
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_CUT, L"Cut\tC-w");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_COPY, L"Copy\tM-w"); // I mapped C-c to Copy. M-w is Emacs standard.
-  // In WindowHandlers: if (wParam == 'C') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_COPY, 0); }
-  // So C-c is Copy. M-w is NOT implemented yet!
-  // I should probably stick to what I implemented: C-c.
-  // User asked for "emacs like".
-  // I implemented C-c for Copy in step 591.
-  // So Menu should say C-c.
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_COPY, L"Copy\tC-c"); 
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_COPY, L"Copy\tM-w");
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_PASTE, L"Paste\tC-y");
   AppendMenu(hEdit, MF_SEPARATOR, 0, NULL);
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_SELECT_ALL, L"Select All\tC-a");
   AppendMenu(hEdit, MF_SEPARATOR, 0, NULL);
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND, L"Find\tC-s");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REPLACE, L"Replace"); // C-h removed (used for Help in Emacs, or Backspace)
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND_IN_FILES, L"Find in Files...\tC-S-f");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_GOTO, L"Go to Line"); // C-g removed (Quit)
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REPLACE, L"Replace");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND_IN_FILES,
+             L"Find in Files...\tC-S-f");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_GOTO, L"Go to Line...\tAlt+G");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_TOGGLE_BOX,
+             L"Box Selection Mode\tAlt+Shift+Drag");
 
   // ... (View, Config, Tools, Language, Buffers, Help omitted for brevity, but
   // they'll be in the actual file) Actually, I should include everything since
@@ -241,6 +234,10 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_CONSOLE, L10N("menu_tools_console"));
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
+  AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_AI_ASSISTANT, L"AI Assistant\tAlt+A");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_AI_CONSOLE, L"AI Console\tAlt+I");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_AI_SET_KEY, L"Set AI API Key...");
 
   // Language Menu
   HMENU hLang = CreatePopupMenu();
@@ -271,15 +268,27 @@ void UpdateMenu(HWND hwnd) {
   // Help Menu
   HMENU hHelp = CreatePopupMenu();
   AppendMenu(hHelp, MF_STRING, IDM_HELP_DOC, L10N("menu_help_doc"));
-  AppendMenu(hHelp, MF_STRING, IDM_HELP_KEYBINDINGS, L10N("menu_help_keybindings"));
+  AppendMenu(hHelp, MF_STRING, IDM_HELP_KEYBINDINGS,
+             L10N("menu_help_keybindings"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_ABOUT, L10N("menu_help_about"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_MESSAGES, L"Show Messages");
+
+  // AI Menu (New)
+  HMENU hAi = CreatePopupMenu();
+  AppendMenu(hAi, MF_STRING, IDM_AI_MANAGER, L"AI Agent Manager");
+  AppendMenu(hAi, MF_STRING, IDM_AI_SETUP_WIZARD, L"AI Setup Wizard");
+  AppendMenu(hAi, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hAi, MF_STRING, IDM_TOOLS_AI_ASSISTANT,
+             L"Contextual AI Assistant\tAlt+A");
+  AppendMenu(hAi, MF_STRING, IDM_TOOLS_AI_CONSOLE, L"AI Agents Console\tAlt+I");
+  AppendMenu(hAi, MF_STRING, IDM_TOOLS_AI_SET_KEY, L"Configure Server Keys...");
 
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hFile, L10N("menu_file"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hEdit, L10N("menu_edit"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hView, L10N("menu_view"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hConfig, L10N("menu_config"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hTools, L10N("menu_tools"));
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hAi, L"AI");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hHelp, L10N("menu_help"));

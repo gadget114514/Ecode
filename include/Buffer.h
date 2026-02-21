@@ -148,9 +148,10 @@ public:
   void SetShell(bool isShell) { m_isShell = isShell; }
   bool IsShell() const { return m_isShell; }
   void SetShellProcess(std::unique_ptr<Process> process);
-  Process *GetShellProcess() const { return m_process.get(); }
+  Process *GetShellProcess() const;
+  void AddProcess(std::unique_ptr<Process> process);
   void SendToShell(const std::string &input);
-  
+
   size_t GetInputStart() const { return m_inputStart; }
   void SetInputStart(size_t pos) { m_inputStart = pos; }
 
@@ -176,7 +177,7 @@ private:
   bool m_isDirty;
   bool m_isScratch;
   bool m_isShell = false;
-  std::unique_ptr<Process> m_process;
+  std::vector<std::unique_ptr<Process>> m_processes;
   size_t m_inputStart = 0;
   std::vector<std::string> m_shellHistory;
   int m_shellHistoryIndex = -1;

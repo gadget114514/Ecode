@@ -31,10 +31,22 @@ static duk_ret_t js_editor_close(duk_context *ctx) {
 }
 
 static duk_ret_t js_editor_new_file(duk_context *ctx) {
+  const char *name = duk_get_string(ctx, 0);
   if (g_editor) {
-    g_editor->NewFile();
+    g_editor->NewFile(name ? name : "Untitled");
     UpdateMenu(g_mainHwnd);
     InvalidateRect(g_mainHwnd, NULL, FALSE);
+    duk_push_boolean(ctx, true);
+    return 1;
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_set_scratch(duk_context *ctx) {
+  bool scratch = duk_get_boolean(ctx, 0);
+  if (g_editor && g_editor->GetActiveBuffer()) {
+    g_editor->GetActiveBuffer()->SetScratch(scratch);
     duk_push_boolean(ctx, true);
     return 1;
   }
@@ -68,6 +80,23 @@ static duk_ret_t js_editor_open(duk_context *ctx) {
     if (index != static_cast<size_t>(-1)) {
       UpdateMenu(g_mainHwnd);
       InvalidateRect(g_mainHwnd, NULL, FALSE);
+      duk_push_boolean(ctx, true);
+      return 1;
+    }
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_write_file(duk_context *ctx) {
+  const char *path = duk_get_string(ctx, 0);
+  const char *content = duk_get_string(ctx, 1);
+  if (path && content) {
+    std::wstring wpath = StringToWString(path);
+    std::ofstream ofs(wpath, std::ios::binary);
+    if (ofs.is_open()) {
+      ofs.write(content, strlen(content));
+      ofs.close();
       duk_push_boolean(ctx, true);
       return 1;
     }

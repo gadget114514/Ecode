@@ -78,35 +78,42 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     break;
   }
   case IDM_HELP_DOC: {
-      char buffer[MAX_PATH];
-      GetModuleFileNameA(NULL, buffer, MAX_PATH);
-      std::string exePath(buffer);
-      std::string dir = exePath.substr(0, exePath.find_last_of("\\/"));
-      
-      std::string filename = "documentation.md";
-      Language lang = Localization::Instance().GetCurrentLanguage();
-      if (lang == Language::Japanese) filename = "documentation_jp.md";
-      else if (lang == Language::Spanish) filename = "documentation_es.md";
-      else if (lang == Language::French) filename = "documentation_fr.md";
-      else if (lang == Language::German) filename = "documentation_de.md";
-      
-      std::string docPath = dir + "/../doc/" + filename;
-      
-      std::ifstream f(docPath);
-      if (!f.good()) {
-          // Try dev path
-          std::string devPath = "d:/ws/Ecode/doc/" + filename;
-          std::ifstream f2(devPath);
-          if (f2.good()) {
-              docPath = devPath;
-          } else {
-              DebugLog("HandleCommand - Documentation file not found: " + filename, LOG_ERROR);
-              MessageBoxA(hwnd, ("Could not find documentation file: " + filename).c_str(), "Error", MB_ICONERROR);
-          }
+    char buffer[MAX_PATH];
+    GetModuleFileNameA(NULL, buffer, MAX_PATH);
+    std::string exePath(buffer);
+    std::string dir = exePath.substr(0, exePath.find_last_of("\\/"));
+
+    std::string filename = "documentation.md";
+    Language lang = Localization::Instance().GetCurrentLanguage();
+    if (lang == Language::Japanese)
+      filename = "documentation_jp.md";
+    else if (lang == Language::Spanish)
+      filename = "documentation_es.md";
+    else if (lang == Language::French)
+      filename = "documentation_fr.md";
+    else if (lang == Language::German)
+      filename = "documentation_de.md";
+
+    std::string docPath = dir + "/../doc/" + filename;
+
+    std::ifstream f(docPath);
+    if (!f.good()) {
+      // Try dev path
+      std::string devPath = "d:/ws/Ecode/doc/" + filename;
+      std::ifstream f2(devPath);
+      if (f2.good()) {
+        docPath = devPath;
+      } else {
+        DebugLog("HandleCommand - Documentation file not found: " + filename,
+                 LOG_ERROR);
+        MessageBoxA(hwnd,
+                    ("Could not find documentation file: " + filename).c_str(),
+                    "Error", MB_ICONERROR);
       }
-      
-      g_editor->OpenFile(StringToWString(docPath));
-      break;
+    }
+
+    g_editor->OpenFile(StringToWString(docPath));
+    break;
   }
 
   case IDM_HELP_ABOUT:
@@ -114,35 +121,42 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     break;
 
   case IDM_HELP_KEYBINDINGS: {
-      char buffer[MAX_PATH];
-      GetModuleFileNameA(NULL, buffer, MAX_PATH);
-      std::string exePath(buffer);
-      std::string dir = exePath.substr(0, exePath.find_last_of("\\/"));
-      
-      std::string filename = "keybindings.md";
-      Language lang = Localization::Instance().GetCurrentLanguage();
-      if (lang == Language::Japanese) filename = "keybindings_jp.md";
-      else if (lang == Language::Spanish) filename = "keybindings_es.md";
-      else if (lang == Language::French) filename = "keybindings_fr.md";
-      else if (lang == Language::German) filename = "keybindings_de.md";
-      
-      std::string docPath = dir + "/../doc/" + filename;
-      
-      std::ifstream f(docPath);
-      if (!f.good()) {
-          // Try dev path
-          std::string devPath = "d:/ws/Ecode/doc/" + filename;
-          std::ifstream f2(devPath);
-          if (f2.good()) {
-              docPath = devPath;
-          } else {
-              DebugLog("HandleCommand - Keybindings file not found: " + filename, LOG_ERROR);
-              MessageBoxA(hwnd, ("Could not find keybindings file: " + filename).c_str(), "Error", MB_ICONERROR);
-          }
+    char buffer[MAX_PATH];
+    GetModuleFileNameA(NULL, buffer, MAX_PATH);
+    std::string exePath(buffer);
+    std::string dir = exePath.substr(0, exePath.find_last_of("\\/"));
+
+    std::string filename = "keybindings.md";
+    Language lang = Localization::Instance().GetCurrentLanguage();
+    if (lang == Language::Japanese)
+      filename = "keybindings_jp.md";
+    else if (lang == Language::Spanish)
+      filename = "keybindings_es.md";
+    else if (lang == Language::French)
+      filename = "keybindings_fr.md";
+    else if (lang == Language::German)
+      filename = "keybindings_de.md";
+
+    std::string docPath = dir + "/../doc/" + filename;
+
+    std::ifstream f(docPath);
+    if (!f.good()) {
+      // Try dev path
+      std::string devPath = "d:/ws/Ecode/doc/" + filename;
+      std::ifstream f2(devPath);
+      if (f2.good()) {
+        docPath = devPath;
+      } else {
+        DebugLog("HandleCommand - Keybindings file not found: " + filename,
+                 LOG_ERROR);
+        MessageBoxA(hwnd,
+                    ("Could not find keybindings file: " + filename).c_str(),
+                    "Error", MB_ICONERROR);
       }
-      
-      g_editor->OpenFile(StringToWString(docPath));
-      break;
+    }
+
+    g_editor->OpenFile(StringToWString(docPath));
+    break;
   }
 
   case IDM_FILE_CLOSE:
@@ -188,6 +202,17 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   case IDM_EDIT_GOTO:
     Dialogs::ShowJumpToLineDialog(hwnd);
     break;
+  case IDM_EDIT_TOGGLE_BOX: {
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf) {
+      if (buf->GetSelectionMode() == SelectionMode::Box)
+        buf->SetSelectionMode(SelectionMode::Normal);
+      else
+        buf->SetSelectionMode(SelectionMode::Box);
+      InvalidateRect(hwnd, NULL, FALSE);
+    }
+    break;
+  }
   case IDM_EDIT_FIND_IN_FILES:
     Dialogs::ShowFindInFilesDialog(hwnd);
     break;
@@ -250,6 +275,36 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   case IDM_TOOLS_CONSOLE: {
     g_editor->OpenShell(L"cmd");
     UpdateMenu(hwnd);
+    break;
+  }
+  case IDM_TOOLS_AI_ASSISTANT: {
+    if (g_scriptEngine) {
+      g_scriptEngine->Evaluate("aiComplete()");
+    }
+    break;
+  }
+  case IDM_TOOLS_AI_CONSOLE: {
+    if (g_scriptEngine) {
+      g_scriptEngine->Evaluate("openAiConsole()");
+    }
+    break;
+  }
+  case IDM_AI_MANAGER: {
+    if (g_scriptEngine) {
+      g_scriptEngine->Evaluate("open_ai_agent_manager()");
+    }
+    break;
+  }
+  case IDM_AI_SETUP_WIZARD: {
+    if (g_scriptEngine) {
+      g_scriptEngine->Evaluate("setup_wizard()");
+    }
+    break;
+  }
+  case IDM_TOOLS_AI_SET_KEY: {
+    if (g_scriptEngine) {
+      g_scriptEngine->Evaluate("set_ai_key()");
+    }
     break;
   }
 

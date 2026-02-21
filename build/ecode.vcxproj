@@ -387,6 +387,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="D:\ws\Ecode\src\EditorBufferRenderer_Draw.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Localization.cpp" />
+    <ClCompile Include="D:\ws\Ecode\src\LspClient.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\MemoryMappedFile.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\PieceTable.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Process.cpp" />

@@ -23,6 +23,7 @@ public:
 
   void SwitchToBuffer(size_t index);
   Buffer *GetActiveBuffer() const;
+  bool IsValidBuffer(Buffer *buf) const;
   size_t GetActiveBufferIndex() const { return m_activeBufferIndex; }
 
   void Undo();
