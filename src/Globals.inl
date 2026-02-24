@@ -94,6 +94,7 @@ void HandleDestroy(HWND hwnd);
 #define IDM_EDIT_REPLACE_ALL 211
 #define IDM_EDIT_GOTO 212
 #define IDM_EDIT_TOGGLE_BOX 213
+#define IDM_EDIT_TAG_JUMP 214
 
 #define IDM_VIEW_TOGGLE_UI 301
 #define IDM_VIEW_ZOOM_IN 302
@@ -123,6 +124,7 @@ void HandleDestroy(HWND hwnd);
 #define IDM_LANG_DE 605
 
 #define IDM_BUFFERS_LIST 701
+#define IDM_TAB_COPY_PATH 702
 #define IDM_RECENT_START 2000
 #define IDM_BUFFERS_START 1000
 
