@@ -333,13 +333,14 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D:\ws\Ecode\tests\test_find_in_files.cpp" />
+    <ClCompile Include="D:\ws\Ecode\tests\TestGlobals.cpp" />
+    <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Editor.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Buffer.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\PieceTable.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\MemoryMappedFile.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Process.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\SettingsManager.cpp" />
-    <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp" />
     <ClCompile Include="D:\ws\Ecode\src-duktape\duktape.c" />
     <ClCompile Include="D:\ws\Ecode\tests\DebugLog_Stub.cpp" />
   </ItemGroup>

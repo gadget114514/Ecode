@@ -333,6 +333,8 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D:\ws\Ecode\tests\test_search_replace.cpp" />
+    <ClCompile Include="D:\ws\Ecode\tests\TestGlobals.cpp" />
+    <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Buffer.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\PieceTable.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\MemoryMappedFile.cpp" />

@@ -1,71 +1,10 @@
-#include <fstream>
 #define _CRT_SECURE_NO_WARNINGS
-#include "../include/Dialogs.h"
-#include "../include/Editor.h"
-#include "../include/EditorBufferRenderer.h"
-#include "../include/ScriptEngine.h"
-#include "../include/SettingsManager.h"
-#include "../include/StringHelpers.h"
-#include <commctrl.h>
-#include <iostream>
-#include <shlobj.h>
-#include <vector>
-#include <windows.h>
+#include "Globals.inl"
 
-#if defined(__has_include) && __has_include(<filesystem>)
-#include <filesystem>
-namespace fs = std::filesystem;
-#elif defined(__has_include) && __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
-
-// Forward declarations
-enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
-void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
-extern std::unique_ptr<Editor> g_editor;
-extern HWND g_mainHwnd;
-extern HWND g_statusHwnd;
-extern HWND g_progressHwnd;
-extern HWND g_tabHwnd;
-extern HWND g_minibufferHwnd;
-extern HWND g_minibufferPromptHwnd;
-
+// Redundant externs removed, they are in Globals.inl
 void EnsureCaretVisible(HWND hwnd);
 void UpdateScrollbars(HWND hwnd);
-extern bool g_minibufferVisible;
-extern std::string g_minibufferPrompt;
-extern int g_minibufferMode;
-extern std::string g_minibufferJsCallback;
-extern int g_currentLogLevel;
-
-extern std::unique_ptr<class EditorBufferRenderer> g_renderer;
-extern std::unique_ptr<class ScriptEngine> g_scriptEngine;
-
 void UpdateMenu(HWND hwnd);
-
-// Utility functions used by all JS API modules
-static std::string WStringToString(const std::wstring &ws) {
-  if (ws.empty())
-    return "";
-  int size_needed = WideCharToMultiByte(CP_UTF8, 0, &ws[0], (int)ws.size(),
-                                        NULL, 0, NULL, NULL);
-  std::string strTo(size_needed, 0);
-  WideCharToMultiByte(CP_UTF8, 0, &ws[0], (int)ws.size(), &strTo[0],
-                      size_needed, NULL, NULL);
-  return strTo;
-}
-
-static std::wstring StringToWString(const std::string &s) {
-  if (s.empty())
-    return L"";
-  int size_needed =
-      MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), NULL, 0);
-  std::wstring wstrTo(size_needed, 0);
-  MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), &wstrTo[0],
-                      size_needed);
-  return wstrTo;
-}
 
 // =============================================================================
 // JS-to-C++ Bridge Functions (organized into .inl modules)
@@ -73,6 +12,7 @@ static std::wstring StringToWString(const std::string &s) {
 
 #include "JsApi_EditorSettings.inl"
 #include "JsApi_FileAndBuffer.inl"
+#include "JsApi_Lsp.inl"
 #include "JsApi_ShellAndMinibuffer.inl"
 #include "JsApi_StatusAndDialogs.inl"
 #include "JsApi_TextEditing.inl"
@@ -170,8 +110,10 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "switchBuffer");
   duk_push_c_function(m_ctx, js_editor_close, 0);
   duk_put_prop_string(m_ctx, -2, "close");
-  duk_push_c_function(m_ctx, js_editor_new_file, 0);
+  duk_push_c_function(m_ctx, js_editor_new_file, 1);
   duk_put_prop_string(m_ctx, -2, "newFile");
+  duk_push_c_function(m_ctx, js_editor_set_scratch, 1);
+  duk_put_prop_string(m_ctx, -2, "setScratch");
   duk_push_c_function(m_ctx, js_editor_toggle_fullscreen, 0);
   duk_put_prop_string(m_ctx, -2, "toggleFullscreen");
   duk_push_c_function(m_ctx, js_editor_set_highlights, 1);
@@ -218,14 +160,6 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "save");
   duk_push_c_function(m_ctx, js_editor_save_as, 1);
   duk_put_prop_string(m_ctx, -2, "saveAs");
-
-  duk_push_c_function(m_ctx, js_editor_set_buffer_name, 1);
-  duk_put_prop_string(m_ctx, -2, "setBufferName");
-  duk_push_c_function(m_ctx, js_editor_get_buffer_name, 0);
-  duk_put_prop_string(m_ctx, -2, "getBufferName");
-  duk_push_c_function(m_ctx, js_editor_write_file, 2);
-  duk_put_prop_string(m_ctx, -2, "writeFile");
-
   duk_push_c_function(m_ctx, js_editor_load_script, 1);
   duk_put_prop_string(m_ctx, -2, "loadScript");
   duk_push_c_function(m_ctx, js_editor_log_message, 1);
@@ -236,27 +170,34 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "sendToShell");
   duk_push_c_function(m_ctx, js_editor_is_shell_buffer, 0);
   duk_put_prop_string(m_ctx, -2, "isShellBuffer");
+  duk_push_c_function(m_ctx, js_editor_run_command, 1);
+  duk_put_prop_string(m_ctx, -2, "runCommand");
+  duk_push_c_function(m_ctx, js_editor_run_async, 2);
+  duk_put_prop_string(m_ctx, -2, "runAsync");
   duk_push_c_function(m_ctx, js_editor_show_minibuffer, DUK_VARARGS);
   duk_put_prop_string(m_ctx, -2, "showMinibuffer");
-  duk_push_c_function(m_ctx, js_editor_exec_sync, 1);
-  duk_put_prop_string(m_ctx, -2, "execSync");
-  duk_push_c_function(m_ctx, js_editor_get_app_data_path, 0);
-  duk_put_prop_string(m_ctx, -2, "getAppDataPath");
 
-  duk_push_c_function(m_ctx, js_editor_set_global_key_binding, 2);
-  duk_put_prop_string(m_ctx, -2, "setGlobalKeyBinding");
-  
-  duk_push_c_function(m_ctx, js_editor_set_key_binding, 2);
-  duk_put_prop_string(m_ctx, -2, "setKeyBinding");
-  
-  duk_push_c_function(m_ctx, js_editor_get_ai_vendor, 0);
-  duk_put_prop_string(m_ctx, -2, "getAIVendor");
-  
-  duk_push_c_function(m_ctx, js_editor_get_ai_model, 0);
-  duk_put_prop_string(m_ctx, -2, "getAIModel");
-  
-  duk_push_c_function(m_ctx, js_editor_get_ai_api_key, 1);
-  duk_put_prop_string(m_ctx, -2, "getAIApiKey");
+  // LSP APIs
+  duk_push_c_function(m_ctx, js_editor_lsp_start, 2);
+  duk_put_prop_string(m_ctx, -2, "lspStart");
+  duk_push_c_function(m_ctx, js_editor_lsp_stop, 0);
+  duk_put_prop_string(m_ctx, -2, "lspStop");
+  duk_push_c_function(m_ctx, js_editor_lsp_request, 2);
+  duk_put_prop_string(m_ctx, -2, "lspRequest");
+  duk_push_c_function(m_ctx, js_editor_lsp_notify, 2);
+  duk_put_prop_string(m_ctx, -2, "lspNotify");
+  duk_push_c_function(m_ctx, js_editor_lsp_get_response, 1);
+  duk_put_prop_string(m_ctx, -2, "lspGetResponse");
+  duk_push_c_function(m_ctx, js_editor_lsp_get_diagnostics, 0);
+  duk_put_prop_string(m_ctx, -2, "lspGetDiagnostics");
+
+  // Settings APIs
+  duk_push_c_function(m_ctx, js_editor_get_settings, 0);
+  duk_put_prop_string(m_ctx, -2, "getSettings");
+  duk_push_c_function(m_ctx, js_editor_save_settings, 0);
+  duk_put_prop_string(m_ctx, -2, "saveSettings");
+  duk_push_c_function(m_ctx, js_editor_set_language, 1);
+  duk_put_prop_string(m_ctx, -2, "setLanguage");
 
   duk_put_global_string(m_ctx, "Editor");
 
@@ -298,8 +239,6 @@ bool ScriptEngine::Initialize() {
   LoadDefaultBindings();
   return true;
 }
-
-#include <windows.h>
 
 extern std::wstring g_scriptsDir;
 
@@ -531,30 +470,14 @@ void ScriptEngine::RegisterBinding(const std::string &chord,
 
 bool ScriptEngine::HandleBinding(const std::string &chord) {
   DebugLog("ScriptEngine::HandleBinding: " + chord, LOG_INFO);
-  
-  std::string funcName;
-  if (g_editor) {
-    Buffer *buf = g_editor->GetActiveBuffer();
-    if (buf && buf->HasKeyBinding(chord)) {
-      funcName = buf->GetKeyBinding(chord);
-      DebugLog("  Found buffer-local binding -> " + funcName, LOG_INFO);
-    }
-  }
-
-  if (funcName.empty()) {
-    auto it = m_keyBindings.find(chord);
-    if (it != m_keyBindings.end()) {
-      funcName = it->second;
-      DebugLog("  Found global binding -> " + funcName, LOG_INFO);
-    }
-  }
-
-  if (funcName.empty()) {
+  auto it = m_keyBindings.find(chord);
+  if (it == m_keyBindings.end()) {
     DebugLog("  No binding found for: " + chord, LOG_INFO);
     return false;
   }
 
-  duk_get_global_string(m_ctx, funcName.c_str());
+  DebugLog("  Found binding -> " + it->second, LOG_INFO);
+  duk_get_global_string(m_ctx, it->second.c_str());
   if (duk_is_function(m_ctx, -1)) {
     if (duk_pcall(m_ctx, 0) != 0) {
       std::cerr << "Script error in binding " << chord << ": "
@@ -565,7 +488,7 @@ bool ScriptEngine::HandleBinding(const std::string &chord) {
     duk_pop(m_ctx);
     return true;
   } else {
-    DebugLog("  Function not found: " + funcName, LOG_WARN);
+    DebugLog("  Function not found: " + it->second, LOG_WARN);
   }
   duk_pop(m_ctx);
   return false;
@@ -603,4 +526,20 @@ void ScriptEngine::CompileAllScripts() {
     }
   }
   DebugLog("ScriptEngine::CompileAllScripts: Finished", LOG_INFO);
+}
+
+void ScriptEngine::CallGlobalFunction(const std::string &name,
+                                      const std::string &arg) {
+  if (!m_ctx)
+    return;
+  duk_push_global_object(m_ctx);
+  if (duk_get_prop_string(m_ctx, -1, name.c_str())) {
+    duk_push_string(m_ctx, arg.c_str());
+    if (duk_pcall(m_ctx, 1) != 0) {
+      DebugLog("Error calling JS function '" + name +
+                   "': " + std::string(duk_safe_to_string(m_ctx, -1)),
+               LOG_ERROR);
+    }
+  }
+  duk_pop_2(m_ctx); // pop result/error and global object
 }

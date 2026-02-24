@@ -4,16 +4,6 @@
 // Included by main.cpp
 // =============================================================================
 
-void DebugLog(const std::string &msg, LogLevel level) {
-  if (level < g_currentLogLevel)
-    return;
-  std::ofstream ofs("debug_init.log", std::ios::app);
-  const char *levelStr[] = {"DEBUG", "INFO", "WARN", "ERROR"};
-  ofs << "[" << levelStr[level] << "] " << msg << std::endl;
-  if (g_editor)
-    g_editor->LogMessage("[" + std::string(levelStr[level]) + "] " + msg);
-}
-
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                             LPARAM lParam) {
   if (uMsg == g_uFindMsgString)
@@ -104,13 +94,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   case WM_SHELL_OUTPUT: {
     ShellOutput *output = (ShellOutput *)wParam;
     if (output) {
-      output->buffer->Insert(output->buffer->GetTotalLength(), output->text);
-      output->buffer->SetInputStart(output->buffer->GetTotalLength());
-      if (g_editor->GetActiveBuffer() == output->buffer) {
-        output->buffer->SetCaretPos(output->buffer->GetTotalLength());
-        output->buffer->SetSelectionAnchor(output->buffer->GetCaretPos());
-        EnsureCaretVisible(hwnd);
-        InvalidateRect(hwnd, NULL, FALSE);
+      if (!output->callback.empty()) {
+        if (g_scriptEngine) {
+          g_scriptEngine->CallGlobalFunction(output->callback, output->text);
+        }
+      } else if (g_editor && g_editor->IsValidBuffer(output->buffer)) {
+        output->buffer->Insert(output->buffer->GetTotalLength(), output->text);
+        output->buffer->SetInputStart(output->buffer->GetTotalLength());
+        if (g_editor->GetActiveBuffer() == output->buffer) {
+          output->buffer->SetCaretPos(output->buffer->GetTotalLength());
+          output->buffer->SetSelectionAnchor(output->buffer->GetCaretPos());
+          EnsureCaretVisible(hwnd);
+          InvalidateRect(hwnd, NULL, FALSE);
+        }
       }
       delete output;
     }
@@ -327,7 +323,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   }
   return 0;
 }
-
 
 // Entry point for Console subsystem (for testing/debug)
 #ifdef ECODE_CONSOLE_BUILD

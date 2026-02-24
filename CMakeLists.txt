@@ -23,7 +23,12 @@ add_executable(ecode WIN32 ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
 add_executable(ecode_console ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
 target_compile_definitions(ecode_console PRIVATE ECODE_CONSOLE_BUILD)
 
-# Test executables
+# Test executables base
+set(TEST_BASE_SOURCES 
+    tests/TestGlobals.cpp
+    src/FileUtils.cpp
+)
+
 add_executable(test_piecetable 
     tests/test_piecetable.cpp 
     src/PieceTable.cpp
@@ -36,6 +41,7 @@ add_executable(test_piecetable_stress
 
 add_executable(test_editor_core
     tests/test_editor_core.cpp
+    ${TEST_BASE_SOURCES}
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -73,6 +79,7 @@ target_link_libraries(test_undoredo_stress
 
 add_executable(test_search_replace
     tests/test_search_replace.cpp
+    ${TEST_BASE_SOURCES}
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -95,10 +102,10 @@ target_link_libraries(test_search_replace
 
 add_executable(test_file_io
     tests/test_file_io.cpp
+    ${TEST_BASE_SOURCES}
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
-    src/FileUtils.cpp
     src/Process.cpp
     src/SettingsManager.cpp
     tests/DebugLog_Stub.cpp
@@ -116,10 +123,10 @@ target_link_libraries(test_file_io
 
 add_executable(performance_benchmark
     tests/performance_benchmark.cpp
+    ${TEST_BASE_SOURCES}
     src/PieceTable.cpp
     src/Buffer.cpp
     src/MemoryMappedFile.cpp
-    src/FileUtils.cpp
     src/Process.cpp
     src/SettingsManager.cpp
     tests/DebugLog_Stub.cpp
@@ -137,12 +144,12 @@ target_link_libraries(performance_benchmark
 
 add_executable(test_visual_wrap
     tests/test_visual_wrap.cpp
+    ${TEST_BASE_SOURCES}
     src/EditorBufferRenderer.cpp
     src/EditorBufferRenderer_Draw.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
-    src/FileUtils.cpp
     src/Localization.cpp
     src/SettingsManager.cpp
     src/Editor.cpp
@@ -162,13 +169,13 @@ target_link_libraries(test_visual_wrap
 
 add_executable(test_find_in_files
     tests/test_find_in_files.cpp
+    ${TEST_BASE_SOURCES}
     src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
     src/Process.cpp
     src/SettingsManager.cpp
-    src/FileUtils.cpp
     src-duktape/duktape.c
     tests/DebugLog_Stub.cpp
 )
@@ -185,13 +192,13 @@ target_link_libraries(test_find_in_files
 
 add_executable(test_shortcuts
     tests/test_shortcuts.cpp
+    ${TEST_BASE_SOURCES}
     src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
     src/Process.cpp
     src/SettingsManager.cpp
-    src/FileUtils.cpp
     src/Localization.cpp
     src/EditorBufferRenderer.cpp
     src/EditorBufferRenderer_Draw.cpp
