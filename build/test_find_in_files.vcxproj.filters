@@ -31,9 +31,6 @@
     <ClCompile Include="D:\ws\Ecode\src-duktape\duktape.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="D:\ws\Ecode\tests\DebugLog_Stub.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="D:\ws\Ecode\CMakeLists.txt" />

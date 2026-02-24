@@ -71,7 +71,6 @@ size_t Editor::OpenJsShell() {
   buffer->SetPath(L"*Script Console*");
   buffer->SetScratch(true);
   buffer->SetShell(true);
-  buffer->SetJsShell(true);
   buffer->Insert(0, "// Ecode Script Console\n// Type JS code and press Enter to evaluate.\n> ");
   buffer->SetInputStart(buffer->GetTotalLength());
   buffer->SetCaretPos(buffer->GetTotalLength());

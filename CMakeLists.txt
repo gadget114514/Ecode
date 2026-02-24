@@ -48,7 +48,7 @@ add_executable(test_editor_core
     src/Process.cpp
     src/SettingsManager.cpp
     src-duktape/duktape.c
-    tests/DebugLog_Stub.cpp
+    src-duktape/duktape.c
     src/FileUtils.cpp
 )
 target_link_libraries(test_editor_core 
@@ -86,8 +86,7 @@ add_executable(test_search_replace
     src/Process.cpp
     src/SettingsManager.cpp
     src-duktape/duktape.c
-    tests/DebugLog_Stub.cpp
-    src/FileUtils.cpp
+    src-duktape/duktape.c
 )
 target_link_libraries(test_search_replace 
     user32 
@@ -108,7 +107,6 @@ add_executable(test_file_io
     src/MemoryMappedFile.cpp
     src/Process.cpp
     src/SettingsManager.cpp
-    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(test_file_io 
     user32 
@@ -129,7 +127,6 @@ add_executable(performance_benchmark
     src/MemoryMappedFile.cpp
     src/Process.cpp
     src/SettingsManager.cpp
-    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(performance_benchmark 
     user32 
@@ -154,7 +151,6 @@ add_executable(test_visual_wrap
     src/SettingsManager.cpp
     src/Editor.cpp
     src/Process.cpp
-    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(test_visual_wrap 
     user32 
@@ -177,7 +173,6 @@ add_executable(test_find_in_files
     src/Process.cpp
     src/SettingsManager.cpp
     src-duktape/duktape.c
-    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(test_find_in_files 
     user32 
@@ -202,7 +197,6 @@ add_executable(test_shortcuts
     src/Localization.cpp
     src/EditorBufferRenderer.cpp
     src/EditorBufferRenderer_Draw.cpp
-    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(test_shortcuts 
     user32 
