@@ -315,3 +315,408 @@ WM_SHOWWINDOW Received, wParam=1
 [INFO]   Found binding -> emacs_next_line
 [INFO] ScriptEngine::HandleBinding: Ctrl+N
 [INFO]   Found binding -> emacs_next_line
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: regression_20260216.js -> regression_20260216.js
+[ERROR] ScriptEngine::RunFile: File not found: regression_20260216.js
+[INFO]   loadScript success: 0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: regression_20260216.js -> regression_20260216.js
+[ERROR] ScriptEngine::RunFile: File not found: regression_20260216.js
+[INFO]   loadScript success: 0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: scripts/ai_session.js -> D:\ws\Ecode\bin\Debug\scripts\ai_session.js
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'getAppDataPath' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: regression_20260216.js -> regression_20260216.js
+[ERROR] ScriptEngine::RunFile: File not found: regression_20260216.js
+[INFO]   loadScript success: 0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: scripts/ai_session.js -> D:\ws\Ecode\bin\Debug\scripts\ai_session.js
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'getAppDataPath' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=767 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=768 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=774 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=783 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=793 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=801 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=809 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=815 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=825 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=833 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=841 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=847 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=853 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=857 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=862 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=868 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=874 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=884 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=890 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=896 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=902 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=908 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=914 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=920 height=524 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=502 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=920 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=926 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=933 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=943 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=952 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=965 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=975 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=981 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=987 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=989 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=988 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=984 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=981 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=979 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: regression_20260216.js -> regression_20260216.js
+[ERROR] ScriptEngine::RunFile: File not found: regression_20260216.js
+[INFO]   loadScript success: 0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: regression_20260216.js -> regression_20260216.js
+[ERROR] ScriptEngine::RunFile: File not found: regression_20260216.js
+[INFO]   loadScript success: 0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=519 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: scripts/ai_session.js -> D:\ws\Ecode\bin\Debug\scripts\ai_session.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::HandleBinding: Ctrl+Enter
+[INFO]   Found binding -> emacs_eval_line_or_selection
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=784 height=541 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=541 mbHeight=0 promptWidth=0
+[INFO] Editor.loadScript: regression_20260216.js -> regression_20260216.js
+[ERROR] ScriptEngine::RunFile: File not found: regression_20260216.js
+[INFO]   loadScript success: 0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0

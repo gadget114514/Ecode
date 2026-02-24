@@ -289,6 +289,122 @@ void Dialogs::ShowSettingsDialog(HWND hwnd) {
   }
 }
 
+INT_PTR CALLBACK AISettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                   LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    HWND hVendor = GetDlgItem(hDlg, IDC_AI_VENDOR);
+    SendMessage(hVendor, CB_ADDSTRING, 0, (LPARAM)L"Gemini");
+    SendMessage(hVendor, CB_ADDSTRING, 0, (LPARAM)L"OpenAI");
+    SendMessage(hVendor, CB_ADDSTRING, 0, (LPARAM)L"Anthropic");
+
+    std::wstring currVendor = SettingsManager::Instance().GetAIVendor();
+    if (currVendor.empty()) currVendor = L"Gemini";
+    
+    int selIndex = 0;
+    if (currVendor == L"OpenAI") selIndex = 1;
+    else if (currVendor == L"Anthropic") selIndex = 2;
+    SendMessage(hVendor, CB_SETCURSEL, selIndex, 0);
+
+    HWND hModel = GetDlgItem(hDlg, IDC_AI_MODEL);
+    if (currVendor == L"Gemini") {
+      SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gemini-1.5-pro");
+      SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gemini-1.5-flash");
+    } else if (currVendor == L"OpenAI") {
+      SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gpt-4o");
+      SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gpt-4-turbo");
+      SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gpt-3.5-turbo");
+    } else if (currVendor == L"Anthropic") {
+      SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"claude-3-opus-20240229");
+      SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"claude-3-sonnet-20240229");
+      SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"claude-3-haiku-20240307");
+    }
+    
+    std::wstring currModel = SettingsManager::Instance().GetAIModel();
+    int modelIndex = (int)SendMessage(hModel, CB_FINDSTRINGEXACT, -1, (LPARAM)currModel.c_str());
+    if (modelIndex == CB_ERR) {
+      if (currVendor == L"Gemini") currModel = L"gemini-1.5-pro";
+      else if (currVendor == L"OpenAI") currModel = L"gpt-4o";
+      else if (currVendor == L"Anthropic") currModel = L"claude-3-opus-20240229";
+      modelIndex = (int)SendMessage(hModel, CB_FINDSTRINGEXACT, -1, (LPARAM)currModel.c_str());
+    }
+    SendMessage(hModel, CB_SETCURSEL, (std::max)(0, modelIndex), 0);
+    
+    std::wstring apiKey = SettingsManager::Instance().GetAIApiKey(currVendor);
+    SetDlgItemTextW(hDlg, IDC_AI_API_KEY, apiKey.c_str());
+
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_AI_VENDOR) {
+      // Handle vendor change
+      HWND hVendor = GetDlgItem(hDlg, IDC_AI_VENDOR);
+      int selIndex = (int)SendMessage(hVendor, CB_GETCURSEL, 0, 0);
+      wchar_t vendorStr[256] = {0};
+      SendMessage(hVendor, CB_GETLBTEXT, selIndex, (LPARAM)vendorStr);
+      std::wstring vendor(vendorStr);
+
+      HWND hModel = GetDlgItem(hDlg, IDC_AI_MODEL);
+      SendMessage(hModel, CB_RESETCONTENT, 0, 0);
+
+      // Save previous key to manager before switching (so we don't lose typed context before IDOK)
+      // Actually simpler: just re-pull existing from settings. Changing fields drops typed unsaved changes.
+      std::wstring apiKey = SettingsManager::Instance().GetAIApiKey(vendor);
+      SetDlgItemTextW(hDlg, IDC_AI_API_KEY, apiKey.c_str());
+
+      if (vendor == L"Gemini") {
+        SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gemini-1.5-pro");
+        SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gemini-1.5-flash");
+      } else if (vendor == L"OpenAI") {
+        SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gpt-4o");
+        SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gpt-4-turbo");
+        SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"gpt-3.5-turbo");
+      } else if (vendor == L"Anthropic") {
+        SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"claude-3-opus-20240229");
+        SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"claude-3-sonnet-20240229");
+        SendMessage(hModel, CB_ADDSTRING, 0, (LPARAM)L"claude-3-haiku-20240307");
+      }
+      SendMessage(hModel, CB_SETCURSEL, 0, 0);
+      
+      return (INT_PTR)TRUE;
+    }
+    
+    if (LOWORD(wParam) == IDOK) {
+      HWND hVendor = GetDlgItem(hDlg, IDC_AI_VENDOR);
+      int vendorIndex = (int)SendMessage(hVendor, CB_GETCURSEL, 0, 0);
+      wchar_t vendorStr[256] = {0};
+      SendMessage(hVendor, CB_GETLBTEXT, vendorIndex, (LPARAM)vendorStr);
+      
+      HWND hModel = GetDlgItem(hDlg, IDC_AI_MODEL);
+      int modelIndex = (int)SendMessage(hModel, CB_GETCURSEL, 0, 0);
+      wchar_t modelStr[256] = {0};
+      SendMessage(hModel, CB_GETLBTEXT, modelIndex, (LPARAM)modelStr);
+      
+      wchar_t keyStr[1024] = {0};
+      GetDlgItemTextW(hDlg, IDC_AI_API_KEY, keyStr, 1024);
+      
+      SettingsManager::Instance().SetAIVendor(vendorStr);
+      SettingsManager::Instance().SetAIModel(modelStr);
+      SettingsManager::Instance().SetAIApiKey(vendorStr, keyStr);
+      SettingsManager::Instance().Save();
+      
+      EndDialog(hDlg, IDOK);
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void Dialogs::ShowAISettingsDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_AI_SETTINGS), hwnd,
+             AISettingsDlgProc);
+  InvalidateRect(hwnd, NULL, FALSE);
+}
+
 void Dialogs::ShowFindReplaceDialog(HWND hwnd, bool replaceMode) {
   // Find/Replace dialog placeholder
   std::wstring type = replaceMode ? L"Replace" : L"Find";
@@ -299,9 +415,12 @@ void Dialogs::ShowFindReplaceDialog(HWND hwnd, bool replaceMode) {
 INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                     LPARAM lParam) {
   switch (message) {
-  case WM_INITDIALOG:
-    SetDlgItemTextW(hDlg, IDC_FIND_DIR, L".");
+  case WM_INITDIALOG: {
+    std::wstring findStart = SettingsManager::Instance().GetFindStartDirectory();
+    if (findStart.empty()) findStart = L".";
+    SetDlgItemTextW(hDlg, IDC_FIND_DIR, findStart.c_str());
     return (INT_PTR)TRUE;
+  }
   case WM_COMMAND:
     if (LOWORD(wParam) == IDOK) {
       wchar_t pattern[256];
@@ -310,6 +429,8 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       GetDlgItemTextW(hDlg, IDC_FIND_DIR, dir, MAX_PATH);
 
       if (g_editor) {
+        SettingsManager::Instance().SetFindStartDirectory(dir);
+        SettingsManager::Instance().Save();
         g_editor->FindInFiles(dir, pattern);
       }
       EndDialog(hDlg, IDOK);

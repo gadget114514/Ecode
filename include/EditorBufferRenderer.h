@@ -48,6 +48,7 @@ public:
   float GetTextWidth(const std::string &text);
   float GetLineHeight() const;
   void SetTopOffset(float offset) { val_TopPadding = offset; }
+  void SetLeftOffset(float offset) { val_LeftPadding = offset; }
 
   // Font controls
   void SetFont(const std::wstring &familyName, float fontSize,
@@ -110,6 +111,7 @@ private:
   bool m_wordWrap = false;
   float m_wrapWidth = 0.0f; // 0 means wrap to window width
   float val_TopPadding = 0.0f;
+  float val_LeftPadding = 0.0f;
   HWND m_hwnd;
   D2D1_RECT_F m_lastCaretRect = {0, 0, 0, 0};
   // OPTIMIZATION #6: UTF-8 to UTF-16 conversion caching

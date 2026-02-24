@@ -10,7 +10,7 @@
 Buffer::Buffer()
     : m_caretPos(0), m_selectionAnchor(0), m_scrollLine(0), m_scrollX(0.0f),
       m_desiredColumn(0), m_encoding(Encoding::UTF8), m_isDirty(false),
-      m_isScratch(false), m_inputStart(0) {
+      m_isScratch(false), m_isShell(false), m_isJsShell(false), m_inputStart(0) {
   m_mmFile = std::make_unique<MemoryMappedFile>();
 }
 

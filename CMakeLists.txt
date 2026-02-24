@@ -42,6 +42,8 @@ add_executable(test_editor_core
     src/Process.cpp
     src/SettingsManager.cpp
     src-duktape/duktape.c
+    tests/DebugLog_Stub.cpp
+    src/FileUtils.cpp
 )
 target_link_libraries(test_editor_core 
     user32 
@@ -77,6 +79,8 @@ add_executable(test_search_replace
     src/Process.cpp
     src/SettingsManager.cpp
     src-duktape/duktape.c
+    tests/DebugLog_Stub.cpp
+    src/FileUtils.cpp
 )
 target_link_libraries(test_search_replace 
     user32 
@@ -97,6 +101,7 @@ add_executable(test_file_io
     src/FileUtils.cpp
     src/Process.cpp
     src/SettingsManager.cpp
+    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(test_file_io 
     user32 
@@ -117,6 +122,7 @@ add_executable(performance_benchmark
     src/FileUtils.cpp
     src/Process.cpp
     src/SettingsManager.cpp
+    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(performance_benchmark 
     user32 
@@ -141,6 +147,7 @@ add_executable(test_visual_wrap
     src/SettingsManager.cpp
     src/Editor.cpp
     src/Process.cpp
+    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(test_visual_wrap 
     user32 
@@ -163,6 +170,7 @@ add_executable(test_find_in_files
     src/SettingsManager.cpp
     src/FileUtils.cpp
     src-duktape/duktape.c
+    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(test_find_in_files 
     user32 
@@ -187,6 +195,7 @@ add_executable(test_shortcuts
     src/Localization.cpp
     src/EditorBufferRenderer.cpp
     src/EditorBufferRenderer_Draw.cpp
+    tests/DebugLog_Stub.cpp
 )
 target_link_libraries(test_shortcuts 
     user32 
@@ -246,11 +255,24 @@ add_custom_command(TARGET ecode POST_BUILD
     "$<TARGET_FILE_DIR:ecode>/scripts"
     COMMENT "Copying scripts to output directory..."
 )
+add_custom_command(TARGET ecode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc"
+    "$<TARGET_FILE_DIR:ecode>/doc"
+    COMMENT "Copying doc to output directory..."
+)
+
 add_custom_command(TARGET ecode_console POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
     "$<TARGET_FILE_DIR:ecode_console>/scripts"
     COMMENT "Copying scripts to output directory..."
+)
+add_custom_command(TARGET ecode_console POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc"
+    "$<TARGET_FILE_DIR:ecode_console>/doc"
+    COMMENT "Copying doc to output directory..."
 )
 
 # Installer

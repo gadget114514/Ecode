@@ -6,6 +6,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <map>
 
 enum class Encoding { UTF8, UTF16LE, UTF16BE, ANSI };
 
@@ -101,6 +102,20 @@ public:
     UpdateDesiredColumn();
   }
 
+  // Per-Buffer Keybindings
+  void SetKeyBinding(const std::string &chord, const std::string &jsFuncName) {
+    m_keyBindings[chord] = jsFuncName;
+  }
+  bool HasKeyBinding(const std::string &chord) const {
+    return m_keyBindings.find(chord) != m_keyBindings.end();
+  }
+  std::string GetKeyBinding(const std::string &chord) const {
+    auto it = m_keyBindings.find(chord);
+    if (it != m_keyBindings.end())
+      return it->second;
+    return "";
+  }
+
   void MoveCaretUp();
   void MoveCaretDown();
   void MoveCaretHome();
@@ -151,6 +166,9 @@ public:
   Process *GetShellProcess() const { return m_process.get(); }
   void SendToShell(const std::string &input);
   
+  void SetJsShell(bool isJsShell) { m_isJsShell = isJsShell; }
+  bool IsJsShell() const { return m_isJsShell; }
+  
   size_t GetInputStart() const { return m_inputStart; }
   void SetInputStart(size_t pos) { m_inputStart = pos; }
 
@@ -176,8 +194,10 @@ private:
   bool m_isDirty;
   bool m_isScratch;
   bool m_isShell = false;
+  bool m_isJsShell = false;
   std::unique_ptr<Process> m_process;
   size_t m_inputStart = 0;
   std::vector<std::string> m_shellHistory;
   int m_shellHistoryIndex = -1;
+  std::map<std::string, std::string> m_keyBindings;
 };

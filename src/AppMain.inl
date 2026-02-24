@@ -60,6 +60,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     return 0;
   }
   case WM_CONTEXTMENU: {
+    if ((HWND)wParam == g_tabHwnd) {
+      return 0; // Handled by NM_RCLICK in WM_NOTIFY
+    }
     HMENU hMenu = CreatePopupMenu();
     AppendMenu(hMenu, MF_STRING, IDM_EDIT_UNDO, L10N("menu_edit_undo"));
     AppendMenu(hMenu, MF_STRING, IDM_EDIT_REDO, L10N("menu_edit_redo"));
@@ -70,6 +73,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenu(hMenu, MF_STRING, IDM_EDIT_SELECT_ALL,
                L10N("menu_edit_select_all"));
+    AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hMenu, MF_STRING, IDM_EDIT_TAG_JUMP, L"Tag Jump");
     int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
     if (x == -1 && y == -1) {
       RECT rc;
@@ -133,6 +138,71 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         UpdateMenu(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);
       }
+    } else if (pnm->hwndFrom == g_treeHwnd && pnm->code == NM_DBLCLK) {
+      HTREEITEM hItem = TreeView_GetSelection(g_treeHwnd);
+      if (hItem) {
+        TVITEMW tvi = {0};
+        tvi.mask = TVIF_PARAM;
+        tvi.hItem = hItem;
+        if (TreeView_GetItem(g_treeHwnd, &tvi) && tvi.lParam) {
+          TreeItemData* data = (TreeItemData*)tvi.lParam;
+          if (!data->isDirectory) {
+            size_t idx = g_editor->OpenFile(data->path);
+            if (idx != static_cast<size_t>(-1)) {
+              g_editor->SwitchToBuffer(idx);
+              UpdateMenu(hwnd);
+              InvalidateRect(hwnd, NULL, FALSE);
+            }
+          }
+        }
+      }
+    } else if (pnm->code == TTN_GETDISPINFOW) {
+      NMTTDISPINFOW *pdi = (NMTTDISPINFOW *)lParam;
+      if (pdi->hdr.hwndFrom == TabCtrl_GetToolTips(g_tabHwnd)) {
+        int tabIndex = (int)pdi->hdr.idFrom;
+        auto &buffers = g_editor->GetBuffers();
+        if (tabIndex >= 0 && tabIndex < (int)buffers.size()) {
+          std::wstring path = buffers[tabIndex]->GetPath();
+          if (path.empty()) {
+            path = buffers[tabIndex]->IsScratch() ? L"Scratch" : L"Untitled";
+          }
+          wcsncpy_s(pdi->szText, path.c_str(), _countof(pdi->szText));
+          pdi->szText[_countof(pdi->szText) - 1] = L'\0';
+        }
+      }
+    } else if (pnm->hwndFrom == g_tabHwnd && pnm->code == NM_RCLICK) {
+      TCHITTESTINFO hti;
+      GetCursorPos(&hti.pt);
+      POINT ptScreen = hti.pt;
+      ScreenToClient(g_tabHwnd, &hti.pt);
+      int tabIndex = TabCtrl_HitTest(g_tabHwnd, &hti);
+      if (tabIndex != -1) {
+        HMENU hMenu = CreatePopupMenu();
+        AppendMenu(hMenu, MF_STRING, IDM_TAB_COPY_PATH, L"Copy Full Path");
+        int res = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_NONOTIFY | TPM_RETURNCMD, ptScreen.x, ptScreen.y, 0, hwnd, NULL);
+        DestroyMenu(hMenu);
+
+        if (res == IDM_TAB_COPY_PATH) {
+          auto &buffers = g_editor->GetBuffers();
+          if (tabIndex >= 0 && tabIndex < (int)buffers.size()) {
+            std::wstring path = buffers[tabIndex]->GetPath();
+            if (path.empty()) {
+              path = buffers[tabIndex]->IsScratch() ? L"Scratch" : L"Untitled";
+            }
+            if (OpenClipboard(hwnd)) {
+              EmptyClipboard();
+              size_t cbStr = (path.length() + 1) * sizeof(wchar_t);
+              HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, cbStr);
+              if (hMem) {
+                memcpy(GlobalLock(hMem), path.c_str(), cbStr);
+                GlobalUnlock(hMem);
+                SetClipboardData(CF_UNICODETEXT, hMem);
+              }
+              CloseClipboard();
+            }
+          }
+        }
+      }
     }
     return 0;
   }
@@ -185,6 +255,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   wc.lpfnWndProc = WindowProc;
   wc.hInstance = hInstance;
   wc.lpszClassName = CLASS_NAME;
+  wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(101));
   wc.hCursor = LoadCursor(NULL, IDC_IBEAM);
   if (!RegisterClass(&wc))
     return 0;

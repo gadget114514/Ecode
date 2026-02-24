@@ -1,6 +1,7 @@
 @echo off
+cd /d "%~dp0"
 echo Running PieceTable Tests...
-bin\Debug\test_piecetable.exe
+..\bin\Debug\test_piecetable.exe
 if %ERRORLEVEL% NEQ 0 (
     echo PieceTable Tests FAILED
     exit /b %ERRORLEVEL%

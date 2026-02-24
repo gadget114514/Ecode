@@ -5,19 +5,6 @@
 
 #include <functional>
 
-// Mock for SafeSave as it used in Buffer.cpp
-bool SafeSave(const std::wstring &targetPath, const std::string &content) {
-  return true;
-}
-
-bool SafeSaveStreaming(
-    const std::wstring &targetPath,
-    const std::function<void(std::function<void(const char *, size_t)>)>
-        &source) {
-  // Just consume the data to avoid "unused" warnings or logic issues
-  source([](const char *, size_t) {});
-  return true;
-}
 
 #define VERIFY(cond, msg)                                                      \
   if (!(cond)) {                                                               \

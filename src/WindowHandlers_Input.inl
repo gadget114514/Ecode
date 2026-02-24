@@ -331,7 +331,6 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
        // Emacs Editing
        if (wParam == 'S') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_FIND, 0); return 0; } // Find
        if (wParam == 'W') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_CUT, 0); return 0; }  // Cut
-       if (wParam == 'Y') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_PASTE, 0); return 0; } // Paste
        if (wParam == 'Z') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_UNDO, 0); return 0; } // Undo
        if (wParam == 'C') { SendMessage(hwnd, WM_COMMAND, IDM_EDIT_COPY, 0); return 0; } // Copy (standard)
        
@@ -506,6 +505,50 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       lineText.pop_back();
       
     activeBuffer->AddShellHistory(lineText);
+    
+    if (activeBuffer->IsJsShell()) {
+        activeBuffer->SetCaretPos(activeBuffer->GetTotalLength());
+        activeBuffer->Insert(activeBuffer->GetTotalLength(), "\n");
+
+        if (lineText == "clear" || lineText == "cls") {
+            activeBuffer->Delete(0, activeBuffer->GetTotalLength());
+            activeBuffer->Insert(0, "// Ecode Script Console\n> ");
+        } else {
+            std::string result = g_scriptEngine->Evaluate(lineText);
+            activeBuffer->Insert(activeBuffer->GetTotalLength(), result + "\n> ");
+        }
+
+        activeBuffer->SetInputStart(activeBuffer->GetTotalLength());
+        activeBuffer->SetCaretPos(activeBuffer->GetTotalLength());
+        activeBuffer->SetSelectionAnchor(activeBuffer->GetCaretPos());
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
+    }
+
+    if (activeBuffer->IsJsShell()) {
+        activeBuffer->SetCaretPos(activeBuffer->GetTotalLength());
+        activeBuffer->Insert(activeBuffer->GetTotalLength(), "\n");
+
+        if (lineText == "clear" || lineText == "cls") {
+            activeBuffer->Delete(0, activeBuffer->GetTotalLength());
+            activeBuffer->Insert(0, "// Ecode Script Console\n> ");
+        } else {
+            std::string result = g_scriptEngine->Evaluate(lineText);
+            if (!result.empty()) {
+                activeBuffer->Insert(activeBuffer->GetTotalLength(), result + "\n");
+            }
+            activeBuffer->Insert(activeBuffer->GetTotalLength(), "> ");
+        }
+
+        activeBuffer->SetInputStart(activeBuffer->GetTotalLength());
+        activeBuffer->SetCaretPos(activeBuffer->GetTotalLength());
+        activeBuffer->SetSelectionAnchor(activeBuffer->GetCaretPos());
+        EnsureCaretVisible(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
+    }
+
     activeBuffer->SendToShell(lineText + "\n");
     activeBuffer->SetInputStart(activeBuffer->GetTotalLength() + 1); // +1 for the newline we are about to insert
     size_t endPos = activeBuffer->GetTotalLength();

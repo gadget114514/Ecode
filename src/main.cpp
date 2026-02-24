@@ -21,6 +21,8 @@ HWND g_mainHwnd = NULL;
 HWND g_statusHwnd = NULL;
 HWND g_progressHwnd = NULL;
 HWND g_tabHwnd = NULL;
+HWND g_treeHwnd = NULL;
+bool g_treeVisible = false;
 HWND g_minibufferHwnd = NULL;
 HWND g_minibufferPromptHwnd = NULL;
 bool g_minibufferVisible = false;
@@ -44,6 +46,7 @@ WNDPROC g_oldMinibufferProc = NULL;
 bool g_bypassCache = false;
 bool g_compileAllScripts = false;
 
+#include "TreeViewHelpers.inl"
 #include "AppMain.inl"
 #include "MinibufferHandler.inl"
 #include "UIHelpers.inl"

@@ -39,10 +39,29 @@ public:
   int GetShellEncoding() const { return m_shellEncoding; }
   void SetShellEncoding(int encoding) { m_shellEncoding = encoding; }
 
+  // AI Settings
+  std::wstring GetAIVendor() const { return m_aiVendor; }
+  void SetAIVendor(const std::wstring &vendor) { m_aiVendor = vendor; }
+  std::wstring GetAIModel() const { return m_aiModel; }
+  void SetAIModel(const std::wstring &model) { m_aiModel = model; }
+  std::wstring GetAIApiKey(const std::wstring &vendor) const;
+  void SetAIApiKey(const std::wstring &vendor, const std::wstring &apiKey);
+
   const std::vector<std::wstring> &GetRecentFiles() const {
     return m_recentFiles;
   }
   void AddRecentFile(const std::wstring &path);
+
+  std::wstring GetProjectDirectory() const { return m_projectDirectory; }
+  void SetProjectDirectory(const std::wstring &dir) { m_projectDirectory = dir; }
+
+  std::wstring GetFindStartDirectory() const { return m_findStartDir; }
+  void SetFindStartDirectory(const std::wstring &dir) { m_findStartDir = dir; }
+
+  int GetCaretStyle() const { return m_caretStyle; }
+  void SetCaretStyle(int style) { m_caretStyle = style; }
+
+  std::wstring GetAppDataPath() const;
 
 private:
   SettingsManager();
@@ -60,5 +79,12 @@ private:
   int m_logLevel;
   std::vector<std::wstring> m_recentFiles;
   bool m_caretBlinking;
+  int m_caretStyle = 0;
   int m_shellEncoding; // 0=UTF8, 1=ShiftJIS
+  std::wstring m_projectDirectory;
+  std::wstring m_findStartDir;
+
+  std::wstring m_aiVendor;
+  std::wstring m_aiModel;
+  std::vector<std::pair<std::wstring, std::wstring>> m_aiApiKeys; // vendor -> key
 };

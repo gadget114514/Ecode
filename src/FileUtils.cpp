@@ -4,7 +4,24 @@
 
 enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
 void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
-std::string GetWin32ErrorString(DWORD errorCode);
+std::string GetWin32ErrorString(DWORD errorCode) {
+  LPSTR messageBuffer = nullptr;
+  size_t size = FormatMessageA(
+      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+          FORMAT_MESSAGE_IGNORE_INSERTS,
+      NULL, errorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+      (LPSTR)&messageBuffer, 0, NULL);
+  if (size > 0 && messageBuffer) {
+    std::string message(messageBuffer, size);
+    LocalFree(messageBuffer);
+    // Remove trailing newlines
+    while (!message.empty() && (message.back() == '\r' || message.back() == '\n')) {
+        message.pop_back();
+    }
+    return message;
+  }
+  return "Unknown error (" + std::to_string(errorCode) + ")";
+}
 
 bool SafeSave(const std::wstring &targetPath, const std::string &content) {
   std::wstring tempPath = targetPath + L".tmp";
