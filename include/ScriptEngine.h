@@ -26,6 +26,7 @@ public:
   bool HandleKeyEvent(const std::string &key, bool isChar);
   void SetBypassCache(bool bypass) { m_bypassCache = bypass; }
   void CompileAllScripts();
+  void CallGlobalFunction(const std::string &name, const std::string &arg);
 
 private:
   void LoadDefaultBindings();

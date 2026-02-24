@@ -22,6 +22,9 @@
     <ClCompile Include="D:\ws\Ecode\src\Localization.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\LspClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\MemoryMappedFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

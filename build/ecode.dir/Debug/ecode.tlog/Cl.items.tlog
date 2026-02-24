@@ -5,6 +5,7 @@ D:\ws\Ecode\src\EditorBufferRenderer.cpp;D:\ws\Ecode\build\ecode.dir\Debug\Edito
 D:\ws\Ecode\src\EditorBufferRenderer_Draw.cpp;D:\ws\Ecode\build\ecode.dir\Debug\EditorBufferRenderer_Draw.obj
 D:\ws\Ecode\src\FileUtils.cpp;D:\ws\Ecode\build\ecode.dir\Debug\FileUtils.obj
 D:\ws\Ecode\src\Localization.cpp;D:\ws\Ecode\build\ecode.dir\Debug\Localization.obj
+D:\ws\Ecode\src\LspClient.cpp;D:\ws\Ecode\build\ecode.dir\Debug\LspClient.obj
 D:\ws\Ecode\src\MemoryMappedFile.cpp;D:\ws\Ecode\build\ecode.dir\Debug\MemoryMappedFile.obj
 D:\ws\Ecode\src\PieceTable.cpp;D:\ws\Ecode\build\ecode.dir\Debug\PieceTable.obj
 D:\ws\Ecode\src\Process.cpp;D:\ws\Ecode\build\ecode.dir\Debug\Process.obj

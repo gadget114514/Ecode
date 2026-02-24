@@ -1,8 +1,8 @@
 D:\ws\Ecode\tests\test_file_io.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\test_file_io.obj
+D:\ws\Ecode\tests\TestGlobals.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\TestGlobals.obj
+D:\ws\Ecode\src\FileUtils.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\FileUtils.obj
 D:\ws\Ecode\src\Buffer.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\Buffer.obj
 D:\ws\Ecode\src\PieceTable.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\PieceTable.obj
 D:\ws\Ecode\src\MemoryMappedFile.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\MemoryMappedFile.obj
-D:\ws\Ecode\src\FileUtils.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\FileUtils.obj
 D:\ws\Ecode\src\Process.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\Process.obj
 D:\ws\Ecode\src\SettingsManager.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\SettingsManager.obj
-D:\ws\Ecode\tests\DebugLog_Stub.cpp;D:\ws\Ecode\build\test_file_io.dir\Debug\DebugLog_Stub.obj

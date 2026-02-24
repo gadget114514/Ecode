@@ -6,14 +6,22 @@
 
 #include <string>
 
-void DebugLog(const std::string &msg);
+void DebugLog(const std::string &msg, LogLevel level);
+
+static void InternalLogCallback(const std::string &msg, LogLevel level) {
+  if (g_editor) {
+    const char *levelStr[] = {"DEBUG", "INFO", "WARN", "ERROR"};
+    g_editor->LogMessage("[" + std::string(levelStr[level]) + "] " + msg);
+  }
+}
 
 static LRESULT HandleCreate(HWND hwnd) {
   SetWindowLong(hwnd, GWL_STYLE,
                 GetWindowLong(hwnd, GWL_STYLE) | WS_CLIPCHILDREN);
   g_mainHwnd = hwnd;
 
-  g_editor = std::make_unique<Editor>();
+  g_logCallback = InternalLogCallback;
+  g_editor = new Editor();
   g_editor->LogMessage("--- Ecode Session Started ---");
 
   INITCOMMONCONTROLSEX icex;
@@ -54,7 +62,7 @@ static LRESULT HandleCreate(HWND hwnd) {
   SendMessage(g_statusHwnd, SB_SETPARTS, 3, (LPARAM)parts);
   SendMessage(g_statusHwnd, SB_SETTEXT, 0, (LPARAM)L"Ready");
 
-  g_renderer = std::make_unique<EditorBufferRenderer>();
+  g_renderer = new EditorBufferRenderer();
   if (!g_renderer->Initialize(hwnd))
     return -1;
 
@@ -65,7 +73,7 @@ static LRESULT HandleCreate(HWND hwnd) {
     }
   });
 
-  g_scriptEngine = std::make_unique<ScriptEngine>();
+  g_scriptEngine = new ScriptEngine();
   g_scriptEngine->SetBypassCache(g_bypassCache);
   g_scriptEngine->Initialize();
   if (g_compileAllScripts)
@@ -296,5 +304,15 @@ static void HandleDestroy(HWND hwnd) {
   }
 
   settings.Save();
+
+  delete g_scriptEngine;
+  g_scriptEngine = nullptr;
+  delete g_renderer;
+  g_renderer = nullptr;
+  delete g_editor;
+  g_editor = nullptr;
+  delete g_lspClient;
+  g_lspClient = nullptr;
+
   PostQuitMessage(0);
 }

@@ -14,6 +14,7 @@
 
 #include <functional>
 
+// SafeSave is now in FileUtils.cpp, which is linked in.
 
 void TestFunctionalSearch() {
   Buffer buf;

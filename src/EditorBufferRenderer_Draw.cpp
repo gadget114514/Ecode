@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <vector>
 
-extern std::unique_ptr<Editor> g_editor;
+extern Editor *g_editor;
 
 void EditorBufferRenderer::DrawEditorLines(
     const std::string &text, size_t caretPos,

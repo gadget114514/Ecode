@@ -10,27 +10,11 @@
 #include <shlobj.h>
 #include <string>
 
-enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
-void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
-std::string GetWin32ErrorString(DWORD errorCode);
+#include "Globals.inl"
 #include <objbase.h>
 #include <vector>
 
-#if defined(__has_include) && __has_include(<filesystem>)
-#include <filesystem>
-namespace fs = std::filesystem;
-#elif defined(__has_include) && __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#else
-// Fallback or error
-#error "No filesystem support found"
-#endif
-
-extern std::unique_ptr<EditorBufferRenderer> g_renderer;
-extern std::unique_ptr<Editor> g_editor;
-extern std::unique_ptr<ScriptEngine> g_scriptEngine;
-extern int g_currentLogLevel;
+// Redundant externs removed, they are in Globals.inl
 
 // Use fully qualified calls or ensure C++17
 
@@ -135,7 +119,9 @@ std::wstring Dialogs::OpenFileDialog(HWND hwnd) {
   } else {
     DWORD err = CommDlgExtendedError();
     if (err != 0) {
-        DebugLog("OpenFileDialog failed with extended error: " + std::to_string(err), LOG_ERROR);
+      DebugLog("OpenFileDialog failed with extended error: " +
+                   std::to_string(err),
+               LOG_ERROR);
     }
   }
   return L"";
@@ -157,7 +143,9 @@ std::wstring Dialogs::SaveFileDialog(HWND hwnd) {
   } else {
     DWORD err = CommDlgExtendedError();
     if (err != 0) {
-        DebugLog("SaveFileDialog failed with extended error: " + std::to_string(err), LOG_ERROR);
+      DebugLog("SaveFileDialog failed with extended error: " +
+                   std::to_string(err),
+               LOG_ERROR);
     }
   }
   return L"";
@@ -171,8 +159,73 @@ void Dialogs::ShowAboutDialog(HWND hwnd) {
               MB_OK | MB_ICONINFORMATION);
 }
 
+static HWND g_hDlgSettingsGeneral = NULL;
+static HWND g_hDlgSettingsAI = NULL;
+
+INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                        LPARAM lParam);
+INT_PTR CALLBACK AiSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                   LPARAM lParam);
+
 INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                  LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    HWND hTab = GetDlgItem(hDlg, IDC_TAB_SETTINGS);
+    TCITEMW tie;
+    tie.mask = TCIF_TEXT;
+    tie.pszText = (LPWSTR)L"General";
+    TabCtrl_InsertItem(hTab, 0, &tie);
+    tie.pszText = (LPWSTR)L"AI";
+    TabCtrl_InsertItem(hTab, 1, &tie);
+
+    g_hDlgSettingsGeneral = CreateDialogW(
+        GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_SETTINGS_GENERAL), hDlg,
+        GeneralSettingsDlgProc);
+    g_hDlgSettingsAI =
+        CreateDialogW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_SETTINGS_AI),
+                      hDlg, AiSettingsDlgProc);
+
+    RECT rcTab;
+    GetWindowRect(hTab, &rcTab);
+    MapWindowPoints(NULL, hDlg, (LPPOINT)&rcTab, 2);
+    TabCtrl_AdjustRect(hTab, FALSE, &rcTab);
+
+    SetWindowPos(g_hDlgSettingsGeneral, HWND_TOP, rcTab.left, rcTab.top,
+                 rcTab.right - rcTab.left, rcTab.bottom - rcTab.top,
+                 SWP_SHOWWINDOW);
+    SetWindowPos(g_hDlgSettingsAI, HWND_TOP, rcTab.left, rcTab.top,
+                 rcTab.right - rcTab.left, rcTab.bottom - rcTab.top,
+                 SWP_HIDEWINDOW);
+
+    return (INT_PTR)TRUE;
+  }
+  case WM_NOTIFY: {
+    LPNMHDR pnmh = (LPNMHDR)lParam;
+    if (pnmh->idFrom == IDC_TAB_SETTINGS && pnmh->code == TCN_SELCHANGE) {
+      int sel = TabCtrl_GetCurSel(pnmh->hwndFrom);
+      ShowWindow(g_hDlgSettingsGeneral, sel == 0 ? SW_SHOW : SW_HIDE);
+      ShowWindow(g_hDlgSettingsAI, sel == 1 ? SW_SHOW : SW_HIDE);
+    }
+    break;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDOK) {
+      SendMessage(g_hDlgSettingsGeneral, WM_COMMAND, MAKEWPARAM(IDOK, 0), 0);
+      SendMessage(g_hDlgSettingsAI, WM_COMMAND, MAKEWPARAM(IDOK, 0), 0);
+      EndDialog(hDlg, IDOK);
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                        LPARAM lParam) {
   switch (message) {
   case WM_INITDIALOG: {
     if (g_renderer) {
@@ -180,29 +233,30 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                       g_renderer->GetFontFamily().c_str());
       SetDlgItemInt(hDlg, IDC_FONT_SIZE,
                     static_cast<UINT>(g_renderer->GetFontSize()), FALSE);
+      SetDlgItemInt(hDlg, IDC_FONT_WEIGHT,
+                    static_cast<UINT>(g_renderer->GetFontWeight()), FALSE);
       CheckDlgButton(hDlg, IDC_SHOW_LINE_NUMBERS,
                      g_renderer->GetShowLineNumbers() ? BST_CHECKED
                                                       : BST_UNCHECKED);
-      CheckDlgButton(hDlg, IDC_WORD_WRAP,
-                     g_renderer->GetWordWrap() ? BST_CHECKED : BST_UNCHECKED);
-      SetDlgItemInt(hDlg, IDC_WRAP_WIDTH,
-                    static_cast<UINT>(g_renderer->GetWrapWidth()), FALSE);
-      SetDlgItemInt(hDlg, IDC_FONT_WEIGHT,
-                    static_cast<UINT>(g_renderer->GetFontWeight()), FALSE);
       CheckDlgButton(hDlg, IDC_ENABLE_LIGATURES,
                      g_renderer->GetEnableLigatures() ? BST_CHECKED
                                                       : BST_UNCHECKED);
+      CheckDlgButton(hDlg, IDC_WORD_WRAP,
+                     g_renderer->GetWordWrap() ? BST_CHECKED : BST_UNCHECKED);
+      ::SetDlgItemInt(hDlg, IDC_WRAP_WIDTH,
+                      static_cast<UINT>(g_renderer->GetWrapWidth()), FALSE);
 
       HWND hCaret = GetDlgItem(hDlg, IDC_CARET_STYLE);
-      SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Line");
-      SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Block");
-      SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Underline");
-      SendMessage(hCaret, CB_SETCURSEL,
-                  (static_cast<int>(g_renderer->GetCaretStyle())), 0);
+      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Line");
+      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Block");
+      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Underline");
+      ::SendMessage(hCaret, CB_SETCURSEL,
+                    static_cast<WPARAM>(g_renderer->GetCaretStyle()), 0);
 
       CheckDlgButton(hDlg, IDC_CARET_BLINKING,
-                     SettingsManager::Instance().IsCaretBlinking() ? BST_CHECKED
-                                                    : BST_UNCHECKED);
+                     SettingsManager::Instance().IsCaretBlinking()
+                         ? BST_CHECKED
+                         : BST_UNCHECKED);
     }
 
     HWND hLog = GetDlgItem(hDlg, IDC_LOG_LEVEL);
@@ -218,7 +272,6 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Spanish");
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"French");
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"German");
-
     SendMessage(hCombo, CB_SETCURSEL,
                 (WPARAM)Localization::Instance().GetCurrentLanguage(), 0);
 
@@ -229,49 +282,135 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       wchar_t fontFamily[256];
       GetDlgItemTextW(hDlg, IDC_FONT_FAMILY, fontFamily, 256);
       UINT fontSize = GetDlgItemInt(hDlg, IDC_FONT_SIZE, NULL, FALSE);
+      UINT fontWeight = GetDlgItemInt(hDlg, IDC_FONT_WEIGHT, NULL, FALSE);
       BOOL showLineNums = IsDlgButtonChecked(hDlg, IDC_SHOW_LINE_NUMBERS);
-      BOOL showPhysical = IsDlgButtonChecked(hDlg, IDC_SHOW_PHYSICAL_LINE_NUMS);
+      BOOL enableLigatures = IsDlgButtonChecked(hDlg, IDC_ENABLE_LIGATURES);
       BOOL wordWrap = IsDlgButtonChecked(hDlg, IDC_WORD_WRAP);
       UINT wrapWidth = GetDlgItemInt(hDlg, IDC_WRAP_WIDTH, NULL, FALSE);
-      UINT fontWeight = GetDlgItemInt(hDlg, IDC_FONT_WEIGHT, NULL, FALSE);
-      BOOL enableLigatures = IsDlgButtonChecked(hDlg, IDC_ENABLE_LIGATURES);
+      BOOL caretBlinking = IsDlgButtonChecked(hDlg, IDC_CARET_BLINKING);
+      int caretStyle =
+          (int)SendDlgItemMessage(hDlg, IDC_CARET_STYLE, CB_GETCURSEL, 0, 0);
       int lang =
           (int)SendMessage(GetDlgItem(hDlg, IDC_LANGUAGE), CB_GETCURSEL, 0, 0);
+      int logLevel =
+          (int)SendMessage(GetDlgItem(hDlg, IDC_LOG_LEVEL), CB_GETCURSEL, 0, 0);
 
       if (g_renderer) {
         g_renderer->SetFont(fontFamily, (float)fontSize,
                             static_cast<DWRITE_FONT_WEIGHT>(fontWeight));
         g_renderer->SetEnableLigatures(enableLigatures == BST_CHECKED);
         g_renderer->SetShowLineNumbers(showLineNums == BST_CHECKED);
-        // g_renderer->SetShowPhysicalLineNumbers(showPhysical == BST_CHECKED);
         g_renderer->SetWordWrap(wordWrap == BST_CHECKED);
         g_renderer->SetWrapWidth((float)wrapWidth);
-
-        int caretStyle =
-            (int)SendDlgItemMessage(hDlg, IDC_CARET_STYLE, CB_GETCURSEL, 0, 0);
         g_renderer->SetCaretStyle((EditorBufferRenderer::CaretStyle)caretStyle);
-      }
-      BOOL caretBlinking = IsDlgButtonChecked(hDlg, IDC_CARET_BLINKING);
-      if (g_renderer) {
         g_renderer->SetCaretBlinking(caretBlinking == BST_CHECKED);
       }
 
       Localization::Instance().SetLanguage((Language)lang);
-
-      int logLevel =
-          (int)SendMessage(GetDlgItem(hDlg, IDC_LOG_LEVEL), CB_GETCURSEL, 0, 0);
       g_currentLogLevel = logLevel;
       SettingsManager::Instance().SetLogLevel(logLevel);
-      g_currentLogLevel = logLevel;
-      SettingsManager::Instance().SetLogLevel(logLevel);
-      SettingsManager::Instance().SetCaretBlinking(caretBlinking == BST_CHECKED);
+      SettingsManager::Instance().SetCaretBlinking(caretBlinking ==
+                                                   BST_CHECKED);
       SettingsManager::Instance().Save();
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
 
-      EndDialog(hDlg, IDOK);
-      return (INT_PTR)TRUE;
-    } else if (LOWORD(wParam) == IDCANCEL) {
-      EndDialog(hDlg, IDCANCEL);
-      return (INT_PTR)TRUE;
+INT_PTR CALLBACK AiSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                   LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    if (g_scriptEngine) {
+      // Load servers list
+      std::string servers = g_scriptEngine->Evaluate(
+          "Object.keys(getAiConfig().servers).join(',')");
+      if (!servers.empty() && servers.find("Error") != 0) {
+        HWND hCombo = GetDlgItem(hDlg, IDC_AI_SERVER);
+        size_t start = 0, end;
+        while ((end = servers.find(',', start)) != std::string::npos) {
+          std::string s = servers.substr(start, end - start);
+          SendMessageA(hCombo, CB_ADDSTRING, 0, (LPARAM)s.c_str());
+          start = end + 1;
+        }
+        SendMessageA(hCombo, CB_ADDSTRING, 0,
+                     (LPARAM)servers.substr(start).c_str());
+
+        std::string activeServer =
+            g_scriptEngine->Evaluate("getAiConfig().activeServer");
+        int idx = (int)SendMessageA(hCombo, CB_FINDSTRINGEXACT, -1,
+                                    (LPARAM)activeServer.c_str());
+        SendMessage(hCombo, CB_SETCURSEL, idx, 0);
+
+        // Load active server details
+        std::string model =
+            g_scriptEngine->Evaluate("getActiveServer().model || ''");
+        std::string base = g_scriptEngine->Evaluate(
+            "getActiveServer().apiBase || getActiveServer().url || ''");
+        std::string key =
+            g_scriptEngine->Evaluate("getActiveServer().apiKey || ''");
+        std::string projectDir =
+            g_scriptEngine->Evaluate("getAiConfig().allowedProjectDir || ''");
+
+        SetDlgItemTextA(hDlg, IDC_AI_MODEL, model.c_str());
+        SetDlgItemTextA(hDlg, IDC_AI_BASE_URL, base.c_str());
+        SetDlgItemTextA(hDlg, IDC_AI_KEY, key.c_str());
+        SetDlgItemTextA(hDlg, IDC_AI_PROJECT_DIR, projectDir.c_str());
+      }
+    }
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_AI_SERVER) {
+      char server[64];
+      GetDlgItemTextA(hDlg, IDC_AI_SERVER, server, 64);
+      g_scriptEngine->Evaluate("switchAiServer('" + std::string(server) + "')");
+      // Reload fields
+      std::string model =
+          g_scriptEngine->Evaluate("getActiveServer().model || ''");
+      std::string base = g_scriptEngine->Evaluate(
+          "getActiveServer().apiBase || getActiveServer().url || ''");
+      std::string key =
+          g_scriptEngine->Evaluate("getActiveServer().apiKey || ''");
+      SetDlgItemTextA(hDlg, IDC_AI_MODEL, model.c_str());
+      SetDlgItemTextA(hDlg, IDC_AI_BASE_URL, base.c_str());
+      SetDlgItemTextA(hDlg, IDC_AI_KEY, key.c_str());
+    } else if (LOWORD(wParam) == IDC_AI_PROJECT_DIR_BROWSE) {
+      std::wstring path = Dialogs::BrowseForFolder(hDlg);
+      if (!path.empty()) {
+        SetDlgItemTextW(hDlg, IDC_AI_PROJECT_DIR, path.c_str());
+      }
+    } else if (LOWORD(wParam) == IDOK) {
+      char model[128], base[256], key[256], projectDir[MAX_PATH];
+      GetDlgItemTextA(hDlg, IDC_AI_MODEL, model, 128);
+      GetDlgItemTextA(hDlg, IDC_AI_BASE_URL, base, 256);
+      GetDlgItemTextA(hDlg, IDC_AI_KEY, key, 256);
+      GetDlgItemTextA(hDlg, IDC_AI_PROJECT_DIR, projectDir, MAX_PATH);
+
+      std::string js = "(function() { var config = getAiConfig(); var s = "
+                       "getActiveServer(); "
+                       "s.model = '" +
+                       std::string(model) + "'; ";
+      std::string sBase(base);
+      if (sBase.find("/chat/completions") != std::string::npos) {
+        js += "s.url = '" + sBase + "'; delete s.apiBase; ";
+      } else {
+        js += "s.apiBase = '" + sBase + "'; delete s.url; ";
+      }
+      js += "s.apiKey = '" + std::string(key) + "'; ";
+
+      std::string sProjectDir(projectDir);
+      // Escape backslashes for JS string
+      size_t pos = 0;
+      while ((pos = sProjectDir.find('\\', pos)) != std::string::npos) {
+        sProjectDir.replace(pos, 1, "\\\\");
+        pos += 2;
+      }
+      js += "config.allowedProjectDir = '" + sProjectDir + "'; ";
+
+      js += "saveAiConfig(config); })();";
+      g_scriptEngine->Evaluate(js);
     }
     break;
   }
@@ -436,11 +575,11 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDC_FIND_BROWSE) {
-        std::wstring path = Dialogs::BrowseForFolder(hDlg);
-        if (!path.empty()) {
-            SetDlgItemTextW(hDlg, IDC_FIND_DIR, path.c_str());
-        }
-        return (INT_PTR)TRUE;
+      std::wstring path = Dialogs::BrowseForFolder(hDlg);
+      if (!path.empty()) {
+        SetDlgItemTextW(hDlg, IDC_FIND_DIR, path.c_str());
+      }
+      return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDCANCEL) {
       EndDialog(hDlg, IDCANCEL);
       return (INT_PTR)TRUE;
@@ -471,8 +610,8 @@ Dialogs::ShowSaveConfirmationDialog(HWND hwnd, const std::wstring &filename) {
 std::wstring Dialogs::BrowseForFolder(HWND hwnd) {
   std::wstring folderPath;
   IFileOpenDialog *pfd = nullptr;
-  HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER,
-                                 IID_PPV_ARGS(&pfd));
+  HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, NULL,
+                                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
   if (SUCCEEDED(hr)) {
     DWORD dwOptions;
     if (SUCCEEDED(hr = pfd->GetOptions(&dwOptions))) {
@@ -487,18 +626,24 @@ std::wstring Dialogs::BrowseForFolder(HWND hwnd) {
           folderPath = pszPath;
           CoTaskMemFree(pszPath);
         } else {
-          DebugLog("BrowseForFolder - GetDisplayName failed: hr=" + std::to_string(hr), LOG_ERROR);
+          DebugLog("BrowseForFolder - GetDisplayName failed: hr=" +
+                       std::to_string(hr),
+                   LOG_ERROR);
         }
         psi->Release();
       } else {
-        DebugLog("BrowseForFolder - GetResult failed: hr=" + std::to_string(hr), LOG_ERROR);
+        DebugLog("BrowseForFolder - GetResult failed: hr=" + std::to_string(hr),
+                 LOG_ERROR);
       }
     } else if (hr != HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
-      DebugLog("BrowseForFolder - pfd->Show failed: hr=" + std::to_string(hr), LOG_ERROR);
+      DebugLog("BrowseForFolder - pfd->Show failed: hr=" + std::to_string(hr),
+               LOG_ERROR);
     }
     pfd->Release();
   } else {
-    DebugLog("BrowseForFolder - CoCreateInstance failed: hr=" + std::to_string(hr), LOG_ERROR);
+    DebugLog("BrowseForFolder - CoCreateInstance failed: hr=" +
+                 std::to_string(hr),
+             LOG_ERROR);
   }
   return folderPath;
 }

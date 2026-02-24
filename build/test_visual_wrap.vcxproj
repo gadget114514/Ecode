@@ -333,12 +333,13 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D:\ws\Ecode\tests\test_visual_wrap.cpp" />
+    <ClCompile Include="D:\ws\Ecode\tests\TestGlobals.cpp" />
+    <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\EditorBufferRenderer.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\EditorBufferRenderer_Draw.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Buffer.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\PieceTable.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\MemoryMappedFile.cpp" />
-    <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Localization.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\SettingsManager.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\Editor.cpp" />

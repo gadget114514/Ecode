@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <vector>
 
-extern std::unique_ptr<Editor> g_editor;
+extern Editor *g_editor;
 
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")

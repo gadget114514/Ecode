@@ -234,12 +234,33 @@ static duk_ret_t js_editor_set_wrap_width(duk_context *ctx) {
   duk_push_boolean(ctx, false);
   return 1;
 }
+static duk_ret_t js_editor_get_settings(duk_context *ctx) {
+  SettingsManager &sm = SettingsManager::Instance();
+  std::string json = "{";
+  json += "\"fontFamily\":\"" + WStringToString(sm.GetFontFamily()) + "\",";
+  json += "\"fontSize\":" + std::to_string(sm.GetFontSize()) + ",";
+  json += "\"language\":" + std::to_string(sm.GetLanguage()) + ",";
+  json +=
+      "\"wordWrap\":" + std::string(sm.IsWordWrap() ? "true" : "false") + ",";
+  json += "\"fontWeight\":" + std::to_string(sm.GetFontWeight()) + ",";
+  json += "\"logLevel\":" + std::to_string(sm.GetLogLevel());
+  json += "}";
+  duk_push_string(ctx, json.c_str());
+  return 1;
+}
 
-static duk_ret_t js_editor_get_app_data_path(duk_context *ctx) {
-  std::wstring path = SettingsManager::Instance().GetAppDataPath();
-  std::string utf8_path = WStringToString(path);
-  // Replace backslashes with forward slashes for JS friendliness
-  std::replace(utf8_path.begin(), utf8_path.end(), '\\', '/');
-  duk_push_string(ctx, utf8_path.c_str());
+static duk_ret_t js_editor_save_settings(duk_context *ctx) {
+  SettingsManager::Instance().Save();
+  duk_push_boolean(ctx, true);
+  return 1;
+}
+
+static duk_ret_t js_editor_set_language(duk_context *ctx) {
+  int lang = (int)duk_get_number(ctx, 0);
+  SettingsManager::Instance().SetLanguage(lang);
+  Localization::Instance().SetLanguage((Language)lang);
+  UpdateMenu(g_mainHwnd);
+  InvalidateRect(g_mainHwnd, NULL, FALSE);
+  duk_push_boolean(ctx, true);
   return 1;
 }
