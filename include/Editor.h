@@ -18,6 +18,7 @@ public:
   size_t OpenFile(const std::wstring &path);
   void NewFile(const std::string &name = "Untitled");
   size_t OpenShell(const std::wstring &cmd);
+  size_t OpenJsShell();
   void FindInFiles(const std::wstring &dir, const std::wstring &pattern);
   void CloseBuffer(size_t index);
 
@@ -31,6 +32,7 @@ public:
   void Cut(HWND hwnd);
   void Copy(HWND hwnd);
   void Paste(HWND hwnd);
+  void TagJump();
 
   const std::vector<std::unique_ptr<Buffer>> &GetBuffers() const {
     return m_buffers;

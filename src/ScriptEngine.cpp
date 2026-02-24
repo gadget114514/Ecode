@@ -4,6 +4,8 @@
 #include "../include/Editor.h"
 #include "../include/EditorBufferRenderer.h"
 #include "../include/ScriptEngine.h"
+#include "../include/SettingsManager.h"
+#include "../include/StringHelpers.h"
 #include <commctrl.h>
 #include <iostream>
 #include <shlobj.h>
@@ -216,6 +218,14 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "save");
   duk_push_c_function(m_ctx, js_editor_save_as, 1);
   duk_put_prop_string(m_ctx, -2, "saveAs");
+
+  duk_push_c_function(m_ctx, js_editor_set_buffer_name, 1);
+  duk_put_prop_string(m_ctx, -2, "setBufferName");
+  duk_push_c_function(m_ctx, js_editor_get_buffer_name, 0);
+  duk_put_prop_string(m_ctx, -2, "getBufferName");
+  duk_push_c_function(m_ctx, js_editor_write_file, 2);
+  duk_put_prop_string(m_ctx, -2, "writeFile");
+
   duk_push_c_function(m_ctx, js_editor_load_script, 1);
   duk_put_prop_string(m_ctx, -2, "loadScript");
   duk_push_c_function(m_ctx, js_editor_log_message, 1);
@@ -228,6 +238,26 @@ bool ScriptEngine::Initialize() {
   duk_put_prop_string(m_ctx, -2, "isShellBuffer");
   duk_push_c_function(m_ctx, js_editor_show_minibuffer, DUK_VARARGS);
   duk_put_prop_string(m_ctx, -2, "showMinibuffer");
+  duk_push_c_function(m_ctx, js_editor_exec_sync, 1);
+  duk_put_prop_string(m_ctx, -2, "execSync");
+  duk_push_c_function(m_ctx, js_editor_get_app_data_path, 0);
+  duk_put_prop_string(m_ctx, -2, "getAppDataPath");
+
+  duk_push_c_function(m_ctx, js_editor_set_global_key_binding, 2);
+  duk_put_prop_string(m_ctx, -2, "setGlobalKeyBinding");
+  
+  duk_push_c_function(m_ctx, js_editor_set_key_binding, 2);
+  duk_put_prop_string(m_ctx, -2, "setKeyBinding");
+  
+  duk_push_c_function(m_ctx, js_editor_get_ai_vendor, 0);
+  duk_put_prop_string(m_ctx, -2, "getAIVendor");
+  
+  duk_push_c_function(m_ctx, js_editor_get_ai_model, 0);
+  duk_put_prop_string(m_ctx, -2, "getAIModel");
+  
+  duk_push_c_function(m_ctx, js_editor_get_ai_api_key, 1);
+  duk_put_prop_string(m_ctx, -2, "getAIApiKey");
+
   duk_put_global_string(m_ctx, "Editor");
 
   // Create global 'console' object
@@ -501,14 +531,30 @@ void ScriptEngine::RegisterBinding(const std::string &chord,
 
 bool ScriptEngine::HandleBinding(const std::string &chord) {
   DebugLog("ScriptEngine::HandleBinding: " + chord, LOG_INFO);
-  auto it = m_keyBindings.find(chord);
-  if (it == m_keyBindings.end()) {
+  
+  std::string funcName;
+  if (g_editor) {
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf && buf->HasKeyBinding(chord)) {
+      funcName = buf->GetKeyBinding(chord);
+      DebugLog("  Found buffer-local binding -> " + funcName, LOG_INFO);
+    }
+  }
+
+  if (funcName.empty()) {
+    auto it = m_keyBindings.find(chord);
+    if (it != m_keyBindings.end()) {
+      funcName = it->second;
+      DebugLog("  Found global binding -> " + funcName, LOG_INFO);
+    }
+  }
+
+  if (funcName.empty()) {
     DebugLog("  No binding found for: " + chord, LOG_INFO);
     return false;
   }
 
-  DebugLog("  Found binding -> " + it->second, LOG_INFO);
-  duk_get_global_string(m_ctx, it->second.c_str());
+  duk_get_global_string(m_ctx, funcName.c_str());
   if (duk_is_function(m_ctx, -1)) {
     if (duk_pcall(m_ctx, 0) != 0) {
       std::cerr << "Script error in binding " << chord << ": "
@@ -519,7 +565,7 @@ bool ScriptEngine::HandleBinding(const std::string &chord) {
     duk_pop(m_ctx);
     return true;
   } else {
-    DebugLog("  Function not found: " + it->second, LOG_WARN);
+    DebugLog("  Function not found: " + funcName, LOG_WARN);
   }
   duk_pop(m_ctx);
   return false;

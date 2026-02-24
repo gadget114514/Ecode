@@ -30,6 +30,9 @@ void EnsureCaretVisible(HWND hwnd);
 bool PromptSaveBuffer(HWND hwnd, Buffer *buf);
 void HideMinibuffer();
 
+extern HWND g_treeHwnd;
+extern bool g_treeVisible;
+
 enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
 extern int g_currentLogLevel;
 void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
@@ -75,17 +78,22 @@ void HandleDestroy(HWND hwnd);
 #define IDM_VIEW_ZOOM_IN 302
 #define IDM_VIEW_ZOOM_OUT 303
 #define IDM_VIEW_ZOOM_RESET 304
+#define IDM_VIEW_TOGGLE_TREE 305
 
 #define IDM_CONFIG_SETTINGS 401
 #define IDM_CONFIG_THEME 402
 #define IDM_CONFIG_EDIT_INIT 403
+#define IDM_CONFIG_AI_SETTINGS 404
 
 #define IDM_TOOLS_RUN_MACRO 501
 #define IDM_TOOLS_CONSOLE 502
 #define IDM_TOOLS_MACRO_GALLERY 503
+#define IDM_TOOLS_OPEN_SHELL 509
 #define IDM_SHELL_ENC_UTF8 504
 #define IDM_SHELL_ENC_SJIS 505
 #define IDM_EDIT_FIND_IN_FILES 506
+#define IDM_EDIT_TAG_JUMP 507
+#define IDM_TOOLS_AI_CHAT 508
 
 #define IDM_LANG_EN 601
 #define IDM_LANG_JP 602
@@ -94,8 +102,9 @@ void HandleDestroy(HWND hwnd);
 #define IDM_LANG_DE 605
 
 #define IDM_BUFFERS_LIST 701
-#define IDM_RECENT_START 2000
+#define IDM_TAB_COPY_PATH 901
 #define IDM_BUFFERS_START 1000
+#define IDM_RECENT_START 2000
 
 #define IDM_HELP_DOC 801
 #define IDM_HELP_ABOUT 802
@@ -114,6 +123,8 @@ extern HWND g_mainHwnd;
 extern HWND g_statusHwnd;
 extern HWND g_progressHwnd;
 extern HWND g_tabHwnd;
+extern HWND g_treeHwnd;
+extern bool g_treeVisible;
 extern HWND g_minibufferHwnd;
 extern HWND g_minibufferPromptHwnd;
 extern bool g_minibufferVisible;
@@ -137,24 +148,13 @@ extern int g_historyIndex;
 extern WNDPROC g_oldMinibufferProc;
 
 // Utility functions
+inline std::wstring StringToWString(const std::string &s) {
+  if (s.empty()) return std::wstring();
+  int size_needed = MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), NULL, 0);
+  std::wstring ws(size_needed, 0);
+  MultiByteToWideChar(CP_UTF8, 0, &s[0], (int)s.size(), &ws[0], size_needed);
   return ws;
 }
 
-inline std::string GetWin32ErrorString(DWORD errorCode) {
-  LPSTR messageBuffer = nullptr;
-  size_t size = FormatMessageA(
-      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-          FORMAT_MESSAGE_IGNORE_INSERTS,
-      NULL, errorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-      (LPSTR)&messageBuffer, 0, NULL);
-  if (size > 0 && messageBuffer) {
-    std::string message(messageBuffer, size);
-    LocalFree(messageBuffer);
-    // Remove trailing newlines
-    while (!message.empty() && (message.back() == '\r' || message.back() == '\n')) {
-        message.pop_back();
-    }
-    return message;
-  }
-  return "Unknown error (" + std::to_string(errorCode) + ")";
-}
+// Implemented in FileUtils.cpp
+std::string GetWin32ErrorString(DWORD errorCode);

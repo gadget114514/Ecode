@@ -341,6 +341,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="D:\ws\Ecode\src\SettingsManager.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\FileUtils.cpp" />
     <ClCompile Include="D:\ws\Ecode\src-duktape\duktape.c" />
+    <ClCompile Include="D:\ws\Ecode\tests\DebugLog_Stub.cpp" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>

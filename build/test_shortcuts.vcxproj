@@ -343,6 +343,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="D:\ws\Ecode\src\Localization.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\EditorBufferRenderer.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\EditorBufferRenderer_Draw.cpp" />
+    <ClCompile Include="D:\ws\Ecode\tests\DebugLog_Stub.cpp" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>

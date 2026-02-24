@@ -9,6 +9,7 @@ public:
   static std::wstring SaveFileDialog(HWND hwnd);
   static void ShowAboutDialog(HWND hwnd);
   static void ShowSettingsDialog(HWND hwnd);
+  static void ShowAISettingsDialog(HWND hwnd);
   static void ShowFindReplaceDialog(HWND hwnd, bool replaceMode);
   static void ShowFindInFilesDialog(HWND hwnd);
   static void ShowJumpToLineDialog(HWND hwnd);

@@ -42,6 +42,35 @@ static duk_ret_t js_editor_new_file(duk_context *ctx) {
   return 1;
 }
 
+static duk_ret_t js_editor_set_buffer_name(duk_context *ctx) {
+  const char *name = duk_get_string(ctx, 0);
+  if (name && g_editor) {
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf) {
+      buf->SetPath(StringToWString(name));
+      UpdateMenu(g_mainHwnd);
+      InvalidateRect(g_mainHwnd, NULL, FALSE);
+      duk_push_boolean(ctx, true);
+      return 1;
+    }
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_get_buffer_name(duk_context *ctx) {
+  if (g_editor) {
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf) {
+      std::string u8Name = StringHelpers::Utf16ToUtf8(buf->GetPath());
+      duk_push_string(ctx, u8Name.c_str());
+      return 1;
+    }
+  }
+  duk_push_undefined(ctx);
+  return 1;
+}
+
 static duk_ret_t js_editor_open(duk_context *ctx) {
   const char *path = duk_get_string(ctx, 0);
   if (!path) {
@@ -165,6 +194,31 @@ static duk_ret_t js_editor_set_capture_keyboard(duk_context *ctx) {
 static duk_ret_t js_editor_set_key_binding(duk_context *ctx) {
   const char *chord = duk_get_string(ctx, 0);
   const char *funcName = duk_get_string(ctx, 1);
+  if (chord && funcName) {
+    DebugLog(std::string("js_editor_set_key_binding: ") + chord + " -> " + funcName, LOG_INFO);
+  } else {
+    DebugLog("js_editor_set_key_binding: missing chord or funcName", LOG_WARN);
+  }
+
+  if (chord && funcName && g_editor) {
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf) {
+      buf->SetKeyBinding(chord, funcName);
+      std::string pathInfo = buf->GetPath().empty() ? "Untitled" : StringHelpers::Utf16ToUtf8(buf->GetPath());
+      DebugLog("  Applied to buffer: " + pathInfo, LOG_INFO);
+      duk_push_boolean(ctx, true);
+      return 1;
+    } else {
+      DebugLog("  Failed: No active buffer!", LOG_WARN);
+    }
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_set_global_key_binding(duk_context *ctx) {
+  const char *chord = duk_get_string(ctx, 0);
+  const char *funcName = duk_get_string(ctx, 1);
   if (chord && funcName && g_scriptEngine) {
     g_scriptEngine->RegisterBinding(chord, funcName);
     duk_push_boolean(ctx, true);
@@ -235,5 +289,47 @@ static duk_ret_t js_editor_load_script(duk_context *ctx) {
     return 1;
   }
   duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_write_file(duk_context *ctx) {
+  const char *path = duk_get_string(ctx, 0);
+  const char *content = duk_get_string(ctx, 1);
+  if (path && content) {
+    std::wstring wpath = StringToWString(path);
+    std::ofstream out(wpath, std::ios::binary);
+    if (out.is_open()) {
+      out.write(content, strlen(content));
+      out.close();
+      duk_push_boolean(ctx, true);
+      return 1;
+    }
+  }
+  duk_push_boolean(ctx, false);
+  return 1;
+}
+
+static duk_ret_t js_editor_get_ai_vendor(duk_context *ctx) {
+  std::wstring vendor = SettingsManager::Instance().GetAIVendor();
+  if (vendor.empty()) vendor = L"Gemini"; // Default
+  duk_push_string(ctx, WStringToString(vendor).c_str());
+  return 1;
+}
+
+static duk_ret_t js_editor_get_ai_model(duk_context *ctx) {
+  std::wstring model = SettingsManager::Instance().GetAIModel();
+  if (model.empty()) model = L"gemini-1.5-pro"; // Default
+  duk_push_string(ctx, WStringToString(model).c_str());
+  return 1;
+}
+
+static duk_ret_t js_editor_get_ai_api_key(duk_context *ctx) {
+  const char *vendor = duk_get_string(ctx, 0);
+  if (vendor) {
+    std::wstring apiKey = SettingsManager::Instance().GetAIApiKey(StringToWString(vendor));
+    duk_push_string(ctx, WStringToString(apiKey).c_str());
+    return 1;
+  }
+  duk_push_string(ctx, "");
   return 1;
 }

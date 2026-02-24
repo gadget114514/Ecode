@@ -131,3 +131,72 @@ static duk_ret_t js_editor_is_shell_buffer(duk_context *ctx) {
   duk_push_boolean(ctx, buf ? buf->IsShell() : false);
   return 1;
 }
+
+static duk_ret_t js_editor_exec_sync(duk_context *ctx) {
+  const char *cmd = duk_get_string(ctx, 0);
+  if (!cmd) {
+    duk_push_string(ctx, "");
+    return 1;
+  }
+
+  std::wstring wcmd = L"cmd.exe /c " + StringToWString(cmd);
+
+  HANDLE hChildStd_OUT_Rd = NULL;
+  HANDLE hChildStd_OUT_Wr = NULL;
+  SECURITY_ATTRIBUTES saAttr;
+  saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+  saAttr.bInheritHandle = TRUE;
+  saAttr.lpSecurityDescriptor = NULL;
+
+  if (!CreatePipe(&hChildStd_OUT_Rd, &hChildStd_OUT_Wr, &saAttr, 0)) {
+    duk_push_string(ctx, "Error: CreatePipe failed");
+    return 1;
+  }
+  if (!SetHandleInformation(hChildStd_OUT_Rd, HANDLE_FLAG_INHERIT, 0)) {
+    duk_push_string(ctx, "Error: SetHandleInformation failed");
+    return 1;
+  }
+
+  PROCESS_INFORMATION piProcInfo;
+  ZeroMemory(&piProcInfo, sizeof(PROCESS_INFORMATION));
+  STARTUPINFOW siStartInfo;
+  ZeroMemory(&siStartInfo, sizeof(STARTUPINFOW));
+  siStartInfo.cb = sizeof(STARTUPINFOW);
+  siStartInfo.hStdError = hChildStd_OUT_Wr;
+  siStartInfo.hStdOutput = hChildStd_OUT_Wr;
+  siStartInfo.dwFlags |= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+  siStartInfo.wShowWindow = SW_HIDE;
+
+  BOOL bSuccess = CreateProcessW(NULL, (LPWSTR)wcmd.c_str(), NULL, NULL, TRUE,
+                                 CREATE_NO_WINDOW, NULL, NULL, &siStartInfo,
+                                 &piProcInfo);
+  
+  if (!bSuccess) {
+    CloseHandle(hChildStd_OUT_Wr);
+    CloseHandle(hChildStd_OUT_Rd);
+    duk_push_string(ctx, "Error: CreateProcess failed");
+    return 1;
+  }
+
+  // Close our copy of the write handle so ReadFile doesn't block forever
+  CloseHandle(hChildStd_OUT_Wr);
+
+  DWORD dwRead;
+  CHAR chBuf[4096];
+  std::string output;
+  bSuccess = FALSE;
+  for (;;) {
+    bSuccess = ReadFile(hChildStd_OUT_Rd, chBuf, 4096, &dwRead, NULL);
+    if (!bSuccess || dwRead == 0)
+      break;
+    output.append(chBuf, dwRead);
+  }
+
+  WaitForSingleObject(piProcInfo.hProcess, INFINITE);
+  CloseHandle(piProcInfo.hProcess);
+  CloseHandle(piProcInfo.hThread);
+  CloseHandle(hChildStd_OUT_Rd);
+
+  duk_push_string(ctx, output.c_str());
+  return 1;
+}

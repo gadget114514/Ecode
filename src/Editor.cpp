@@ -94,6 +94,21 @@ size_t Editor::OpenShell(const std::wstring &cmd) {
   return static_cast<size_t>(-1);
 }
 
+size_t Editor::OpenJsShell() {
+  auto buffer = std::make_unique<Buffer>();
+  buffer->SetPath(L"*Script Console*");
+  buffer->SetScratch(true);
+  buffer->SetShell(true);
+  buffer->SetJsShell(true);
+  buffer->Insert(0, "// Ecode Script Console\n// Type JS code and press Enter to evaluate.\n> ");
+  buffer->SetInputStart(buffer->GetTotalLength());
+  buffer->SetCaretPos(buffer->GetTotalLength());
+
+  m_buffers.push_back(std::move(buffer));
+  m_activeBufferIndex = m_buffers.size() - 1;
+  return m_activeBufferIndex;
+}
+
 void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern) {
   // Create or clear *Find Results* buffer
   Buffer *resultsBuf = GetBufferByName(L"*Find Results*");
@@ -304,6 +319,76 @@ void Editor::LogMessage(const std::string &msg) {
 
   if (m_messagesBuffer) {
     m_messagesBuffer->Insert(m_messagesBuffer->GetTotalLength(), msg + "\n");
+  }
+}
+
+void Editor::TagJump() {
+  Buffer *active = GetActiveBuffer();
+  if (!active) return;
+  
+  std::string targetText;
+  if (active->HasSelection()) {
+      targetText = active->GetSelectedText();
+  } else {
+      // Find word under caret
+      size_t pos = active->GetCaretPos();
+      size_t start = pos;
+      size_t end = pos;
+      std::string allText = active->GetText(0, active->GetTotalLength());
+      // Expand backward
+      while (start > 0 && allText[start - 1] != '\n' && allText[start - 1] != '\r') {
+          start--;
+      }
+      // Expand forward
+      while (end < allText.length() && allText[end] != '\n' && allText[end] != '\r') {
+          end++;
+      }
+      targetText = allText.substr(start, end - start);
+  }
+
+  if (targetText.empty()) return;
+
+  // Pattern: filename(line)
+  size_t parenOpen = targetText.find('(');
+  if (parenOpen != std::string::npos) {
+      size_t parenClose = targetText.find(')', parenOpen);
+      if (parenClose != std::string::npos) {
+          std::string filename = targetText.substr(0, parenOpen);
+          std::string lineStr = targetText.substr(parenOpen + 1, parenClose - parenOpen - 1);
+          
+          try {
+              int lineNum = std::stoi(lineStr);
+              std::wstring wFilename = StringToWString(filename);
+              
+              // Resolve relative to project path or active buffer's dir
+              std::wstring basePath = active->GetPath();
+              if (basePath.empty() || basePath[0] == L'*') {
+                  basePath = SettingsManager::Instance().GetProjectDirectory();
+              }
+              
+              if (!basePath.empty()) {
+                  size_t lastSlash = basePath.find_last_of(L"\\/");
+                  if (lastSlash != std::wstring::npos) {
+                      std::wstring dir = basePath.substr(0, lastSlash + 1);
+                      wFilename = dir + wFilename;
+                  }
+              }
+
+              size_t newBufIdx = OpenFile(wFilename);
+              if (newBufIdx != static_cast<size_t>(-1)) {
+                  SwitchToBuffer(newBufIdx);
+                  Buffer* newBuf = GetActiveBuffer();
+                  if (newBuf) {
+                      size_t offset = newBuf->GetLineOffset(lineNum - 1);
+                      newBuf->SetCaretPos(offset);
+                      newBuf->SetSelectionAnchor(offset);
+                      newBuf->SetScrollLine(lineNum > 20 ? (size_t)lineNum - 20 : 0);
+                  }
+              }
+          } catch (...) {
+              // Ignore parse errors
+          }
+      }
   }
 }
 

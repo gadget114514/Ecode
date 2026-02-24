@@ -14,18 +14,6 @@
 
 #include <functional>
 
-// Mock SafeSave
-bool SafeSave(const std::wstring &path, const std::string &content) {
-  return true;
-}
-
-bool SafeSaveStreaming(
-    const std::wstring &targetPath,
-    const std::function<void(std::function<void(const char *, size_t)>)>
-        &source) {
-  source([](const char *, size_t) {});
-  return true;
-}
 
 void TestFunctionalSearch() {
   Buffer buf;

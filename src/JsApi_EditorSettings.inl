@@ -234,3 +234,12 @@ static duk_ret_t js_editor_set_wrap_width(duk_context *ctx) {
   duk_push_boolean(ctx, false);
   return 1;
 }
+
+static duk_ret_t js_editor_get_app_data_path(duk_context *ctx) {
+  std::wstring path = SettingsManager::Instance().GetAppDataPath();
+  std::string utf8_path = WStringToString(path);
+  // Replace backslashes with forward slashes for JS friendliness
+  std::replace(utf8_path.begin(), utf8_path.end(), '\\', '/');
+  duk_push_string(ctx, utf8_path.c_str());
+  return 1;
+}
