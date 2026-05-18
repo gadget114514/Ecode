@@ -29,3 +29,9 @@ WNDPROC g_oldMinibufferProc = NULL;
 bool g_bypassCache = false;
 bool g_compileAllScripts = false;
 LogCallback g_logCallback = nullptr;
+
+std::vector<AppTabInfo> g_appTabs;
+int g_activeAppTab = -1;
+std::vector<TerminalTabInfo> g_terminalTabs;
+int g_activeTerminalTab = -1;
+void UpdateMenu(HWND) {}

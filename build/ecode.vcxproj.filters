@@ -55,15 +55,6 @@
     <ClCompile Include="D:\ws\Ecode\src\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\FatReader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\MFTReader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\exFatReader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src-duktape\duktape.c">
       <Filter>Source Files</Filter>
     </ClCompile>

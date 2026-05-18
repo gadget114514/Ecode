@@ -1,13 +1,69 @@
-// =============================================================================
-// WindowHandlers_Command.inl
-// Handle WM_COMMAND (menu items, buttons, etc)
-// Included by main.cpp
-// =============================================================================
+struct EnumData {
+  DWORD processId;
+  HWND hwnd;
+};
+
+struct TerminalThreadParams {
+  HWND hwnd;
+  int termIdx;
+  std::wstring shell;
+  std::wstring uniqueTitle;
+  HWND foundHwnd;
+};
+
+static BOOL CALLBACK EnumConsoleWindowsProc(HWND hwnd, LPARAM lParam) {
+  TerminalThreadParams *params = (TerminalThreadParams *)lParam;
+  wchar_t className[256];
+  GetClassNameW(hwnd, className, 256);
+  if (wcscmp(className, L"ConsoleWindowClass") == 0) {
+    wchar_t windowTitle[512];
+    GetWindowTextW(hwnd, windowTitle, 512);
+    if (wcsstr(windowTitle, params->uniqueTitle.c_str()) != nullptr) {
+      params->foundHwnd = hwnd;
+      return FALSE; // found, stop
+    }
+  }
+  return TRUE;
+}
+
+static DWORD WINAPI TerminalEmbedThread(LPVOID lpParam) {
+  TerminalThreadParams *params = (TerminalThreadParams *)lpParam;
+  HWND hwnd = params->hwnd;
+  int termIdx = params->termIdx;
+  std::wstring shell = params->shell;
+  std::wstring uniqueTitle = params->uniqueTitle;
+
+  STARTUPINFOW si = { sizeof(si) };
+  si.lpTitle = &uniqueTitle[0];
+  PROCESS_INFORMATION pi = { 0 };
+  std::wstring cmd = L"conhost.exe " + shell;
+  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+    HWND foundHwnd = NULL;
+    for (int i = 0; i < 50; ++i) {
+      Sleep(100);
+      params->foundHwnd = NULL;
+      EnumWindows(EnumConsoleWindowsProc, (LPARAM)params);
+      if (params->foundHwnd != NULL) {
+        foundHwnd = params->foundHwnd;
+        break;
+      }
+    }
+    if (foundHwnd) {
+      PostMessageW(hwnd, WM_EMBED_TERMINAL, (WPARAM)foundHwnd, (LPARAM)termIdx);
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  }
+  delete params;
+  return 0;
+}
 
 void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring &label) {
   TerminalTabInfo tab;
-  tab.view = new TerminalView();
-  tab.hwnd = tab.view->Create(hwnd);
+  tab.view = nullptr;
+  tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting Terminal...",
+                             WS_CHILD | WS_VISIBLE | SS_CENTER,
+                             0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
   tab.shell = shell;
   if (label.empty()) {
     int count = static_cast<int>(g_terminalTabs.size());
@@ -25,7 +81,7 @@ void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring 
   TabCtrl_SetCurSel(g_tabHwnd, tabIndex);
   g_suppressTabChange = false;
 
-  // Position the terminal view to fill content area
+  // Position the terminal placeholder to fill content area
   RECT rc;
   GetClientRect(hwnd, &rc);
   int treeWidth = g_treeVisible ? 200 : 0;
@@ -51,8 +107,261 @@ void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring 
   ShowScrollBar(hwnd, SB_BOTH, FALSE);
   g_activeTerminalTab = termIdx;
   SetFocus(g_terminalTabs[termIdx].hwnd);
-  g_terminalTabs[termIdx].view->StartSession(g_terminalTabs[termIdx].shell, {});
   InvalidateRect(hwnd, NULL, FALSE);
+
+  TerminalThreadParams *params = new TerminalThreadParams();
+  params->hwnd = hwnd;
+  params->termIdx = termIdx;
+  params->shell = shell;
+  params->uniqueTitle = L"EcodeTerminalTab_" + std::to_wstring(GetCurrentProcessId()) + L"_" + std::to_wstring(termIdx);
+  params->foundHwnd = NULL;
+  CreateThread(NULL, 0, TerminalEmbedThread, params, 0, NULL);
+}
+
+
+
+static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+  EnumData *data = (EnumData *)lParam;
+  DWORD processId = 0;
+  GetWindowThreadProcessId(hwnd, &processId);
+  if (processId == data->processId) {
+    if (IsWindowVisible(hwnd) && GetWindow(hwnd, GW_OWNER) == NULL) {
+      data->hwnd = hwnd;
+      return FALSE; // Stop enumerating
+    }
+  }
+  return TRUE;
+}
+
+struct SearchThreadParams {
+  HWND hwnd;
+  int appIdx;
+};
+
+static DWORD WINAPI FastFileSearchThread(LPVOID lpParam) {
+  SearchThreadParams *params = (SearchThreadParams *)lpParam;
+  HWND hwnd = params->hwnd;
+  int appIdx = params->appIdx;
+  delete params;
+
+  STARTUPINFOW si = { sizeof(si) };
+  PROCESS_INFORMATION pi = { 0 };
+  std::wstring cmd = L"\"d:\\ws\\Ecode\\Application\\FastFileSearch\\build\\Release\\FastFileSearch.exe\"";
+  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, L"d:\\ws\\Ecode\\Application\\FastFileSearch\\build\\Release", &si, &pi)) {
+    HWND foundHwnd = NULL;
+    for (int i = 0; i < 50; ++i) {
+      Sleep(100);
+      EnumData data = { pi.dwProcessId, NULL };
+      EnumWindows(EnumWindowsProc, (LPARAM)&data);
+      if (data.hwnd != NULL) {
+        foundHwnd = data.hwnd;
+        break;
+      }
+    }
+    if (foundHwnd) {
+      PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  }
+  return 0;
+}
+
+void OpenFastFileSearch(HWND hwnd) {
+  AppTabInfo tab;
+  tab.label = L"File Search";
+  tab.type = 2;
+  if (!IsUserAnAdmin()) {
+    tab.hwnd = CreateWindowExW(0, L"STATIC",
+                               L"\n\n\n\n\n\n\n\n\n⚠️ Fast File Search requires Administrator privileges.\n\nPlease relaunch Ecode as Administrator (Right-click -> Run as Administrator) to use this tool.",
+                               WS_CHILD | WS_VISIBLE | SS_CENTER,
+                               0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+  } else {
+    tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting Fast File Search...",
+                               WS_CHILD | WS_VISIBLE | SS_CENTER,
+                               0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+  }
+  tab.data = nullptr;
+  g_appTabs.push_back(std::move(tab));
+  int appIdx = static_cast<int>(g_appTabs.size()) - 1;
+  g_activeAppTab = appIdx;
+  g_activeTerminalTab = -1;
+
+  RECT rc;
+  GetClientRect(hwnd, &rc);
+  SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
+
+  g_suppressTabChange = true;
+  size_t bufCount = g_editor->GetBuffers().size();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  g_suppressTabChange = false;
+
+  for (auto &t : g_appTabs) {
+    if (t.hwnd) {
+      ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
+    }
+  }
+  for (auto &t : g_terminalTabs) {
+    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+  }
+
+  UpdateMenu(hwnd);
+  InvalidateRect(hwnd, NULL, FALSE);
+
+  if (IsUserAnAdmin()) {
+    SearchThreadParams *params = new SearchThreadParams();
+    params->hwnd = hwnd;
+    params->appIdx = appIdx;
+    CreateThread(NULL, 0, FastFileSearchThread, params, 0, NULL);
+  }
+}
+
+struct CSVThreadParams {
+  HWND hwnd;
+  int appIdx;
+};
+
+static DWORD WINAPI CSVEditorThread(LPVOID lpParam) {
+  CSVThreadParams *params = (CSVThreadParams *)lpParam;
+  HWND hwnd = params->hwnd;
+  int appIdx = params->appIdx;
+  delete params;
+
+  STARTUPINFOW si = { sizeof(si) };
+  PROCESS_INFORMATION pi = { 0 };
+  std::wstring cmd = L"\"d:\\ws\\Ecode\\Application\\CSVEditor\\build\\Release\\CSVEditor.exe\"";
+  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, L"d:\\ws\\Ecode\\Application\\CSVEditor\\build\\Release", &si, &pi)) {
+    HWND foundHwnd = NULL;
+    for (int i = 0; i < 50; ++i) {
+      Sleep(100);
+      EnumData data = { pi.dwProcessId, NULL };
+      EnumWindows(EnumWindowsProc, (LPARAM)&data);
+      if (data.hwnd != NULL) {
+        foundHwnd = data.hwnd;
+        break;
+      }
+    }
+    if (foundHwnd) {
+      PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  }
+  return 0;
+}
+
+void OpenCSVEditor(HWND hwnd) {
+  AppTabInfo tab;
+  tab.label = L"CSV Editor";
+  tab.type = 3;
+  tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting CSV Editor...",
+                             WS_CHILD | WS_VISIBLE | SS_CENTER,
+                             0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+  tab.data = nullptr;
+  g_appTabs.push_back(std::move(tab));
+  int appIdx = static_cast<int>(g_appTabs.size()) - 1;
+  g_activeAppTab = appIdx;
+  g_activeTerminalTab = -1;
+
+  RECT rc;
+  GetClientRect(hwnd, &rc);
+  SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
+
+  g_suppressTabChange = true;
+  size_t bufCount = g_editor->GetBuffers().size();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  g_suppressTabChange = false;
+
+  for (auto &t : g_appTabs) {
+    if (t.hwnd) {
+      ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
+    }
+  }
+  for (auto &t : g_terminalTabs) {
+    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+  }
+
+  UpdateMenu(hwnd);
+  InvalidateRect(hwnd, NULL, FALSE);
+
+  CSVThreadParams *params = new CSVThreadParams();
+  params->hwnd = hwnd;
+  params->appIdx = appIdx;
+  CreateThread(NULL, 0, CSVEditorThread, params, 0, NULL);
+}
+
+struct JYThreadParams {
+  HWND hwnd;
+  int appIdx;
+};
+
+static DWORD WINAPI JYEditorThread(LPVOID lpParam) {
+  JYThreadParams *params = (JYThreadParams *)lpParam;
+  HWND hwnd = params->hwnd;
+  int appIdx = params->appIdx;
+  delete params;
+
+  STARTUPINFOW si = { sizeof(si) };
+  PROCESS_INFORMATION pi = { 0 };
+  std::wstring cmd = L"\"d:\\ws\\Ecode\\Application\\JYEditor\\build\\Release\\JYEditor.exe\"";
+  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, L"d:\\ws\\Ecode\\Application\\JYEditor\\build\\Release", &si, &pi)) {
+    HWND foundHwnd = NULL;
+    for (int i = 0; i < 50; ++i) {
+      Sleep(100);
+      EnumData data = { pi.dwProcessId, NULL };
+      EnumWindows(EnumWindowsProc, (LPARAM)&data);
+      if (data.hwnd != NULL) {
+        foundHwnd = data.hwnd;
+        break;
+      }
+    }
+    if (foundHwnd) {
+      PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  }
+  return 0;
+}
+
+void OpenJYEditor(HWND hwnd) {
+  AppTabInfo tab;
+  tab.label = L"JY Editor";
+  tab.type = 4;
+  tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting JY Editor...",
+                             WS_CHILD | WS_VISIBLE | SS_CENTER,
+                             0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+  tab.data = nullptr;
+  g_appTabs.push_back(std::move(tab));
+  int appIdx = static_cast<int>(g_appTabs.size()) - 1;
+  g_activeAppTab = appIdx;
+  g_activeTerminalTab = -1;
+
+  RECT rc;
+  GetClientRect(hwnd, &rc);
+  SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
+
+  g_suppressTabChange = true;
+  size_t bufCount = g_editor->GetBuffers().size();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  g_suppressTabChange = false;
+
+  for (auto &t : g_appTabs) {
+    if (t.hwnd) {
+      ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
+    }
+  }
+  for (auto &t : g_terminalTabs) {
+    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+  }
+
+  UpdateMenu(hwnd);
+  InvalidateRect(hwnd, NULL, FALSE);
+
+  JYThreadParams *params = new JYThreadParams();
+  params->hwnd = hwnd;
+  params->appIdx = appIdx;
+  CreateThread(NULL, 0, JYEditorThread, params, 0, NULL);
 }
 
 static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
@@ -379,6 +688,18 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     }
     break;
   }
+  case IDM_TOOLS_FILE_SEARCH: {
+    OpenFastFileSearch(hwnd);
+    break;
+  }
+  case IDM_TOOLS_CSV_EDITOR: {
+    OpenCSVEditor(hwnd);
+    break;
+  }
+  case IDM_TOOLS_JY_EDITOR: {
+    OpenJYEditor(hwnd);
+    break;
+  }
 
   case IDM_CLI_CONFIGURE: {
     ShowCliDialog(hwnd);
@@ -402,8 +723,6 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         g_activeTerminalTab = termIdx;
         if (g_terminalTabs[termIdx].hwnd) {
           SetFocus(g_terminalTabs[termIdx].hwnd);
-          if (g_terminalTabs[termIdx].view && !g_terminalTabs[termIdx].view->IsStarted())
-            g_terminalTabs[termIdx].view->StartSession(g_terminalTabs[termIdx].shell, {});
         }
       }
     } else if (LOWORD(wParam) >= IDM_CLI_START && LOWORD(wParam) < IDM_CLI_START + 100) {

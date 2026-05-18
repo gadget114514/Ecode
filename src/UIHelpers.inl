@@ -265,6 +265,9 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL, L"New Terminal (powershell)");
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_CMD, L"New Terminal (cmd)");
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_BASH, L"New Terminal (bash)");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_FILE_SEARCH, L"Fast File Search");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_CSV_EDITOR, L"CSV Editor");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_JY_EDITOR, L"JY Editor");
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
