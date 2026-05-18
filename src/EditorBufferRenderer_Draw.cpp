@@ -298,5 +298,8 @@ void EditorBufferRenderer::DrawEditorLines(
     }
   }
 
-  this->m_renderTarget->EndDraw();
+  HRESULT endHr = this->m_renderTarget->EndDraw();
+  if (endHr == D2DERR_RECREATE_TARGET || FAILED(endHr)) {
+    DiscardDeviceResources();
+  }
 }

@@ -79,7 +79,7 @@ void TerminalBuffer::clearAll() {
     clearScreen();
 }
 
-void TerminalBuffer::clearLine(int mode) {
+void TerminalBuffer::clearLine(int mode, const TerminalCell& attrs) {
     pendingWrap_ = false;
     if (screen_.empty()) return;
     Line& line = screen_[cursorRow_];
@@ -87,21 +87,21 @@ void TerminalBuffer::clearLine(int mode) {
     if      (mode == 0) start = cursorColumn_;
     else if (mode == 1) end   = cursorColumn_;
     for (int c = start; c <= end && c < (int)line.size(); ++c)
-        eraseCell(cursorRow_, c);
+        eraseCell(cursorRow_, c, attrs);
 }
 
-void TerminalBuffer::clearScreenMode(int mode) {
+void TerminalBuffer::clearScreenMode(int mode, const TerminalCell& attrs) {
     pendingWrap_ = false;
     if (mode == 3) { history_.clear(); return; }
-    if (mode == 2) { for (int r = 0; r < rows_; ++r) screen_[r] = blankLine(); return; }
+    if (mode == 2) { for (int r = 0; r < rows_; ++r) screen_[r] = blankLine(attrs); return; }
     if (mode == 0) {
-        clearLine(0);
-        for (int r = cursorRow_ + 1; r < rows_; ++r) screen_[r] = blankLine();
+        clearLine(0, attrs);
+        for (int r = cursorRow_ + 1; r < rows_; ++r) screen_[r] = blankLine(attrs);
         return;
     }
     if (mode == 1) {
-        for (int r = 0; r < cursorRow_; ++r) screen_[r] = blankLine();
-        clearLine(1);
+        for (int r = 0; r < cursorRow_; ++r) screen_[r] = blankLine(attrs);
+        clearLine(1, attrs);
     }
 }
 
@@ -266,10 +266,10 @@ void TerminalBuffer::restoreCursor() {
 // ---------------------------------------------------------------------------
 // character editing
 // ---------------------------------------------------------------------------
-void TerminalBuffer::eraseCharacters(int count) {
+void TerminalBuffer::eraseCharacters(int count, const TerminalCell& attrs) {
     pendingWrap_ = false;
     const int end = std::min(columns_ - 1, cursorColumn_ + std::max(1, count) - 1);
-    for (int c = cursorColumn_; c <= end; ++c) eraseCell(cursorRow_, c);
+    for (int c = cursorColumn_; c <= end; ++c) eraseCell(cursorRow_, c, attrs);
 }
 
 void TerminalBuffer::insertCharacters(int count) {
@@ -460,8 +460,16 @@ bool TerminalBuffer::alternateScreenActive() const { return alternateScreenActiv
 // ---------------------------------------------------------------------------
 // private helpers
 // ---------------------------------------------------------------------------
-TerminalBuffer::Line TerminalBuffer::blankLine() const {
-    return Line(columns_, TerminalCell());
+TerminalBuffer::Line TerminalBuffer::blankLine(const TerminalCell& attrs) const {
+    Line line(columns_, attrs);
+    for (auto& cell : line) {
+        cell.ch = L' ';
+        cell.text = L" ";
+        cell.wide = false;
+        cell.wideContinuation = false;
+        cell.softWrapped = false;
+    }
+    return line;
 }
 
 // Unicode character width — combined from termdock + standard wcwidth tables
@@ -549,13 +557,197 @@ void TerminalBuffer::resizeLines(std::vector<Line>& lines, int oldColumns) {
     }
 }
 
-void TerminalBuffer::eraseCell(int row, int column) {
+void TerminalBuffer::eraseCell(int row, int column, const TerminalCell& attrs) {
     if (row < 0 || row >= (int)screen_.size()) return;
     if (column < 0 || column >= (int)screen_[row].size()) return;
     Line& line = screen_[row];
-    if (line[column].wideContinuation && column > 0) line[column-1] = TerminalCell();
-    if (line[column].wide && column + 1 < (int)line.size()) line[column+1] = TerminalCell();
-    line[column] = TerminalCell();
+    auto makeBlank = [&]() {
+        TerminalCell b = attrs;
+        b.ch = L' '; b.text = L" ";
+        b.wide = false; b.wideContinuation = false; b.softWrapped = false;
+        return b;
+    };
+    if (line[column].wideContinuation && column > 0) line[column-1] = makeBlank();
+    if (line[column].wide && column + 1 < (int)line.size()) line[column+1] = makeBlank();
+    line[column] = makeBlank();
+}
+
+void TerminalBuffer::fillRect(int top, int left, int bottom, int right, wchar_t ch, const TerminalCell& attributes) {
+    top    = clamp(top,    0, rows_    - 1);
+    left   = clamp(left,   0, columns_ - 1);
+    bottom = clamp(bottom, 0, rows_    - 1);
+    right  = clamp(right,  0, columns_ - 1);
+    if (top > bottom || left > right) return;
+    for (int r = top; r <= bottom; ++r) {
+        for (int c = left; c <= right; ++c) {
+            if (screen_[r][c].wideContinuation && c > 0)
+                screen_[r][c-1] = TerminalCell();
+            if (screen_[r][c].wide && c + 1 < columns_)
+                screen_[r][c+1] = TerminalCell();
+            TerminalCell cell = attributes;
+            cell.ch = ch;
+            cell.text = std::wstring(1, ch);
+            cell.wide = false;
+            cell.wideContinuation = false;
+            cell.softWrapped = false;
+            if (characterWidth(ch) == 2) {
+                cell.wide = true;
+                if (c + 1 < columns_)
+                    screen_[r][c+1] = TerminalCell();
+            }
+            screen_[r][c] = cell;
+        }
+    }
+}
+
+void TerminalBuffer::eraseRect(int top, int left, int bottom, int right, const TerminalCell& attrs) {
+    top    = clamp(top,    0, rows_    - 1);
+    left   = clamp(left,   0, columns_ - 1);
+    bottom = clamp(bottom, 0, rows_    - 1);
+    right  = clamp(right,  0, columns_ - 1);
+    if (top > bottom || left > right) return;
+    for (int r = top; r <= bottom; ++r)
+        for (int c = left; c <= right; ++c)
+            eraseCell(r, c, attrs);
+}
+
+void TerminalBuffer::copyRect(int top, int left, int bottom, int right,
+                              int destTop, int destLeft) {
+    top    = clamp(top,    0, rows_    - 1);
+    left   = clamp(left,   0, columns_ - 1);
+    bottom = clamp(bottom, 0, rows_    - 1);
+    right  = clamp(right,  0, columns_ - 1);
+    if (top > bottom || left > right) return;
+
+    int width  = right  - left  + 1;
+    int height = bottom - top   + 1;
+
+    // Snapshot source region
+    std::vector<std::vector<TerminalCell>> src(height);
+    for (int r = 0; r < height; ++r)
+        src[r].assign(screen_[top + r].begin() + left,
+                      screen_[top + r].begin() + left + width);
+
+    // Compute destination with overlap-safe iteration
+    int dTop    = clamp(destTop,    0, rows_    - 1);
+    int dLeft   = clamp(destLeft,   0, columns_ - 1);
+    int dBottom = clamp(destTop + height - 1, 0, rows_ - 1);
+    int dRight  = clamp(destLeft + width  - 1, 0, columns_ - 1);
+    if (dTop > dBottom || dLeft > dRight) return;
+
+    // Determine iteration order to avoid self-overlap corruption
+    int rStart, rEnd, rStep;
+    if (destTop <= top) { rStart = 0; rEnd = height; rStep = 1; }
+    else                { rStart = height - 1; rEnd = -1; rStep = -1; }
+
+    int cStart, cEnd, cStep;
+    if (destLeft <= left) { cStart = 0; cEnd = width; cStep = 1; }
+    else                  { cStart = width - 1; cEnd = -1; cStep = -1; }
+
+    for (int r = rStart; r != rEnd; r += rStep) {
+        int dr = dTop + r;
+        for (int c = cStart; c != cEnd; c += cStep) {
+            int dc = dLeft + c;
+            eraseCell(dr, dc);
+            screen_[dr][dc] = src[r][c];
+        }
+    }
+}
+
+void TerminalBuffer::setAttributeChangeExtent(int extent) {
+    attrChangeExtent_ = extent;
+    if (attrChangeExtent_ < 1) attrChangeExtent_ = 1;
+    if (attrChangeExtent_ > 3) attrChangeExtent_ = 3;
+}
+
+int TerminalBuffer::attributeChangeExtent() const {
+    return attrChangeExtent_;
+}
+
+static void applySgrToCell(TerminalCell& cell, const std::vector<int>& sgr) {
+    for (size_t i = 0; i < sgr.size(); ++i) {
+        int v = sgr[i];
+        switch (v) {
+        case 0:  cell = TerminalCell(); break;
+        case 1:  cell.bold = true; break;
+        case 2:  cell.dim = true; break;
+        case 3:  cell.italic = true; break;
+        case 4:  cell.underline = true; break;
+        case 5:  cell.blink = true; break;
+        case 7:  cell.inverse = true; break;
+        case 9:  cell.strikethrough = true; break;
+        case 21: cell.bold = false; break;
+        case 22: cell.bold = false; cell.dim = false; break;
+        case 23: cell.italic = false; break;
+        case 24: cell.underline = false; break;
+        case 25: cell.blink = false; break;
+        case 27: cell.inverse = false; break;
+        case 29: cell.strikethrough = false; break;
+        case 38: case 48: case 58: {
+            TermColor c;
+            if (i + 2 < sgr.size() && sgr[i+1] == 2) {
+                c = TermColor::fromRgb(
+                    (uint8_t)clamp(sgr[i+2], 0, 255),
+                    (uint8_t)clamp(sgr[i+3], 0, 255),
+                    (uint8_t)clamp(sgr[i+4], 0, 255));
+                i += 4;
+            } else if (i + 1 < sgr.size() && sgr[i+1] == 5) {
+                int idx = (i + 2 < sgr.size()) ? sgr[i+2] : 0;
+                c = TermColor::fromRgb(0, 0, 0);
+                (void)idx;
+                i += 2;
+            }
+            if (v == 38) { cell.foreground = c; cell.decorColor = c; }
+            else if (v == 48) cell.background = c;
+            else if (v == 58) cell.decorColor = c;
+            break;
+        }
+        case 39: cell.foreground = DefaultFg(); cell.decorColor = DefaultDecor(); break;
+        case 49: cell.background = DefaultBg(); break;
+        case 59: cell.decorColor = DefaultDecor(); break;
+        default:
+            if (v >= 30 && v <= 37) {
+                cell.foreground = TermColor::fromRgb(0,0,0);
+                cell.decorColor = cell.foreground;
+            } else if (v >= 40 && v <= 47) {
+                cell.background = TermColor::fromRgb(0,0,0);
+            }
+            break;
+        }
+    }
+}
+
+void TerminalBuffer::changeRectAttr(int top, int left, int bottom, int right,
+                                    const std::vector<int>& sgrParams) {
+    top    = clamp(top,    0, rows_    - 1);
+    left   = clamp(left,   0, columns_ - 1);
+    bottom = clamp(bottom, 0, rows_    - 1);
+    right  = clamp(right,  0, columns_ - 1);
+    if (top > bottom || left > right) return;
+    for (int r = top; r <= bottom; ++r)
+        for (int c = left; c <= right; ++c)
+            applySgrToCell(screen_[r][c], sgrParams);
+}
+
+void TerminalBuffer::reverseRectAttr(int top, int left, int bottom, int right) {
+    top    = clamp(top,    0, rows_    - 1);
+    left   = clamp(left,   0, columns_ - 1);
+    bottom = clamp(bottom, 0, rows_    - 1);
+    right  = clamp(right,  0, columns_ - 1);
+    if (top > bottom || left > right) return;
+    for (int r = top; r <= bottom; ++r) {
+        for (int c = left; c <= right; ++c) {
+            auto& cell = screen_[r][c];
+            std::swap(cell.foreground, cell.background);
+            cell.bold          = !cell.bold;
+            cell.dim           = !cell.dim;
+            cell.italic        = !cell.italic;
+            cell.underline     = !cell.underline;
+            cell.blink         = !cell.blink;
+            cell.inverse       = !cell.inverse;
+            cell.strikethrough = !cell.strikethrough;
+        }
+    }
 }
 
 void TerminalBuffer::clampCursor() {

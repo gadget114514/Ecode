@@ -336,7 +336,7 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       // Move Forward (Right)
       Buffer *buf = g_editor->GetActiveBuffer();
       if (buf) {
-        buf->MoveCaret(1);
+        buf->MoveCaretByChar(1);
         EnsureCaretVisible(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);
       }
@@ -346,7 +346,7 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       // Move Backward (Left)
       Buffer *buf = g_editor->GetActiveBuffer();
       if (buf) {
-        buf->MoveCaret(-1);
+        buf->MoveCaretByChar(-1);
         EnsureCaretVisible(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);
       }
@@ -426,10 +426,30 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     } // Copy (standard)
 
     if (wParam == 'D') {
-      // Delete Char
+      // Delete Char (UTF-8 aware)
       Buffer *buf = g_editor->GetActiveBuffer();
       if (buf) {
-        buf->Delete(buf->GetCaretPos(), 1);
+        size_t pos = buf->GetCaretPos();
+        if (buf->HasSelection()) {
+          buf->DeleteSelection();
+        } else if (pos < buf->GetTotalLength()) {
+          std::string text = buf->GetText(pos, 4);
+          size_t nextPos = pos;
+          if (!text.empty()) {
+            unsigned char c = (unsigned char)text[0];
+            if (c < 0x80)
+              nextPos = pos + 1;
+            else if ((c & 0xE0) == 0xC0)
+              nextPos = pos + 2;
+            else if ((c & 0xF0) == 0xE0)
+              nextPos = pos + 3;
+            else if ((c & 0xF8) == 0xF0)
+              nextPos = pos + 4;
+            else
+              nextPos = pos + 1;
+          }
+          buf->Delete(pos, (std::min)(nextPos - pos, buf->GetTotalLength() - pos));
+        }
         EnsureCaretVisible(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);
       }
@@ -527,9 +547,9 @@ static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   if (activeBuffer && chord.empty()) {
     bool movement = true;
     if (wParam == VK_LEFT)
-      activeBuffer->MoveCaret(-1);
+      activeBuffer->MoveCaretByChar(-1);
     else if (wParam == VK_RIGHT)
-      activeBuffer->MoveCaret(1);
+      activeBuffer->MoveCaretByChar(1);
     else if (wParam == VK_UP)
       activeBuffer->MoveCaretUp();
     else if (wParam == VK_DOWN)

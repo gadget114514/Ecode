@@ -167,6 +167,7 @@ struct GrepSearchParams {
     bool useRegex;
     bool matchCase;
 };
+#define WM_DEFERRED_FOCUS (WM_USER + 206)
 
 struct ShellOutput {
   Buffer *buffer;

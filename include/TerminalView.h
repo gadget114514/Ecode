@@ -58,6 +58,11 @@ public:
     void SendInput(const std::string& utf8);
     void SendInput(const std::wstring& text);
 
+    // Set debug log callback (forwards to TerminalEmulator)
+    void SetLogCallback(std::function<void(const std::wstring&)> cb) {
+        emulator_.setLogCallback(std::move(cb));
+    }
+
     // Window class name for RegisterClassEx
     static constexpr const wchar_t* kClassName = L"EcodeTerminalView";
     static bool RegisterWindowClass(HINSTANCE hInst);
@@ -82,7 +87,8 @@ private:
     void ReleaseRenderTarget();
     void UpdateMetrics();
     void DrawCell(ID2D1RenderTarget* rt, int row, int col,
-                  const TerminalCell& cell, bool isCursor, bool cursorVisible);
+                  const TerminalCell& cell, bool isCursor, bool cursorVisible,
+                  bool isSelected = false);
     ID2D1SolidColorBrush* GetBrush(const TermColor& c, float alpha = 1.0f);
     D2D1_COLOR_F ToD2DColor(const TermColor& c, float alpha = 1.0f);
 
@@ -92,6 +98,14 @@ private:
     // Clipboard
     void PasteFromClipboard();
     void OnContextMenu(int screenX, int screenY);
+
+    // Mouse selection
+    void OnLButtonDown(int px, int py);
+    void OnMouseMove(int px, int py);
+    void OnLButtonUp();
+    void BufferCoordFromPoint(int px, int py, int& outRow, int& outCol) const;
+    bool IsSelected(int logRow, int col) const;
+    void CopySelectionToClipboard() const;
 
     // Scrollback
     int  scrollOffset_ = 0;  // lines scrolled back (0 = bottom)
@@ -133,4 +147,11 @@ private:
 
     // Pending hyperlink URL (for Ctrl+click)
     std::wstring pendingHyperlinkUrl_;
+
+    // Selection state
+    bool selecting_    = false;
+    int  selAnchorRow_ = -1;
+    int  selAnchorCol_ = -1;
+    int  selEndRow_    = -1;
+    int  selEndCol_    = -1;
 };
