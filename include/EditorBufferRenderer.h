@@ -12,10 +12,11 @@ using Microsoft::WRL::ComPtr;
 #include <vector>
 
 struct Theme {
+  std::wstring name = L"Light";
   D2D1_COLOR_F background = {1.0f, 1.0f, 1.0f, 1.0f};
   D2D1_COLOR_F foreground = {0.0f, 0.0f, 0.0f, 1.0f};
   D2D1_COLOR_F caret = {0.0f, 0.0f, 0.0f, 1.0f};
-  D2D1_COLOR_F selection = {0.68f, 0.85f, 0.90f, 0.5f}; // LightBlue
+  D2D1_COLOR_F selection = {0.68f, 0.85f, 0.90f, 0.5f};
   D2D1_COLOR_F lineNumbers = {0.5f, 0.5f, 0.5f, 1.0f};
 
   // Syntax
