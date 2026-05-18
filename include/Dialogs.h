@@ -16,6 +16,7 @@ public:
   static void ShowDiredPairsDialog(HWND hwnd);
   static void ShowJumpToLineDialog(HWND hwnd);
   static void ShowMacroGalleryDialog(HWND hwnd);
+  static void ShowThemeManagerDialog(HWND hwnd);
   static std::wstring BrowseForFolder(HWND hwnd);
 
   enum class ConfirmationResult { Save, Discard, Cancel };

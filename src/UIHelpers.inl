@@ -241,7 +241,21 @@ void UpdateMenu(HWND hwnd) {
   HMENU hConfig = CreatePopupMenu();
   AppendMenu(hConfig, MF_STRING, IDM_CONFIG_SETTINGS,
              L10N("menu_config_settings"));
-  AppendMenu(hConfig, MF_STRING, IDM_CONFIG_THEME, L10N("menu_config_theme"));
+
+  // Themes submenu
+  HMENU hThemes = CreatePopupMenu();
+  const auto &themes = SettingsManager::Instance().GetThemes();
+  std::wstring activeTheme = SettingsManager::Instance().GetActiveThemeName();
+  for (size_t i = 0; i < themes.size(); ++i) {
+    UINT flags = MF_STRING;
+    if (themes[i].name == activeTheme) flags |= MF_CHECKED;
+    AppendMenu(hThemes, flags, IDM_THEME_START + i, themes[i].name.c_str());
+  }
+  if (!themes.empty())
+    AppendMenu(hThemes, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hThemes, MF_STRING, IDM_CONFIG_THEME, L10N("menu_config_theme"));
+  AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hThemes, L"Themes");
+
   AppendMenu(hConfig, MF_SEPARATOR, 0, NULL);
   AppendMenu(hConfig, MF_STRING, IDM_CONFIG_EDIT_INIT,
              L10N("menu_config_edit_init"));

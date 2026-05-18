@@ -145,6 +145,7 @@ void HandleDestroy(HWND hwnd);
 #define IDM_DIRED_START 5000
 #define IDM_DIRED_CONFIGURE 705
 #define IDM_BUFFERS_START 1000
+#define IDM_THEME_START 6000
 
 #define IDM_HELP_DOC 801
 #define IDM_HELP_ABOUT 802
