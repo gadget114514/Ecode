@@ -183,7 +183,7 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
 
   Buffer *results = GetBufferByName(L"*Find Results*");
   if (results) {
-    results->DeleteRange(0, results->GetTotalLength());
+    results->Delete(0, results->GetTotalLength());
     for (size_t i = 0; i < m_buffers.size(); i++) {
       if (m_buffers[i].get() == results) {
         SwitchToBuffer(i);
@@ -209,7 +209,7 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
   UpdateMenu(g_mainHwnd);
 
   auto *params = new GrepSearchParams{
-    dir, pattern, extFilter, useRegex, matchCase, NULL
+    dir, pattern, extFilter, useRegex, matchCase
   };
 
   g_grepSearchActive = true;

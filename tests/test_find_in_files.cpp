@@ -10,8 +10,24 @@
 // Simple window proc to handle grep result messages
 LRESULT CALLBACK TestWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   if (msg == WM_GREP_RESULT) {
-    GrepSearchResult *batch = (GrepSearchResult*)lp;
-    if (batch) delete batch;
+    std::string *text = (std::string*)lp;
+    if (text) {
+      Buffer *buf = g_editor ? g_editor->GetBufferByName(L"*Find Results*") : nullptr;
+      if (buf) {
+        buf->Insert(buf->GetTotalLength(), *text);
+      }
+      delete text;
+    }
+    return 0;
+  }
+  if (msg == WM_GREP_COMPLETE) {
+    int totalMatches = (int)wp;
+    g_grepSearchActive = false;
+    Buffer *buf = g_editor ? g_editor->GetBufferByName(L"*Find Results*") : nullptr;
+    if (buf) {
+      std::string done = "\n--- Done. " + std::to_string(totalMatches) + " matches found. ---\n";
+      buf->Insert(buf->GetTotalLength(), done);
+    }
     return 0;
   }
   return DefWindowProc(hwnd, msg, wp, lp);
@@ -46,6 +62,7 @@ int main() {
   }
 
   Editor editor;
+  g_editor = &editor;
   editor.FindInFiles(testDir.wstring(), L"match");
 
   // Run message loop until search completes (async)
@@ -64,20 +81,21 @@ int main() {
     DispatchMessage(&msg);
   }
 
-  // Verify results in the app tab
-  VERIFY(!g_appTabs.empty(), "No grep results tab was created");
-  VERIFY(g_appTabs.back().type == 1, "Grep results tab type mismatch");
+  // Verify results in the *Find Results* buffer
+  Buffer *results = editor.GetBufferByName(L"*Find Results*");
+  VERIFY(results != nullptr, "Find results buffer was not created");
 
-  GrepResultData *data = (GrepResultData*)g_appTabs.back().data;
-  VERIFY(data != nullptr, "Grep result data was not created");
+  std::string content = results->GetText(0, results->GetTotalLength());
+  std::cout << "Grep results:\n" << content << std::endl;
 
-  std::wcout << L"Grep results: " << data->files.size() << L" matches" << std::endl;
-  for (size_t i = 0; i < data->files.size(); i++) {
-    std::wcout << data->files[i] << L"(" << data->lines[i] << L"): "
-               << data->contents[i] << std::endl;
-  }
-
-  VERIFY(data->files.size() >= 3, "Expected at least 3 matches");
+  VERIFY(content.find("file1.txt(1)") != std::string::npos,
+         "file1.txt line 1 missing");
+  VERIFY(content.find("file1.txt(3)") != std::string::npos,
+         "file1.txt line 3 missing");
+  VERIFY(content.find("file2.txt(2)") != std::string::npos,
+         "file2.txt line 2 missing");
+  VERIFY(content.find("Done.") != std::string::npos,
+         "Search did not finish correctly");
 
   // Cleanup
   DestroyWindow(hwnd);
