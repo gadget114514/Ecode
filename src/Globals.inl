@@ -158,6 +158,7 @@ void HandleDestroy(HWND hwnd);
 #define WM_GREP_RESULT   (WM_USER + 202)
 #define WM_GREP_PROGRESS (WM_USER + 203)
 #define WM_GREP_COMPLETE (WM_USER + 204)
+#define WM_DEFERRED_FOCUS (WM_USER + 205)
 
 struct GrepSearchResult {
     std::vector<std::wstring> files;

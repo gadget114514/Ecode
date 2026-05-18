@@ -20,6 +20,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       SetFocus(g_terminalTabs[g_activeTerminalTab].hwnd);
     }
     return 0;
+  case WM_DEFERRED_FOCUS:
+    if (IsWindow((HWND)wParam))
+      SetFocus((HWND)wParam);
+    return 0;
   case WM_SIZE:
     return HandleSize(hwnd, lParam);
   case WM_PAINT:
@@ -284,7 +288,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
         if (g_appTabs[appIdx].hwnd) {
           ShowWindow(g_appTabs[appIdx].hwnd, SW_SHOW);
-          SetFocus(g_appTabs[appIdx].hwnd);
+          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_appTabs[appIdx].hwnd, 0);
         }
         UpdateMenu(hwnd);
       } else if (sel >= termStart && sel < termEnd) {
@@ -299,7 +303,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         g_activeTerminalTab = termIdx;
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
         if (g_terminalTabs[termIdx].hwnd) {
-          SetFocus(g_terminalTabs[termIdx].hwnd);
+          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_terminalTabs[termIdx].hwnd, 0);
         }
       } else if (sel >= 0 && sel < static_cast<int>(bufCount)) {
         // Switch to an editor buffer tab
@@ -309,6 +313,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         g_activeTerminalTab = -1;
         ShowScrollBar(hwnd, SB_BOTH, TRUE);
         g_editor->SwitchToBuffer(static_cast<size_t>(sel));
+        SetFocus(hwnd);
         UpdateMenu(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);
       }

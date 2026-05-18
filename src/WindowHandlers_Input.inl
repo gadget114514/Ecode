@@ -92,6 +92,8 @@ static LRESULT HandlePaint(HWND hwnd) {
 }
 
 static LRESULT HandleChar(HWND hwnd, WPARAM wParam) {
+  if (g_activeTerminalTab >= 0) return 0;
+  if (g_activeAppTab >= 0) return 0;
   if (g_scriptEngine->IsKeyboardCaptured()) {
     wchar_t wc = static_cast<wchar_t>(wParam);
     std::string s;
@@ -165,6 +167,8 @@ std::function<SHORT(int)> g_getKeyState = [](int key) {
 };
 
 static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
+  if (g_activeTerminalTab >= 0) return -1;
+  if (g_activeAppTab >= 0) return -1;
   static bool s_inEscapeSequence = false;
   static bool s_inCtrlX = false; // Add prefix state
 

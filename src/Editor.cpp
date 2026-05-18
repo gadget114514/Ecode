@@ -82,43 +82,10 @@ size_t Editor::OpenJsShell() {
   return m_activeBufferIndex;
 }
 
-static LRESULT CALLBACK GrepListSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-  if (msg == WM_NOTIFY) {
-    LPNMHDR nm = (LPNMHDR)lp;
-    if (nm->code == NM_DBLCLK || nm->code == NM_RETURN) {
-      int sel = ListView_GetNextItem(hwnd, -1, LVNI_SELECTED);
-      if (sel >= 0) {
-        GrepResultData *data = (GrepResultData*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
-        if (data && sel < (int)data->files.size()) {
-          size_t bufIdx = g_editor->OpenFile(data->files[sel]);
-          if (bufIdx != (size_t)-1) {
-            g_editor->SwitchToBuffer(bufIdx);
-            Buffer *buf = g_editor->GetActiveBuffer();
-            if (buf && data->lines[sel] >= 1) {
-              size_t line = (size_t)data->lines[sel] - 1;
-              size_t offset = buf->GetLineOffset(line);
-              buf->SetCaretPos(offset);
-              buf->SetSelectionAnchor(offset);
-              buf->SetScrollLine(line > 20 ? line - 20 : 0);
-              InvalidateRect(g_mainHwnd, NULL, FALSE);
-            }
-          }
-        }
-      }
-      return 0;
-    }
-  }
-  return DefWindowProc(hwnd, msg, wp, lp);
-}
-
-static void SendBatch(HWND hwndListView, std::vector<std::wstring> &files,
-                      std::vector<int> &lines, std::vector<std::wstring> &contents) {
-  if (files.empty()) return;
-  auto *batch = new GrepSearchResult();
-  batch->files.swap(files);
-  batch->lines.swap(lines);
-  batch->contents.swap(contents);
-  PostMessage(g_mainHwnd, WM_GREP_RESULT, (WPARAM)hwndListView, (LPARAM)batch);
+static void SendResultText(const std::string &text) {
+  if (text.empty()) return;
+  auto *batch = new std::string(text);
+  PostMessage(g_mainHwnd, WM_GREP_RESULT, 0, (LPARAM)batch);
 }
 
 static DWORD WINAPI GrepSearchThread(LPVOID param) {
@@ -137,9 +104,7 @@ static DWORD WINAPI GrepSearchThread(LPVOID param) {
     }
   }
 
-  std::vector<std::wstring> batchFiles;
-  std::vector<int> batchLines;
-  std::vector<std::wstring> batchContents;
+  std::string batchText;
   int totalMatches = 0;
   int filesProcessed = 0;
 
@@ -180,22 +145,22 @@ static DWORD WINAPI GrepSearchThread(LPVOID param) {
         if (!file) continue;
         std::string line;
         int lineNum = 0;
+        std::wstring wPath = entry.path().wstring();
         while (std::getline(file, line)) {
           if (line.length() > 4096) break;
           lineNum++;
           if (MatchLine(line)) {
-            batchFiles.push_back(entry.path().wstring());
-            batchLines.push_back(lineNum);
-            batchContents.push_back(StringToWString(line));
+            batchText += WStringToString(wPath) + "(" + std::to_string(lineNum) + "): " + line + "\n";
             totalMatches++;
-            if (batchFiles.size() >= 50) {
-              SendBatch(params->hwndListView, batchFiles, batchLines, batchContents);
+            if (batchText.length() >= 4096) {
+              SendResultText(batchText);
+              batchText.clear();
             }
           }
         }
         filesProcessed++;
         if (filesProcessed % 25 == 0) {
-          PostMessage(g_mainHwnd, WM_GREP_PROGRESS, (WPARAM)params->hwndListView, filesProcessed);
+          PostMessage(g_mainHwnd, WM_GREP_PROGRESS, 0, filesProcessed);
         }
       }
     }
@@ -204,8 +169,8 @@ static DWORD WINAPI GrepSearchThread(LPVOID param) {
     DebugLog("GrepSearchThread - Exception during search", LOG_ERROR);
   }
 
-  SendBatch(params->hwndListView, batchFiles, batchLines, batchContents);
-  PostMessage(g_mainHwnd, WM_GREP_COMPLETE, (WPARAM)params->hwndListView, totalMatches);
+  SendResultText(batchText);
+  PostMessage(g_mainHwnd, WM_GREP_COMPLETE, totalMatches, 0);
 
   delete params;
   return 0;
@@ -215,36 +180,36 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
                          const std::wstring &extFilter,
                          bool useRegex, bool matchCase) {
   extern HWND g_mainHwnd;
-  extern std::vector<AppTabInfo> g_appTabs;
-  extern int g_activeAppTab;
 
-  HWND hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
-      WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL | LVS_NOSORTHEADER,
-      0, 0, 100, 100, g_mainHwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+  Buffer *results = GetBufferByName(L"*Find Results*");
+  if (results) {
+    results->DeleteRange(0, results->GetTotalLength());
+    for (size_t i = 0; i < m_buffers.size(); i++) {
+      if (m_buffers[i].get() == results) {
+        SwitchToBuffer(i);
+        break;
+      }
+    }
+  } else {
+    auto buf = std::make_unique<Buffer>();
+    buf->SetPath(L"*Find Results*");
+    buf->SetScratch(true);
+    results = buf.get();
+    m_buffers.push_back(std::move(buf));
+    SwitchToBuffer(m_buffers.size() - 1);
+  }
 
-  LVCOLUMNW lvc = {0};
-  lvc.mask = LVCF_TEXT | LVCF_WIDTH;
-  lvc.cx = 300; lvc.pszText = L"File"; ListView_InsertColumn(hListView, 0, &lvc);
-  lvc.cx = 60;  lvc.pszText = L"Line"; ListView_InsertColumn(hListView, 1, &lvc);
-  lvc.cx = 500; lvc.pszText = L"Content"; ListView_InsertColumn(hListView, 2, &lvc);
-
-  auto *grepData = new GrepResultData();
-  SetWindowLongPtr(hListView, GWLP_USERDATA, (LONG_PTR)grepData);
-  SetWindowLongPtr(hListView, GWLP_WNDPROC, (LONG_PTR)GrepListSubclassProc);
-
-  AppTabInfo tab;
-  tab.hwnd = hListView;
-  tab.label = L"Grep: " + pattern + L" (searching...)";
-  tab.type = 1;
-  tab.data = grepData;
-  g_appTabs.push_back(std::move(tab));
-  int appIdx = static_cast<int>(g_appTabs.size()) - 1;
-  g_activeAppTab = appIdx;
+  std::string header = "Grep: \"" + WStringToString(pattern) + "\" in " + WStringToString(dir) + "\n";
+  if (!extFilter.empty())
+    header += "Filter: " + WStringToString(extFilter) + "\n";
+  header += "\n";
+  results->Insert(0, header);
+  results->SetCaretPos(results->GetTotalLength());
+  results->SetSelectionAnchor(results->GetCaretPos());
   UpdateMenu(g_mainHwnd);
-  UpdateTabs(g_mainHwnd);
 
   auto *params = new GrepSearchParams{
-    dir, pattern, extFilter, useRegex, matchCase, hListView
+    dir, pattern, extFilter, useRegex, matchCase, NULL
   };
 
   g_grepSearchActive = true;
@@ -256,6 +221,7 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
 
 void Editor::CancelFindInFiles() {
   InterlockedExchange(&g_grepCancelFlag, 1);
+  g_grepSearchActive = false;
 }
 
 void Editor::FindFile(const std::wstring &pattern, const std::wstring &dir) {
@@ -513,17 +479,18 @@ void Editor::TagJump() {
               int lineNum = std::stoi(lineStr);
               std::wstring wFilename = StringToWString(filename);
               
-              // Resolve relative to project path or active buffer's dir
-              std::wstring basePath = active->GetPath();
-              if (basePath.empty() || basePath[0] == L'*') {
-                  basePath = SettingsManager::Instance().GetProjectDirectory();
-              }
-              
-              if (!basePath.empty()) {
-                  size_t lastSlash = basePath.find_last_of(L"\\/");
-                  if (lastSlash != std::wstring::npos) {
-                      std::wstring dir = basePath.substr(0, lastSlash + 1);
-                      wFilename = dir + wFilename;
+              // If not an absolute path, resolve relative to active buffer/project dir
+              if (wFilename.length() < 2 || (wFilename[1] != L':' && wFilename[0] != L'\\')) {
+                  std::wstring basePath = active->GetPath();
+                  if (basePath.empty() || basePath[0] == L'*') {
+                      basePath = SettingsManager::Instance().GetProjectDirectory();
+                  }
+                  if (!basePath.empty()) {
+                      size_t lastSlash = basePath.find_last_of(L"\\/");
+                      if (lastSlash != std::wstring::npos) {
+                          std::wstring dir = basePath.substr(0, lastSlash + 1);
+                          wFilename = dir + wFilename;
+                      }
                   }
               }
 
