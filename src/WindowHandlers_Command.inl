@@ -144,10 +144,18 @@ static DWORD WINAPI FastFileSearchThread(LPVOID lpParam) {
   int appIdx = params->appIdx;
   delete params;
 
+  wchar_t modulePath[MAX_PATH];
+  GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+  std::wstring dir = modulePath;
+  size_t pos = dir.find_last_of(L"\\/");
+  if (pos != std::wstring::npos) dir = dir.substr(0, pos + 1);
+  std::wstring exePath = dir + L"Application\\FastFileSearch\\build\\Release\\FastFileSearch.exe";
+  std::wstring workDir = dir + L"Application\\FastFileSearch\\build\\Release";
+
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"d:\\ws\\Ecode\\Application\\FastFileSearch\\build\\Release\\FastFileSearch.exe\"";
-  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, L"d:\\ws\\Ecode\\Application\\FastFileSearch\\build\\Release", &si, &pi)) {
+  std::wstring cmd = L"\"" + exePath + L"\"";
+  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
       Sleep(100);
@@ -227,10 +235,18 @@ static DWORD WINAPI CSVEditorThread(LPVOID lpParam) {
   int appIdx = params->appIdx;
   delete params;
 
+  wchar_t modulePath[MAX_PATH];
+  GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+  std::wstring dir = modulePath;
+  size_t pos = dir.find_last_of(L"\\/");
+  if (pos != std::wstring::npos) dir = dir.substr(0, pos + 1);
+  std::wstring exePath = dir + L"Application\\CSVEditor\\build\\Release\\CSVEditor.exe";
+  std::wstring workDir = dir + L"Application\\CSVEditor\\build\\Release";
+
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"d:\\ws\\Ecode\\Application\\CSVEditor\\build\\Release\\CSVEditor.exe\"";
-  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, L"d:\\ws\\Ecode\\Application\\CSVEditor\\build\\Release", &si, &pi)) {
+  std::wstring cmd = L"\"" + exePath + L"\"";
+  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
       Sleep(100);
@@ -301,10 +317,18 @@ static DWORD WINAPI JYEditorThread(LPVOID lpParam) {
   int appIdx = params->appIdx;
   delete params;
 
+  wchar_t modulePath[MAX_PATH];
+  GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+  std::wstring dir = modulePath;
+  size_t pos = dir.find_last_of(L"\\/");
+  if (pos != std::wstring::npos) dir = dir.substr(0, pos + 1);
+  std::wstring exePath = dir + L"Application\\JYEditor\\build\\Release\\JYEditor.exe";
+  std::wstring workDir = dir + L"Application\\JYEditor\\build\\Release";
+
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"d:\\ws\\Ecode\\Application\\JYEditor\\build\\Release\\JYEditor.exe\"";
-  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, L"d:\\ws\\Ecode\\Application\\JYEditor\\build\\Release", &si, &pi)) {
+  std::wstring cmd = L"\"" + exePath + L"\"";
+  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
       Sleep(100);
