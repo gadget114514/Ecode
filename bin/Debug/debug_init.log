@@ -2038,3 +2038,812 @@ ScriptEngine::HandleBinding: Alt+X
 [INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
 [INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
 [INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=815 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=793 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1441 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=832 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1458 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1457 height=832 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=810 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1455 height=831 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=809 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1347 height=778 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=756 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1209 height=711 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=689 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1102 height=652 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=630 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1074 height=648 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=626 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1010 height=636 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=614 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=996 height=636 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=614 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=990 height=639 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=617 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=988 height=640 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=618 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=986 height=644 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=622 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=983 height=647 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=625 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=983 height=649 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=627 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=982 height=650 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=628 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=980 height=657 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=635 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=979 height=662 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=640 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=669 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=647 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=672 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=650 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=675 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=653 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=676 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=654 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=678 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] ScriptEngine::HandleBinding: Alt+A
+[INFO]   Found binding -> aiComplete
+[INFO] --> Entering js_editor_show_minibuffer
+[INFO] js_editor_show_minibuffer: prompt=AI Instruction: mode=2
+[INFO]   g_mainHwnd=4591230 g_minibufferHwnd=7998624
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=1
+[INFO]   Minibuffer Layout: mbTop=632 mbHeight=24 promptWidth=77
+[INFO]   WM_SIZE sent, result=0
+[INFO]   ShowWindow mb=24 prompt=24
+[INFO] <-- Exiting js_editor_show_minibuffer
+[INFO] Minibuffer: Return pressed. Input='' Mode=2
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=661 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=639 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=661 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=639 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=661 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=639 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=661 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=639 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=661 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=639 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=678 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=678 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=678 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=978 height=678 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=656 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Debug\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Debug\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Debug\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Debug\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Debug\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0

@@ -388,6 +388,10 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
 
     TermColor fg = cell.foreground.isDefault ? DefaultFg() : cell.foreground;
     TermColor bg = cell.background.isDefault ? DefaultBg() : cell.background;
+    TermColor dc = cell.decorColor.isDefault ? fg : cell.decorColor;
+
+    // Apply inverse (reverse video) at render time — swap fg/bg
+    if (cell.inverse) std::swap(fg, bg);
 
     // Draw background
     if (!bg.isDefault || isCursor) {
@@ -410,7 +414,6 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
 
     // Underline
     if (cell.underline) {
-        TermColor dc = cell.decorColor.isDefault ? fg : cell.decorColor;
         if (auto* b = GetBrush(dc)) {
             float uy = y + baseline_ + 1.5f;
             rt->DrawLine({x, uy}, {x + w, uy}, b, 1.0f);
@@ -419,7 +422,6 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
 
     // Strikethrough
     if (cell.strikethrough) {
-        TermColor dc = cell.decorColor.isDefault ? fg : cell.decorColor;
         if (auto* b = GetBrush(dc)) {
             float sy = y + baseline_ * 0.5f;
             rt->DrawLine({x, sy}, {x + w, sy}, b, 1.0f);

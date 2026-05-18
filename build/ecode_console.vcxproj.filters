@@ -4,6 +4,9 @@
     <ClCompile Include="D:\ws\Ecode\src\Buffer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\ConPtySession.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\Dialogs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -40,7 +43,25 @@
     <ClCompile Include="D:\ws\Ecode\src\SettingsManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\TerminalBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\TerminalEmulator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\src\TerminalView.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\FatReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\MFTReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\exFatReader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="D:\ws\Ecode\src-duktape\duktape.c">

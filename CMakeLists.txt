@@ -14,9 +14,12 @@ endif()
 
 # Include directories
 include_directories(include)
+include_directories(FastFileSearch/src)
 
 # Source files
 file(GLOB SOURCES "src/*.cpp")
+file(GLOB FASTFS_SOURCES "FastFileSearch/src/MFTReader.cpp" "FastFileSearch/src/FatReader.cpp" "FastFileSearch/src/exFatReader.cpp")
+list(APPEND SOURCES ${FASTFS_SOURCES})
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/test_piecetable.cpp")
 set(DUKTAPE_SOURCES "src-duktape/duktape.c")
 set(RESOURCES "src/Ecode.rc")

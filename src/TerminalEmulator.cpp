@@ -435,12 +435,9 @@ void TerminalEmulator::handleSgr(const std::vector<std::wstring>& parts) {
         case 5:  // blink (terminalpp)
             currentAttrs_.blink = true;
             break;
-        case 7:  // inverse
-            if (!isInverseMode_) {
-                isInverseMode_ = true;
-                currentAttrs_.inverse = true;
-                std::swap(currentAttrs_.foreground, currentAttrs_.background);
-            }
+        case 7:  // inverse — flag only, renderer swaps fg/bg at draw time
+            isInverseMode_ = true;
+            currentAttrs_.inverse = true;
             break;
         case 9:  // strikethrough (terminalpp)
             currentAttrs_.strikethrough = true;
@@ -465,11 +462,8 @@ void TerminalEmulator::handleSgr(const std::vector<std::wstring>& parts) {
             currentAttrs_.blink = false;
             break;
         case 27: // inverse off
-            if (isInverseMode_) {
-                isInverseMode_ = false;
-                currentAttrs_.inverse = false;
-                std::swap(currentAttrs_.foreground, currentAttrs_.background);
-            }
+            isInverseMode_ = false;
+            currentAttrs_.inverse = false;
             break;
         case 29: // strikethrough off (terminalpp)
             currentAttrs_.strikethrough = false;

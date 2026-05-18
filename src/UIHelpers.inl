@@ -135,15 +135,33 @@ void UpdateTabs(HWND hwnd) {
     tie.pszText = (LPWSTR)name.c_str();
     TabCtrl_InsertItem(g_tabHwnd, static_cast<int>(i), &tie);
   }
-  // Append the terminal tab after all buffer tabs
-  g_terminalTabIndex = static_cast<int>(buffers.size());
-  TCITEMW tci = {0};
-  tci.mask = TCIF_TEXT;
-  tci.pszText = const_cast<LPWSTR>(L"Terminal");
-  TabCtrl_InsertItem(g_tabHwnd, g_terminalTabIndex, &tci);
+  // Append all app tabs after buffer tabs
+  int appStart = static_cast<int>(buffers.size());
+  for (size_t i = 0; i < g_appTabs.size(); ++i) {
+    TCITEMW tci = {0};
+    tci.mask = TCIF_TEXT;
+    tci.pszText = (LPWSTR)g_appTabs[i].label.c_str();
+    TabCtrl_InsertItem(g_tabHwnd, appStart + static_cast<int>(i), &tci);
+  }
 
-  // Restore selection (don't activate terminal tab during UpdateTabs)
-  int curSel = static_cast<int>(g_editor->GetActiveBufferIndex());
+  // Append all terminal tabs after app tabs
+  int termStart = appStart + static_cast<int>(g_appTabs.size());
+  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
+    TCITEMW tci = {0};
+    tci.mask = TCIF_TEXT;
+    tci.pszText = (LPWSTR)g_terminalTabs[i].label.c_str();
+    TabCtrl_InsertItem(g_tabHwnd, termStart + static_cast<int>(i), &tci);
+  }
+
+  // Restore selection
+  int curSel;
+  if (g_activeAppTab >= 0) {
+    curSel = appStart + g_activeAppTab;
+  } else if (g_activeTerminalTab >= 0) {
+    curSel = termStart + g_activeTerminalTab;
+  } else {
+    curSel = static_cast<int>(g_editor->GetActiveBufferIndex());
+  }
   TabCtrl_SetCurSel(g_tabHwnd, curSel);
 }
 
@@ -200,6 +218,8 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_REPLACE, L"Replace");
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND_IN_FILES,
              L"Find in Files...\tC-S-f");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND_FILE,
+             L"Find File...\tC-S-F");
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_GOTO, L"Go to Line...\tAlt+G");
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_TOGGLE_BOX,
              L"Box Selection Mode\tAlt+Shift+Drag");
@@ -240,6 +260,11 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_RUN_MACRO,
              L10N("menu_tools_run_macro"));
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_CONSOLE, L10N("menu_tools_console"));
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_SHELL_MODE, L"Shell Mode");
+  AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL, L"New Terminal (powershell)");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_CMD, L"New Terminal (cmd)");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_BASH, L"New Terminal (bash)");
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
@@ -291,18 +316,57 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hAi, MF_STRING, IDM_TOOLS_AI_CONSOLE, L"AI Agents Console\tAlt+I");
   AppendMenu(hAi, MF_STRING, IDM_TOOLS_AI_SET_KEY, L"Configure Server Keys...");
 
+  // CLI Menu
+  HMENU hCli = CreatePopupMenu();
+  const auto &cliEntries = SettingsManager::Instance().GetCliEntries();
+  for (size_t i = 0; i < cliEntries.size(); ++i) {
+    std::wstring text = cliEntries[i].command + L"  →  " + cliEntries[i].folder;
+    AppendMenu(hCli, MF_STRING, IDM_CLI_START + i, text.c_str());
+  }
+  if (!cliEntries.empty())
+    AppendMenu(hCli, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hCli, MF_STRING, IDM_CLI_CONFIGURE, L"Configure CLI Entries...");
+
+  // Terminals Menu
+  HMENU hTerminals = CreatePopupMenu();
+  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
+    UINT flags = MF_STRING;
+    if (g_activeTerminalTab == static_cast<int>(i)) flags |= MF_CHECKED;
+    AppendMenu(hTerminals, flags, IDM_TERMINALS_START + i, g_terminalTabs[i].label.c_str());
+  }
+
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hFile, L10N("menu_file"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hEdit, L10N("menu_edit"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hView, L10N("menu_view"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hConfig, L10N("menu_config"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hTools, L10N("menu_tools"));
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hAi, L"AI");
+  if (SettingsManager::Instance().IsShowAI())
+    AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hAi, L"AI");
+  else
+    DestroyMenu(hAi);
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hTerminals, L"Terminals");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hHelp, L10N("menu_help"));
 
   SetMenu(hwnd, hMenu);
-  SetWindowText(hwnd, L10N("title"));
+  // Set window title: "Ecode - {current file / working directory / tab name}"
+  std::wstring title = L"Ecode";
+  if (g_activeTerminalTab >= 0) {
+    size_t t = static_cast<size_t>(g_activeTerminalTab);
+    if (t < g_terminalTabs.size() && !g_terminalTabs[t].label.empty())
+      title = L"Ecode - " + g_terminalTabs[t].label;
+  } else {
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf) {
+      std::wstring name = buf->GetPath();
+      if (name.empty())
+        name = buf->IsScratch() ? L"Scratch" : L"Untitled";
+      title = L"Ecode - " + name;
+    }
+  }
+  SetWindowText(hwnd, title.c_str());
   UpdateScrollbars(hwnd);
   UpdateTabs(hwnd);
 }

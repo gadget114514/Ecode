@@ -123,8 +123,8 @@ void Localization::LoadTranslations() {
   jp["menu_file_save_as"] = L"名前を付けて保存(&A)...";
   jp["menu_file_close"] = L"閉じる(&C)";
   jp["menu_file_scratch"] = L"新しいスクラッチバッファ(&S)";
-  jp["menu_file_recent"] = L"譛霑台ｽｿ縺｣縺溘ヵ繧｡繧､繝ｫ(&R)";
-  jp["menu_file_recent_empty"] = L"(螻･豁ｴ縺ｪ縺・";
+  jp["menu_file_recent"] = L"最近使ったファイル(&R)";
+  jp["menu_file_recent_empty"] = L"(空)";
   jp["menu_file_exit"] = L"終了(&X)";
 
   jp["menu_edit"] = L"編集(&E)";

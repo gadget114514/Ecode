@@ -19,7 +19,10 @@ public:
   void NewFile(const std::string &name = "Untitled");
   size_t OpenShell(const std::wstring &cmd);
   size_t OpenJsShell();
-  void FindInFiles(const std::wstring &dir, const std::wstring &pattern);
+  void FindInFiles(const std::wstring &dir, const std::wstring &pattern,
+                   const std::wstring &extFilter = L"",
+                   bool useRegex = false, bool matchCase = false);
+  void FindFile(const std::wstring &pattern, const std::wstring &dir);
   void CloseBuffer(size_t index);
 
   void SwitchToBuffer(size_t index);

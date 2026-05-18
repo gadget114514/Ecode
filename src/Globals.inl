@@ -51,6 +51,8 @@ void UpdateTabs(HWND hwnd);
 void EnsureCaretVisible(HWND hwnd);
 bool PromptSaveBuffer(HWND hwnd, Buffer *buf);
 void HideMinibuffer();
+void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring &label = L"");
+void ShowCliDialog(HWND hwnd);
 
 enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
 extern int g_currentLogLevel;
@@ -112,12 +114,16 @@ void HandleDestroy(HWND hwnd);
 #define IDM_SHELL_ENC_UTF8 504
 #define IDM_SHELL_ENC_SJIS 505
 #define IDM_EDIT_FIND_IN_FILES 506
+#define IDM_EDIT_FIND_FILE 215
 #define IDM_TOOLS_AI_ASSISTANT 507
 #define IDM_TOOLS_AI_CONSOLE 508
 #define IDM_TOOLS_AI_SET_KEY 509
 #define IDM_AI_MANAGER 510
 #define IDM_AI_SETUP_WIZARD 511
 #define IDM_TOOLS_TERMINAL 512
+#define IDM_TOOLS_SHELL_MODE 513
+#define IDM_TOOLS_TERMINAL_CMD 514
+#define IDM_TOOLS_TERMINAL_BASH 515
 
 #define IDM_LANG_EN 601
 #define IDM_LANG_JP 602
@@ -127,7 +133,11 @@ void HandleDestroy(HWND hwnd);
 
 #define IDM_BUFFERS_LIST 701
 #define IDM_TAB_COPY_PATH 702
+#define IDM_TAB_CLOSE_TERMINAL 703
+#define IDM_CLI_CONFIGURE 704
 #define IDM_RECENT_START 2000
+#define IDM_CLI_START 3000
+#define IDM_TERMINALS_START 4000
 #define IDM_BUFFERS_START 1000
 
 #define IDM_HELP_DOC 801
@@ -160,10 +170,28 @@ extern Editor *g_editor;
 extern EditorBufferRenderer *g_renderer;
 extern ScriptEngine *g_scriptEngine;
 extern LspClient *g_lspClient;
-extern TerminalView *g_terminalView;
-extern HWND g_terminalViewHwnd;
-extern int  g_terminalTabIndex;
+struct TerminalTabInfo {
+    TerminalView* view = nullptr;
+    HWND hwnd = nullptr;
+    std::wstring shell;
+    std::wstring label;
+};
+extern std::vector<TerminalTabInfo> g_terminalTabs;
+extern int g_activeTerminalTab; // -1 = no terminal active, 0+ = index in g_terminalTabs
+
+struct AppTabInfo {
+    HWND hwnd = nullptr;
+    std::wstring label;
+    int type; // 0 = file search, 1 = grep results
+    void *data = nullptr; // type-specific data (e.g. ListView HWND or result list)
+};
+extern std::vector<AppTabInfo> g_appTabs;
+extern int g_activeAppTab; // -1 = no app tab active, 0+ = index in g_appTabs
 extern bool g_isDragging;
+extern bool g_isDraggingTab;
+extern int  g_dragTabFrom;
+extern bool g_suppressTabChange;
+extern WNDPROC g_oldTabProc;
 extern UINT g_uFindMsgString;
 extern FINDREPLACEW g_fr;
 extern WCHAR g_szFindWhat[256];
