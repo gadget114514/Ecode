@@ -19,9 +19,10 @@ struct TermColor {
 };
 
 // Default terminal palette (Windows Terminal / xterm colors)
-inline TermColor DefaultFg()   noexcept { return TermColor::fromRgb(204, 204, 204); }
-inline TermColor DefaultBg()   noexcept { return TermColor::fromRgb(12,  12,  12);  }
-inline TermColor DefaultDecor() noexcept { return TermColor::fromRgb(204, 204, 204); }
+// isDefault stays true so DrawCell can skip rendering the background for blank cells.
+inline TermColor DefaultFg()    noexcept { TermColor c; c.r=204; c.g=204; c.b=204; return c; }
+inline TermColor DefaultBg()    noexcept { TermColor c; c.r=12;  c.g=12;  c.b=12;  return c; }
+inline TermColor DefaultDecor() noexcept { TermColor c; c.r=204; c.g=204; c.b=204; return c; }
 
 // ---------------------------------------------------------------------------
 // TerminalCell — one character cell in the terminal grid

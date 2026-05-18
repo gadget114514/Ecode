@@ -155,6 +155,7 @@ void HandleDestroy(HWND hwnd);
 #define WM_SHELL_OUTPUT (WM_USER + 101)
 #define WM_EMBED_APP (WM_USER + 200)
 #define WM_EMBED_TERMINAL (WM_USER + 201)
+#define WM_DEFERRED_FOCUS (WM_USER + 205)
 
 struct ShellOutput {
   Buffer *buffer;

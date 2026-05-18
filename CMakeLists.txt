@@ -217,6 +217,15 @@ target_link_libraries(test_shortcuts
     dwrite
 )
 
+add_executable(test_string_helpers
+    tests/test_string_helpers.cpp
+)
+
+add_executable(test_localization
+    tests/test_localization.cpp
+    src/Localization.cpp
+)
+
 # Libraries to link
 target_link_libraries(ecode 
     user32 
@@ -256,6 +265,8 @@ set_target_properties(test_visual_wrap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OU
 set_target_properties(test_find_in_files PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_shortcuts PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_string_helpers PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_localization PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 
 # Copy scripts directory to output
 add_custom_command(TARGET ecode POST_BUILD

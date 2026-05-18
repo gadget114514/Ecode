@@ -26,8 +26,8 @@ public:
     void resize(int columns, int rows);
     void clearScreen();
     void clearAll();
-    void clearLine(int mode);       // 0=to EOL, 1=to BOL, 2=whole
-    void clearScreenMode(int mode); // 0=to EOS, 1=to BOS, 2=all, 3=history
+    void clearLine(int mode, const TerminalCell& attrs = TerminalCell());       // 0=to EOL, 1=to BOL, 2=whole
+    void clearScreenMode(int mode, const TerminalCell& attrs = TerminalCell()); // 0=to EOS, 1=to BOS, 2=all, 3=history
 
     // --- character output ---
     void putChar(wchar_t ch, const TerminalCell& attributes = TerminalCell());
@@ -50,9 +50,22 @@ public:
     void restoreCursor();
 
     // --- character editing ---
-    void eraseCharacters(int count);
+    void eraseCharacters(int count, const TerminalCell& attrs = TerminalCell());
     void insertCharacters(int count);
     void deleteCharacters(int count);
+
+    // --- rectangle operations (DECCRA, DECERA, DECFRA, DECSERA, DECCARA, DECRARA) ---
+    void fillRect(int top, int left, int bottom, int right, wchar_t ch, const TerminalCell& attributes = TerminalCell());
+    void eraseRect(int top, int left, int bottom, int right, const TerminalCell& attrs = TerminalCell());
+    void copyRect(int top, int left, int bottom, int right,
+                  int destTop, int destLeft);
+    void changeRectAttr(int top, int left, int bottom, int right,
+                        const std::vector<int>& sgrParams);
+    void reverseRectAttr(int top, int left, int bottom, int right);
+
+    // --- attribute change extent (DECSACE) ---
+    void setAttributeChangeExtent(int extent);
+    int  attributeChangeExtent() const;
 
     // --- line editing ---
     void insertLines(int count);
@@ -125,10 +138,10 @@ public:
     static int characterWidth(const std::wstring& text);
 
 private:
-    Line blankLine() const;
+    Line blankLine(const TerminalCell& attrs = TerminalCell()) const;
     void normalizeWideCells(Line& line);
     void resizeLines(std::vector<Line>& lines, int oldColumns);
-    void eraseCell(int row, int column);
+    void eraseCell(int row, int column, const TerminalCell& attrs = TerminalCell());
     void clampCursor();
     void trimHistory();
 
@@ -161,6 +174,7 @@ private:
     // modes
     bool originMode_     = false;
     bool autoWrapEnabled_= true;
+    int  attrChangeExtent_ = 2;  // DECSACE: 1=stream, 2=rect, 3=line
     bool pendingWrap_    = false;
     bool alternateScreenActive_ = false;
 
