@@ -7,6 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Define Unicode for Win32
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Treat all source files as UTF-8 on MSVC (avoids encoding errors with Unicode literals)
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
+
 # Include directories
 include_directories(include)
 

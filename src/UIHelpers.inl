@@ -135,8 +135,17 @@ void UpdateTabs(HWND hwnd) {
     tie.pszText = (LPWSTR)name.c_str();
     TabCtrl_InsertItem(g_tabHwnd, static_cast<int>(i), &tie);
   }
-  TabCtrl_SetCurSel(g_tabHwnd,
-                    static_cast<int>(g_editor->GetActiveBufferIndex()));
+
+  // Append the terminal tab after all buffer tabs
+  g_terminalTabIndex = static_cast<int>(buffers.size());
+  TCITEMW tci = {0};
+  tci.mask = TCIF_TEXT;
+  tci.pszText = const_cast<LPWSTR>(L"Terminal");
+  TabCtrl_InsertItem(g_tabHwnd, g_terminalTabIndex, &tci);
+
+  // Restore selection (don't activate terminal tab during UpdateTabs)
+  int curSel = static_cast<int>(g_editor->GetActiveBufferIndex());
+  TabCtrl_SetCurSel(g_tabHwnd, curSel);
 }
 
 void UpdateMenu(HWND hwnd) {

@@ -41,6 +41,7 @@ namespace fs = std::filesystem;
 #include "../include/LspClient.h"
 #include "../include/ScriptEngine.h"
 #include "../include/SettingsManager.h"
+#include "../include/TerminalView.h"
 
 // Forward declarations
 class Buffer;
@@ -116,6 +117,7 @@ void HandleDestroy(HWND hwnd);
 #define IDM_TOOLS_AI_SET_KEY 509
 #define IDM_AI_MANAGER 510
 #define IDM_AI_SETUP_WIZARD 511
+#define IDM_TOOLS_TERMINAL 512
 
 #define IDM_LANG_EN 601
 #define IDM_LANG_JP 602
@@ -158,6 +160,9 @@ extern Editor *g_editor;
 extern EditorBufferRenderer *g_renderer;
 extern ScriptEngine *g_scriptEngine;
 extern LspClient *g_lspClient;
+extern TerminalView *g_terminalView;
+extern HWND          g_terminalViewHwnd;
+extern int           g_terminalTabIndex;
 extern bool g_isDragging;
 extern UINT g_uFindMsgString;
 extern FINDREPLACEW g_fr;

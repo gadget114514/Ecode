@@ -85,6 +85,13 @@ static LRESULT HandleCreate(HWND hwnd) {
   g_uFindMsgString = RegisterWindowMessageW(FINDMSGSTRINGW);
   DragAcceptFiles(hwnd, TRUE);
 
+  // --- Terminal tab ---
+  TerminalView::RegisterWindowClass(GetModuleHandle(NULL));
+  g_terminalView     = new TerminalView();
+  g_terminalViewHwnd = g_terminalView->Create(hwnd);
+  ShowWindow(g_terminalViewHwnd, SW_HIDE);
+  // Terminal tab is appended after all buffer tabs via UpdateTabs()
+
   auto &settings = SettingsManager::Instance();
   settings.Load();
 
@@ -173,9 +180,20 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
                rcStatus.right - rcStatus.left - 4,
                rcStatus.bottom - rcStatus.top - 4, TRUE);
   }
+  int safetyMargin  = 50;
+  int contentTop    = tabHeight;
+  int contentHeight = (int)height - tabHeight - statusHeight - minibufferHeight - safetyMargin;
+  int contentWidth  = (int)width  - treeWidth;
+
   g_renderer->SetTopOffset((float)tabHeight);
   g_renderer->SetLeftOffset((float)treeWidth);
   g_renderer->Resize(width, height);
+
+  // Position terminal view to cover the same content area as the editor
+  if (g_terminalViewHwnd)
+    MoveWindow(g_terminalViewHwnd, treeWidth, contentTop,
+               contentWidth, contentHeight + safetyMargin, TRUE);
+
   UpdateScrollbars(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
   return 0;
