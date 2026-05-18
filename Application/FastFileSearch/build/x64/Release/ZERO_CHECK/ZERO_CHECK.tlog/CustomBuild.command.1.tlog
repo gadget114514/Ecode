@@ -1,0 +1,10 @@
+^D:\WS\FASTFILESEARCH\BUILD\CMAKEFILES\3063142E3BC1448F65393E9BE96E5447\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/ws/FastFileSearch -BD:/ws/FastFileSearch/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/ws/FastFileSearch/build/FastFileSearch.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
