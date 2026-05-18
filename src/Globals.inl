@@ -160,25 +160,12 @@ void HandleDestroy(HWND hwnd);
 #define WM_GREP_COMPLETE (WM_USER + 204)
 #define WM_DEFERRED_FOCUS (WM_USER + 205)
 
-struct GrepSearchResult {
-    std::vector<std::wstring> files;
-    std::vector<int> lines;
-    std::vector<std::wstring> contents;
-};
-
-struct GrepResultData {
-    std::vector<std::wstring> files;
-    std::vector<int> lines;
-    std::vector<std::wstring> contents;
-};
-
 struct GrepSearchParams {
     std::wstring dir;
     std::wstring pattern;
     std::wstring extFilter;
     bool useRegex;
     bool matchCase;
-    HWND hwndListView;
 };
 
 struct ShellOutput {

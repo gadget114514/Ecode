@@ -669,8 +669,10 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     } else if (LOWORD(wParam) == IDCANCEL) {
       if (g_grepSearchActive) {
         g_editor->CancelFindInFiles();
+        // Don't call EndDialog here; the nested IDOK loop will exit and call it
+      } else {
+        EndDialog(hDlg, IDCANCEL);
       }
-      EndDialog(hDlg, IDCANCEL);
       return (INT_PTR)TRUE;
     }
     break;

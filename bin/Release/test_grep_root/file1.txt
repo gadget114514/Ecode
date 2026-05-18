@@ -1,3 +1,0 @@
-This is a match
-Other line
-Another match here
