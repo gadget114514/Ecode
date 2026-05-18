@@ -4,6 +4,7 @@
 // Included by main.cpp
 // =============================================================================
 
+#include <cstdio>
 #include <string>
 
 void DebugLog(const std::string &msg, LogLevel level);
@@ -112,6 +113,40 @@ static LRESULT HandleCreate(HWND hwnd) {
   g_renderer->SetFont(settings.GetFontFamily(), settings.GetFontSize());
   g_renderer->SetWordWrap(settings.IsWordWrap());
   g_renderer->SetCaretStyle((EditorBufferRenderer::CaretStyle)settings.GetCaretStyle());
+
+  // Load active theme
+  {
+    const auto &themes = settings.GetThemes();
+    std::wstring activeName = settings.GetActiveThemeName();
+    auto HexToColor = [](const std::wstring &hex) -> D2D1_COLOR_F {
+      unsigned int r = 0, g = 0, b = 0, a = 255;
+      if (hex.length() >= 8) {
+        swscanf_s(hex.c_str(), L"%02x%02x%02x%02x", &r, &g, &b, &a);
+      } else if (hex.length() >= 6) {
+        swscanf_s(hex.c_str(), L"%02x%02x%02x", &r, &g, &b);
+      }
+      return {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+    };
+    for (const auto &t : themes) {
+      if (t.name == activeName) {
+        Theme theme;
+        theme.name = t.name;
+        theme.background = HexToColor(t.background);
+        theme.foreground = HexToColor(t.foreground);
+        theme.caret = HexToColor(t.caret);
+        theme.selection = HexToColor(t.selection);
+        theme.lineNumbers = HexToColor(t.lineNumbers);
+        theme.keyword = HexToColor(t.keyword);
+        theme.string = HexToColor(t.string);
+        theme.number = HexToColor(t.number);
+        theme.comment = HexToColor(t.comment);
+        theme.function = HexToColor(t.function);
+        g_renderer->SetTheme(theme);
+        break;
+      }
+    }
+  }
+
   Localization::Instance().SetLanguage(
       static_cast<Language>(settings.GetLanguage()));
   UpdateMenu(hwnd);

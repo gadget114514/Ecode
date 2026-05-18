@@ -140,6 +140,102 @@ void SettingsManager::Load() {
     }
   }
 
+  // Load themes
+  m_themes.clear();
+  wchar_t themeNamesBuf[4096];
+  if (GetPrivateProfileSectionW(L"Themes", themeNamesBuf, 4096, path.c_str()) > 0) {
+    wchar_t *p = themeNamesBuf;
+    while (*p) {
+      std::wstring line(p);
+      size_t pos = line.find(L'=');
+      if (pos != std::wstring::npos) {
+        std::wstring key = line.substr(0, pos);
+        if (key == L"List") {
+          std::wstring list = line.substr(pos + 1);
+          size_t start = 0, end;
+          while ((end = list.find(L',', start)) != std::wstring::npos) {
+            std::wstring tn = list.substr(start, end - start);
+            if (!tn.empty()) {
+              ThemeEntry te;
+              te.name = tn;
+              wchar_t val[256];
+              auto ReadHex = [&](const wchar_t *sect, const wchar_t *k, const wchar_t *def) -> std::wstring {
+                if (GetPrivateProfileStringW(sect, k, def, val, 256, path.c_str()) > 0)
+                  return val;
+                return def;
+              };
+              std::wstring sect = L"Theme_" + tn;
+              te.background = ReadHex(sect.c_str(), L"Background", L"ffffffff");
+              te.foreground = ReadHex(sect.c_str(), L"Foreground", L"000000ff");
+              te.caret = ReadHex(sect.c_str(), L"Caret", L"000000ff");
+              te.selection = ReadHex(sect.c_str(), L"Selection", L"add8e680");
+              te.lineNumbers = ReadHex(sect.c_str(), L"LineNumbers", L"808080ff");
+              te.keyword = ReadHex(sect.c_str(), L"Keyword", L"0000ffff");
+              te.string = ReadHex(sect.c_str(), L"String", L"a32929ff");
+              te.number = ReadHex(sect.c_str(), L"Number", L"008000ff");
+              te.comment = ReadHex(sect.c_str(), L"Comment", L"006300ff");
+              te.function = ReadHex(sect.c_str(), L"Function", L"800080ff");
+              m_themes.push_back(te);
+            }
+            start = end + 1;
+          }
+          if (start < list.size()) {
+            std::wstring tn = list.substr(start);
+            if (!tn.empty()) {
+              ThemeEntry te;
+              te.name = tn;
+              wchar_t val[256];
+              auto ReadHex = [&](const wchar_t *sect, const wchar_t *k, const wchar_t *def) -> std::wstring {
+                if (GetPrivateProfileStringW(sect, k, def, val, 256, path.c_str()) > 0)
+                  return val;
+                return def;
+              };
+              std::wstring sect = L"Theme_" + tn;
+              te.background = ReadHex(sect.c_str(), L"Background", L"ffffffff");
+              te.foreground = ReadHex(sect.c_str(), L"Foreground", L"000000ff");
+              te.caret = ReadHex(sect.c_str(), L"Caret", L"000000ff");
+              te.selection = ReadHex(sect.c_str(), L"Selection", L"add8e680");
+              te.lineNumbers = ReadHex(sect.c_str(), L"LineNumbers", L"808080ff");
+              te.keyword = ReadHex(sect.c_str(), L"Keyword", L"0000ffff");
+              te.string = ReadHex(sect.c_str(), L"String", L"a32929ff");
+              te.number = ReadHex(sect.c_str(), L"Number", L"008000ff");
+              te.comment = ReadHex(sect.c_str(), L"Comment", L"006300ff");
+              te.function = ReadHex(sect.c_str(), L"Function", L"800080ff");
+              m_themes.push_back(te);
+            }
+          }
+        }
+      }
+      p += line.length() + 1;
+    }
+  }
+
+  if (m_themes.empty()) {
+    // Default themes
+    ThemeEntry light;
+    light.name = L"Light";
+    light.background = L"ffffffff"; light.foreground = L"000000ff"; light.caret = L"000000ff";
+    light.selection = L"add8e680"; light.lineNumbers = L"808080ff";
+    light.keyword = L"0000ffff"; light.string = L"a32929ff"; light.number = L"008000ff";
+    light.comment = L"006300ff"; light.function = L"800080ff";
+    m_themes.push_back(light);
+
+    ThemeEntry dark;
+    dark.name = L"Dark";
+    dark.background = L"1e1e1eff"; dark.foreground = L"d4d4d4ff"; dark.caret = L"d4d4d4ff";
+    dark.selection = L"264f7880"; dark.lineNumbers = L"858585ff";
+    dark.keyword = L"569cd6ff"; dark.string = L"ce9178ff"; dark.number = L"b5cea8ff";
+    dark.comment = L"6a9955ff"; dark.function = L"dcdcaaff";
+    m_themes.push_back(dark);
+  }
+
+  wchar_t activeBuf[256];
+  if (GetPrivateProfileStringW(L"Theme", L"Active", m_themes[0].name.c_str(), activeBuf, 256, path.c_str()) > 0) {
+    m_activeTheme = activeBuf;
+  } else {
+    m_activeTheme = m_themes[0].name;
+  }
+
   // Load Dired pairs
   m_diredPairs.clear();
   for (int i = 0; i < 50; ++i) {
@@ -228,6 +324,7 @@ void SettingsManager::Save() {
   }
 
   SaveCliEntries();
+  SaveThemes();
 }
 
 std::wstring SettingsManager::DetectBashPath() {
@@ -378,5 +475,59 @@ void SettingsManager::SaveDiredPairs() {
     WritePrivateProfileStringW(L"DiredPairs", keyLabel.c_str(), m_diredPairs[i].label.c_str(), path.c_str());
     WritePrivateProfileStringW(L"DiredPairs", keyLeft.c_str(), m_diredPairs[i].leftDir.c_str(), path.c_str());
     WritePrivateProfileStringW(L"DiredPairs", keyRight.c_str(), m_diredPairs[i].rightDir.c_str(), path.c_str());
+  }
+}
+
+void SettingsManager::AddTheme(const ThemeEntry &theme) {
+  m_themes.push_back(theme);
+}
+
+void SettingsManager::RemoveTheme(size_t index) {
+  if (index < m_themes.size()) {
+    if (m_themes[index].name == m_activeTheme && m_themes.size() > 1) {
+      size_t next = (index == 0) ? 1 : 0;
+      m_activeTheme = m_themes[next].name;
+    }
+    m_themes.erase(m_themes.begin() + index);
+  }
+}
+
+const ThemeEntry *SettingsManager::FindTheme(const std::wstring &name) const {
+  for (const auto &t : m_themes) {
+    if (t.name == name) return &t;
+  }
+  return nullptr;
+}
+
+void SettingsManager::SaveThemes() {
+  std::wstring path = GetSettingsPath();
+  WritePrivateProfileStringW(L"Theme", NULL, NULL, path.c_str());
+  WritePrivateProfileStringW(L"Theme", L"Active", m_activeTheme.c_str(), path.c_str());
+
+  WritePrivateProfileStringW(L"Themes", NULL, NULL, path.c_str());
+  std::wstring list;
+  for (size_t i = 0; i < m_themes.size(); ++i) {
+    if (i > 0) list += L",";
+    list += m_themes[i].name;
+  }
+  WritePrivateProfileStringW(L"Themes", L"List", list.c_str(), path.c_str());
+
+  auto WriteHex = [&](const wchar_t *sect, const wchar_t *key, const std::wstring &val) {
+    WritePrivateProfileStringW(sect, key, val.c_str(), path.c_str());
+  };
+
+  for (const auto &t : m_themes) {
+    std::wstring sect = L"Theme_" + t.name;
+    WritePrivateProfileStringW(sect.c_str(), NULL, NULL, path.c_str());
+    WriteHex(sect.c_str(), L"Background", t.background);
+    WriteHex(sect.c_str(), L"Foreground", t.foreground);
+    WriteHex(sect.c_str(), L"Caret", t.caret);
+    WriteHex(sect.c_str(), L"Selection", t.selection);
+    WriteHex(sect.c_str(), L"LineNumbers", t.lineNumbers);
+    WriteHex(sect.c_str(), L"Keyword", t.keyword);
+    WriteHex(sect.c_str(), L"String", t.string);
+    WriteHex(sect.c_str(), L"Number", t.number);
+    WriteHex(sect.c_str(), L"Comment", t.comment);
+    WriteHex(sect.c_str(), L"Function", t.function);
   }
 }

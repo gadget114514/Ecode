@@ -911,6 +911,189 @@ void ShowCliDialog(HWND hwnd) {
              CliSettingsDlgProc);
 }
 
+static void RefreshThemeList(HWND hDlg) {
+  HWND hList = GetDlgItem(hDlg, IDC_TH_LIST);
+  SendMessage(hList, LB_RESETCONTENT, 0, 0);
+  const auto &themes = SettingsManager::Instance().GetThemes();
+  for (size_t i = 0; i < themes.size(); ++i) {
+    SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)themes[i].name.c_str());
+  }
+}
+
+static void ThemeEntryToFields(HWND hDlg, const ThemeEntry &te) {
+  SetDlgItemTextW(hDlg, IDC_TH_NAME, te.name.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_BG, te.background.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_FG, te.foreground.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_CARET, te.caret.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_SEL, te.selection.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_LN, te.lineNumbers.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_KW, te.keyword.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_STR, te.string.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_NUM, te.number.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_CMT, te.comment.c_str());
+  SetDlgItemTextW(hDlg, IDC_TH_FUNC, te.function.c_str());
+}
+
+static ThemeEntry FieldsToThemeEntry(HWND hDlg) {
+  ThemeEntry te;
+  wchar_t buf[256];
+  auto GetHex = [&](int id) -> std::wstring {
+    GetDlgItemTextW(hDlg, id, buf, 256);
+    return buf;
+  };
+  te.name = GetHex(IDC_TH_NAME);
+  te.background = GetHex(IDC_TH_BG);
+  te.foreground = GetHex(IDC_TH_FG);
+  te.caret = GetHex(IDC_TH_CARET);
+  te.selection = GetHex(IDC_TH_SEL);
+  te.lineNumbers = GetHex(IDC_TH_LN);
+  te.keyword = GetHex(IDC_TH_KW);
+  te.string = GetHex(IDC_TH_STR);
+  te.number = GetHex(IDC_TH_NUM);
+  te.comment = GetHex(IDC_TH_CMT);
+  te.function = GetHex(IDC_TH_FUNC);
+  return te;
+}
+
+INT_PTR CALLBACK ThemeManagerDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                     LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    RefreshThemeList(hDlg);
+    // Select first theme
+    const auto &themes = SettingsManager::Instance().GetThemes();
+    if (!themes.empty()) {
+      SendMessage(GetDlgItem(hDlg, IDC_TH_LIST), LB_SETCURSEL, 0, 0);
+      ThemeEntryToFields(hDlg, themes[0]);
+    }
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_TH_LIST && HIWORD(wParam) == LBN_SELCHANGE) {
+      HWND hList = GetDlgItem(hDlg, IDC_TH_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        const auto &themes = SettingsManager::Instance().GetThemes();
+        if (sel >= 0 && sel < (int)themes.size()) {
+          ThemeEntryToFields(hDlg, themes[sel]);
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_TH_ADD) {
+      ThemeEntry te = FieldsToThemeEntry(hDlg);
+      if (te.name.empty()) {
+        te.name = L"New Theme";
+      }
+      SettingsManager::Instance().AddTheme(te);
+      SettingsManager::Instance().SaveThemes();
+      RefreshThemeList(hDlg);
+      // Select the newly added theme
+      HWND hList = GetDlgItem(hDlg, IDC_TH_LIST);
+      int count = (int)SendMessage(hList, LB_GETCOUNT, 0, 0);
+      if (count > 0) {
+        SendMessage(hList, LB_SETCURSEL, count - 1, 0);
+        const auto &themes = SettingsManager::Instance().GetThemes();
+        ThemeEntryToFields(hDlg, themes.back());
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_TH_DUPLICATE) {
+      HWND hList = GetDlgItem(hDlg, IDC_TH_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        ThemeEntry te = FieldsToThemeEntry(hDlg);
+        if (te.name.empty()) te.name = L"Copy";
+        else te.name = te.name + L" (Copy)";
+        SettingsManager::Instance().AddTheme(te);
+        SettingsManager::Instance().SaveThemes();
+        RefreshThemeList(hDlg);
+        int count = (int)SendMessage(hList, LB_GETCOUNT, 0, 0);
+        if (count > 0) {
+          SendMessage(hList, LB_SETCURSEL, count - 1, 0);
+          const auto &themes = SettingsManager::Instance().GetThemes();
+          ThemeEntryToFields(hDlg, themes.back());
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_TH_REMOVE) {
+      HWND hList = GetDlgItem(hDlg, IDC_TH_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        SettingsManager::Instance().RemoveTheme(sel);
+        SettingsManager::Instance().SaveThemes();
+        RefreshThemeList(hDlg);
+        const auto &themes = SettingsManager::Instance().GetThemes();
+        if (!themes.empty()) {
+          SendMessage(hList, LB_SETCURSEL, 0, 0);
+          ThemeEntryToFields(hDlg, themes[0]);
+        } else {
+          SetDlgItemTextW(hDlg, IDC_TH_NAME, L"");
+          for (int id = IDC_TH_BG; id <= IDC_TH_FUNC; ++id)
+            SetDlgItemTextW(hDlg, id, L"");
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_TH_APPLY) {
+      ThemeEntry te = FieldsToThemeEntry(hDlg);
+      if (!te.name.empty()) {
+        // Update the theme entry in settings if it exists
+        const auto &themes = SettingsManager::Instance().GetThemes();
+        for (size_t i = 0; i < themes.size(); ++i) {
+          if (themes[i].name == te.name) {
+            // Remove and re-add with updated values
+            SettingsManager::Instance().RemoveTheme(i);
+            break;
+          }
+        }
+        SettingsManager::Instance().AddTheme(te);
+        SettingsManager::Instance().SetActiveThemeName(te.name);
+        SettingsManager::Instance().SaveThemes();
+        SettingsManager::Instance().Save();
+        RefreshThemeList(hDlg);
+
+        // Apply to renderer
+        if (g_renderer) {
+          Theme theme;
+          theme.name = te.name;
+          auto HexToColor = [](const std::wstring &hex) -> D2D1_COLOR_F {
+            unsigned int r = 0, g = 0, b = 0, a = 255;
+            if (hex.length() >= 8) {
+              swscanf_s(hex.c_str(), L"%02x%02x%02x%02x", &r, &g, &b, &a);
+            } else if (hex.length() >= 6) {
+              swscanf_s(hex.c_str(), L"%02x%02x%02x", &r, &g, &b);
+            }
+            return {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+          };
+          theme.background = HexToColor(te.background);
+          theme.foreground = HexToColor(te.foreground);
+          theme.caret = HexToColor(te.caret);
+          theme.selection = HexToColor(te.selection);
+          theme.lineNumbers = HexToColor(te.lineNumbers);
+          theme.keyword = HexToColor(te.keyword);
+          theme.string = HexToColor(te.string);
+          theme.number = HexToColor(te.number);
+          theme.comment = HexToColor(te.comment);
+          theme.function = HexToColor(te.function);
+          g_renderer->SetTheme(theme);
+        }
+        // Trigger repaint
+        HWND parent = GetParent(hDlg);
+        if (parent) InvalidateRect(parent, NULL, FALSE);
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void Dialogs::ShowThemeManagerDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_THEME_MANAGER), hwnd,
+             ThemeManagerDlgProc);
+}
+
 Dialogs::ConfirmationResult
 Dialogs::ShowSaveConfirmationDialog(HWND hwnd, const std::wstring &filename) {
   std::wstring name = filename.empty() ? L"Untitled" : filename;

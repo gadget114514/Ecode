@@ -93,7 +93,7 @@ void Localization::LoadTranslations() {
 
   en["menu_config"] = L"&Config";
   en["menu_config_settings"] = L"&Settings...";
-  en["menu_config_theme"] = L"&Theme Selection...";
+  en["menu_config_theme"] = L"&Manage Themes...";
   en["menu_config_edit_init"] = L"Edit &ecodeinit.js";
 
   en["menu_tools"] = L"&Tools";
@@ -146,7 +146,7 @@ void Localization::LoadTranslations() {
 
   jp["menu_config"] = L"設定(&C)";
   jp["menu_config_settings"] = L"設定(&S)...";
-  jp["menu_config_theme"] = L"テーマ選択(&T)...";
+  jp["menu_config_theme"] = L"テーマ管理(&T)...";
   jp["menu_config_edit_init"] = L"ecodeinit.jsを編集(&E)";
 
   jp["menu_tools"] = L"ツール(&T)";
