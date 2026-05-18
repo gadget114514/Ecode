@@ -352,3 +352,38 @@
 [INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
 [INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
 [INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] Loading system ecodeinit.js from: D:\ws\Ecode\bin\Release\scripts\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Release\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Release\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Release\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] Editor.loadScript: scripts/setup_wizard.js -> D:\ws\Ecode\bin\Release\scripts\setup_wizard.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] Loading user ecodeinit.js from: C:\Users\bluen\AppData\Roaming\Ecode\ecodeinit.js
+[INFO] Editor.loadScript: scripts/emacs.js -> D:\ws\Ecode\bin\Release\scripts\emacs.js
+[INFO] JS: 
+[ERROR] ScriptEngine::RunFile: Execution error: TypeError: undefined not callable (property 'setGlobalKeyBinding' of [object Object])
+[INFO]   loadScript success: 0
+[INFO] Editor.loadScript: scripts/ai.js -> D:\ws\Ecode\bin\Release\scripts\ai.js
+[INFO] Editor.loadScript: scripts/ai_core.js -> D:\ws\Ecode\bin\Release\scripts\ai_core.js
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] JS: 
+[INFO] ScriptEngine::RunFile: Success
+[INFO]   loadScript success: 1
+[INFO] ScriptEngine::RunFile: Success
+[INFO] HandleSize: width=1407 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=677 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
