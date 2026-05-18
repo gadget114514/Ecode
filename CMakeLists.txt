@@ -53,6 +53,8 @@ add_executable(test_editor_core
     src/Process.cpp
     src/SettingsManager.cpp
     src-duktape/duktape.c
+    src-duktape/duktape.c
+    src/FileUtils.cpp
 )
 target_link_libraries(test_editor_core 
     user32 
@@ -88,6 +90,7 @@ add_executable(test_search_replace
     src/MemoryMappedFile.cpp
     src/Process.cpp
     src/SettingsManager.cpp
+    src-duktape/duktape.c
     src-duktape/duktape.c
 )
 target_link_libraries(test_search_replace 
@@ -258,11 +261,24 @@ add_custom_command(TARGET ecode POST_BUILD
     "$<TARGET_FILE_DIR:ecode>/scripts"
     COMMENT "Copying scripts to output directory..."
 )
+add_custom_command(TARGET ecode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc"
+    "$<TARGET_FILE_DIR:ecode>/doc"
+    COMMENT "Copying doc to output directory..."
+)
+
 add_custom_command(TARGET ecode_console POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
     "$<TARGET_FILE_DIR:ecode_console>/scripts"
     COMMENT "Copying scripts to output directory..."
+)
+add_custom_command(TARGET ecode_console POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc"
+    "$<TARGET_FILE_DIR:ecode_console>/doc"
+    COMMENT "Copying doc to output directory..."
 )
 
 # Installer

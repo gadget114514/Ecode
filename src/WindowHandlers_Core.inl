@@ -30,8 +30,13 @@ static LRESULT HandleCreate(HWND hwnd) {
   InitCommonControlsEx(&icex);
 
   g_tabHwnd = CreateWindowEx(0, WC_TABCONTROL, NULL,
-                             WS_CHILD | WS_VISIBLE | TCS_TABS, 0, 0, 0, 0, hwnd,
+                             WS_CHILD | WS_VISIBLE | TCS_TABS | TCS_TOOLTIPS, 0, 0, 0, 0, hwnd,
                              (HMENU)2002, GetModuleHandle(NULL), NULL);
+  
+  g_treeHwnd = CreateWindowEx(0, WC_TREEVIEW, NULL,
+                              WS_CHILD | TVS_HASLINES | TVS_LINESATROOT | TVS_HASBUTTONS | TVS_SHOWSELALWAYS,
+                              0, 0, 0, 0, hwnd, (HMENU)2005, GetModuleHandle(NULL), NULL);
+
   g_statusHwnd = CreateWindowEx(
       0, STATUSCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 0,
       0, hwnd, (HMENU)2000, GetModuleHandle(NULL), NULL);
@@ -76,6 +81,7 @@ static LRESULT HandleCreate(HWND hwnd) {
   g_editor->NewFile();
   UpdateMenu(hwnd);
   SetTimer(hwnd, 1, 500, NULL);
+  g_renderer->SetCaretBlinking(SettingsManager::Instance().IsCaretBlinking());
   g_uFindMsgString = RegisterWindowMessageW(FINDMSGSTRINGW);
   DragAcceptFiles(hwnd, TRUE);
 
@@ -89,6 +95,13 @@ static LRESULT HandleCreate(HWND hwnd) {
 
   auto &settings = SettingsManager::Instance();
   settings.Load();
+
+  std::wstring projDir = settings.GetProjectDirectory();
+  if (!projDir.empty()) {
+    SetCurrentDirectoryW(projDir.c_str());
+    RefreshTreeView(g_treeHwnd, projDir);
+  }
+
   RECT rc = {0};
   settings.GetWindowRect(rc);
   if (rc.right > rc.left && rc.bottom > rc.top)
@@ -99,6 +112,7 @@ static LRESULT HandleCreate(HWND hwnd) {
   ShowWindow(g_statusHwnd, settings.IsShowStatusBar() ? SW_SHOW : SW_HIDE);
   g_renderer->SetFont(settings.GetFontFamily(), settings.GetFontSize());
   g_renderer->SetWordWrap(settings.IsWordWrap());
+  g_renderer->SetCaretStyle((EditorBufferRenderer::CaretStyle)settings.GetCaretStyle());
   Localization::Instance().SetLanguage(
       static_cast<Language>(settings.GetLanguage()));
   UpdateMenu(hwnd);
@@ -118,7 +132,13 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
                " height=" + std::to_string(height) +
                " g_minibufferVisible=" + std::to_string(g_minibufferVisible),
            LOG_INFO);
-  MoveWindow(g_tabHwnd, 0, 0, width, 25, TRUE);
+           
+  int treeWidth = g_treeVisible ? 200 : 0;
+  if (g_treeVisible) {
+      MoveWindow(g_treeHwnd, 0, 0, treeWidth, height, TRUE);
+  }
+           
+  MoveWindow(g_tabHwnd, treeWidth, 0, width - treeWidth, 25, TRUE);
   int tabHeight = 25;
   if (IsWindowVisible(g_statusHwnd))
     SendMessage(g_statusHwnd, WM_SIZE, 0, 0);
@@ -147,10 +167,10 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
                " mbHeight=" + std::to_string(minibufferHeight) +
                " promptWidth=" + std::to_string(promptWidth),
            LOG_INFO);
-  MoveWindow(g_minibufferPromptHwnd, 0, mbTop, promptWidth, minibufferHeight,
+  MoveWindow(g_minibufferPromptHwnd, treeWidth, mbTop, promptWidth, minibufferHeight,
              TRUE);
   ShowWindow(g_minibufferPromptHwnd, g_minibufferVisible ? SW_SHOW : SW_HIDE);
-  MoveWindow(g_minibufferHwnd, promptWidth, mbTop, width - promptWidth,
+  MoveWindow(g_minibufferHwnd, treeWidth + promptWidth, mbTop, width - treeWidth - promptWidth,
              minibufferHeight, TRUE);
   ShowWindow(g_minibufferHwnd, g_minibufferVisible ? SW_SHOW : SW_HIDE);
 
@@ -161,16 +181,19 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
                rcStatus.right - rcStatus.left - 4,
                rcStatus.bottom - rcStatus.top - 4, TRUE);
   }
-  int safetyMargin = 50;
+  int safetyMargin  = 50;
   int contentTop    = tabHeight;
   int contentHeight = (int)height - tabHeight - statusHeight - minibufferHeight - safetyMargin;
+  int contentWidth  = (int)width  - treeWidth;
 
   g_renderer->SetTopOffset((float)tabHeight);
-  g_renderer->Resize(width, contentHeight);
+  g_renderer->SetLeftOffset((float)treeWidth);
+  g_renderer->Resize(width, height);
 
   // Position terminal view to cover the same content area as the editor
   if (g_terminalViewHwnd)
-    MoveWindow(g_terminalViewHwnd, 0, contentTop, (int)width, contentHeight + safetyMargin, TRUE);
+    MoveWindow(g_terminalViewHwnd, treeWidth, contentTop,
+               contentWidth, contentHeight + safetyMargin, TRUE);
 
   UpdateScrollbars(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
@@ -293,6 +316,12 @@ static void HandleDestroy(HWND hwnd) {
   settings.SetLanguage(
       static_cast<int>(Localization::Instance().GetCurrentLanguage()));
   settings.SetWordWrap(g_renderer->IsWordWrap());
+
+  wchar_t curDir[MAX_PATH];
+  if (GetCurrentDirectoryW(MAX_PATH, curDir) > 0) {
+    settings.SetProjectDirectory(curDir);
+  }
+
   settings.Save();
 
   delete g_scriptEngine;

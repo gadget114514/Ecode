@@ -1,4 +1,5 @@
-﻿#include "../include/Localization.h"
+﻿#include <windows.h>
+#include "../include/Localization.h"
 
 Localization &Localization::Instance() {
   static Localization instance;
@@ -47,7 +48,15 @@ std::wstring Localization::GetString(const std::string &key) const {
     }
   }
 
-  return L"MISSING_STRING";
+  // Return the key itself so we can see what's missing
+  std::string keyUtf8 = key;
+  int len = MultiByteToWideChar(CP_UTF8, 0, keyUtf8.c_str(), -1, NULL, 0);
+  if (len > 0) {
+      std::vector<wchar_t> buf(len);
+      MultiByteToWideChar(CP_UTF8, 0, keyUtf8.c_str(), -1, buf.data(), len);
+      return std::wstring(buf.data());
+  }
+  return L"???";
 }
 
 void Localization::LoadTranslations() {

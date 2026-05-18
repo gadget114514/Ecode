@@ -99,10 +99,10 @@ size_t EditorBufferRenderer::GetPositionFromPoint(const std::string &text,
   std::vector<wchar_t> wtext(len);
   MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wtext.data(), len);
 
-  float gutterWidth = 0.0f;
+  float gutterWidth = val_LeftPadding;
   if (m_showLineNumbers) {
     int digits = (int)std::to_string(totalLinesInFile).length();
-    gutterWidth = (digits * 8.0f) + 15.0f;
+    gutterWidth += (digits * 8.0f) + 15.0f;
   }
 
   D2D1_SIZE_F size = {10000, 10000};
@@ -153,14 +153,14 @@ size_t EditorBufferRenderer::GetPositionFromPoint(const std::string &text,
 bool EditorBufferRenderer::HitTestGutter(float x, float y,
                                          size_t totalLinesInFile,
                                          size_t &lineIndex) {
-  float gutterWidth = 0.0f;
+  float gutterWidth = val_LeftPadding;
   if (!m_showLineNumbers)
     return false;
 
   int digits = (int)std::to_string(totalLinesInFile).length();
-  gutterWidth = (digits * 8.0f) + 15.0f;
+  gutterWidth += (digits * 8.0f) + 15.0f;
 
-  if (x >= 0 && x <= gutterWidth) {
+  if (x >= val_LeftPadding && x <= gutterWidth) {
     float adjustedY = y - val_TopPadding;
     if (adjustedY < 0)
       return false;
