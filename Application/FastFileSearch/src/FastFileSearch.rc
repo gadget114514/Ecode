@@ -1,0 +1,108 @@
+#include "resource.h"
+#include <windows.h>
+
+IDI_APP_ICON ICON "app_icon.ico"
+
+IDD_MAINDIALOG DIALOGEX 0, 0, 500, 300
+STYLE DS_SETFONT | DS_CENTER | WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN
+CAPTION "Fast File Search (MFT & FAT)"
+MENU IDR_MAINMENU
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    EDITTEXT        IDC_EDIT_QUERY, 195, 7, 185, 14, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "Search Filename:", IDC_STATIC_FILENAME, 115, 9, 80, 8
+    AUTOCHECKBOX    "Not", IDC_CHECK_NOT, 385, 9, 45, 10, WS_TABSTOP
+    PUSHBUTTON      "Search", IDC_BTN_SEARCH, 435, 7, 60, 14
+    
+    LTEXT           "Code Page:", IDC_STATIC_CP, 115, 23, 40, 8
+    COMBOBOX        IDC_COMBO_CP, 155, 21, 50, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    
+    LTEXT           "Search Candidates:", IDC_STATIC_TARGETS, 7, 25, 100, 8
+    LISTBOX         IDC_LIST_TARGETS, 7, 35, 405, 50, LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+    PUSHBUTTON      "Add Folder", IDC_BTN_ADD, 415, 35, 80, 14
+    PUSHBUTTON      "Not candidate", IDC_BTN_REMOVE, 415, 55, 80, 14
+    
+    CONTROL         "",IDC_LIST_RESULTS,"SysListView32", LVS_REPORT | LVS_SHOWSELALWAYS | LVS_ALIGNLEFT | WS_BORDER | WS_TABSTOP, 7, 90, 486, 185
+    
+    PUSHBUTTON      "Save Results", IDC_BTN_SAVE, 7, 280, 80, 14
+    LTEXT           "Ready", IDC_STATUS, 95, 283, 150, 8
+    CONTROL         "",IDC_PROGRESS,"msctls_progress32",WS_BORDER, 250, 280, 243, 14
+END
+
+IDR_MENU1 MENU
+BEGIN
+    POPUP "Context"
+    BEGIN
+        MENUITEM "Copy Path", ID_POPUP_COPYPATH
+    END
+END
+
+IDR_MAINMENU MENU
+BEGIN
+    POPUP "&Config"
+    BEGIN
+        MENUITEM "&Search Options...", ID_CONFIG_OPTIONS
+    END
+    POPUP "&Language"
+    BEGIN
+        MENUITEM "English", ID_LANG_ENGLISH
+        MENUITEM "Japanese", ID_LANG_JAPANESE
+        MENUITEM "Chinese (Simplified)", ID_LANG_CHINESE_SIMP
+        MENUITEM "Chinese (Traditional)", ID_LANG_CHINESE_TRAD
+        MENUITEM "Spanish", ID_LANG_SPANISH
+        MENUITEM "French", ID_LANG_FRENCH
+        MENUITEM "German", ID_LANG_GERMAN
+        MENUITEM "Portuguese", ID_LANG_PORTUGUESE
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About...", ID_HELP_ABOUT
+    END
+END
+
+IDD_CONFIG DIALOGEX 0, 0, 150, 330
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Search Options"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    GROUPBOX        "Match Mode", IDC_GRP_MATCHMODE, 7, 7, 136, 65
+    AUTORADIOBUTTON "Substring", IDC_RADIO_SUBSTRING, 15, 18, 120, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "Exact Match", IDC_RADIO_EXACT, 15, 30, 120, 10
+    AUTORADIOBUTTON "Space Divided (All)", IDC_RADIO_SPACED, 15, 42, 120, 10
+    AUTORADIOBUTTON "Regular Expression", IDC_RADIO_REGEX, 15, 54, 120, 10
+    
+    AUTOCHECKBOX    "Ignore Case (Global)", IDC_CHKS_IGNORECASE, 7, 75, 136, 10, WS_TABSTOP
+    
+    GROUPBOX        "Size Filter", IDC_GRP_SIZE, 7, 90, 136, 45
+    AUTOCHECKBOX    "Enable Size Filter", IDC_CHKS_SIZE, 12, 100, 126, 10
+    LTEXT           "Min:", IDC_STATIC_MIN, 15, 112, 15, 8
+    EDITTEXT        IDC_EDIT_MINSIZE, 35, 110, 40, 12, ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Max:", IDC_STATIC_MAX, 80, 112, 15, 8
+    EDITTEXT        IDC_EDIT_MAXSIZE, 100, 110, 40, 12, ES_AUTOHSCROLL | ES_NUMBER
+    
+    GROUPBOX        "Date Filter", IDC_GRP_DATE, 7, 140, 136, 55
+    AUTOCHECKBOX    "Enable Date Filter", IDC_CHKS_DATE, 12, 150, 126, 10
+    LTEXT           "From:", IDC_STATIC_FROM, 15, 163, 20, 8
+    CONTROL         "", IDC_DATE_MIN, "SysDateTimePick32", DTS_SHORTDATEFORMAT | WS_TABSTOP, 40, 160, 60, 12
+    LTEXT           "To:", IDC_STATIC_TO, 15, 178, 20, 8
+    CONTROL         "", IDC_DATE_MAX, "SysDateTimePick32", DTS_SHORTDATEFORMAT | WS_TABSTOP, 40, 175, 60, 12
+
+    GROUPBOX        "Include", IDC_GRP_INCLUDE, 7, 200, 136, 25
+    AUTOCHECKBOX    "Files", IDC_CHKS_FILES, 15, 210, 50, 10, WS_TABSTOP
+    AUTOCHECKBOX    "Folders", IDC_CHKS_FOLDERS, 75, 210, 50, 10, WS_TABSTOP
+
+    GROUPBOX        "Type Filter", IDC_GRP_TYPE, 7, 230, 136, 25
+    LTEXT           "Ext:", IDC_STATIC_EXT, 15, 242, 15, 8
+    EDITTEXT        IDC_EDIT_EXT, 35, 240, 100, 12, ES_AUTOHSCROLL
+
+    GROUPBOX        "Advanced", IDC_GRP_ADVANCED, 7, 260, 136, 45
+    AUTOCHECKBOX    "Match Full Path", IDC_CHKS_FULLPATH, 15, 272, 120, 10, WS_TABSTOP
+    LTEXT           "Exclude:", IDC_STATIC_EXCLUDE, 15, 287, 30, 8
+    EDITTEXT        IDC_EDIT_EXCLUDE, 50, 285, 85, 12, ES_AUTOHSCROLL
+    
+    DEFPUSHBUTTON   "OK", IDOK, 38, 310, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 93, 310, 50, 14
+END
+
+// Manifest to request admin privileges
+1 RT_MANIFEST "app.manifest"
