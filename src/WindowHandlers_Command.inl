@@ -364,6 +364,95 @@ void OpenJYEditor(HWND hwnd) {
   CreateThread(NULL, 0, JYEditorThread, params, 0, NULL);
 }
 
+struct DiredThreadParams {
+  HWND hwnd;
+  int appIdx;
+};
+
+static DWORD WINAPI DiredThread(LPVOID lpParam) {
+  DiredThreadParams *params = (DiredThreadParams *)lpParam;
+  HWND hwnd = params->hwnd;
+  int appIdx = params->appIdx;
+  delete params;
+
+  // Get current directory for initial path
+  wchar_t curDir[MAX_PATH];
+  GetCurrentDirectoryW(MAX_PATH, curDir);
+
+  STARTUPINFOW si = { sizeof(si) };
+  PROCESS_INFORMATION pi = { 0 };
+  std::wstring diredPath;
+  wchar_t modulePath[MAX_PATH];
+  GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+  diredPath = std::wstring(modulePath);
+  size_t pos = diredPath.find_last_of(L"\\/");
+  if (pos != std::wstring::npos)
+    diredPath = diredPath.substr(0, pos + 1) + L"Dired.exe";
+  else
+    diredPath = L"Dired.exe";
+
+  std::wstring cmd = L"\"" + diredPath + L"\" \"" + curDir + L"\"";
+  if (CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0,
+                     nullptr, nullptr, &si, &pi)) {
+    HWND foundHwnd = nullptr;
+    for (int i = 0; i < 50; ++i) {
+      Sleep(100);
+      EnumData data = { pi.dwProcessId, nullptr };
+      EnumWindows(EnumWindowsProc, (LPARAM)&data);
+      if (data.hwnd != nullptr) {
+        foundHwnd = data.hwnd;
+        break;
+      }
+    }
+    if (foundHwnd) {
+      PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  }
+  return 0;
+}
+
+void OpenDired(HWND hwnd) {
+  AppTabInfo tab;
+  tab.label = L"Dired";
+  tab.type = 5;
+  tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting Dired...",
+                             WS_CHILD | WS_VISIBLE | SS_CENTER,
+                             0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+  tab.data = nullptr;
+  g_appTabs.push_back(std::move(tab));
+  int appIdx = static_cast<int>(g_appTabs.size()) - 1;
+  g_activeAppTab = appIdx;
+  g_activeTerminalTab = -1;
+
+  RECT rc;
+  GetClientRect(hwnd, &rc);
+  SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
+
+  g_suppressTabChange = true;
+  size_t bufCount = g_editor->GetBuffers().size();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  g_suppressTabChange = false;
+
+  for (auto &t : g_appTabs) {
+    if (t.hwnd) {
+      ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
+    }
+  }
+  for (auto &t : g_terminalTabs) {
+    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+  }
+
+  UpdateMenu(hwnd);
+  InvalidateRect(hwnd, NULL, FALSE);
+
+  DiredThreadParams *params = new DiredThreadParams();
+  params->hwnd = hwnd;
+  params->appIdx = appIdx;
+  CreateThread(nullptr, 0, DiredThread, params, 0, nullptr);
+}
+
 static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   switch (LOWORD(wParam)) {
   case IDM_FILE_NEW:
@@ -641,6 +730,10 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     UpdateMenu(hwnd);
     break;
   }
+  case IDM_TOOLS_DIRED: {
+    OpenDired(hwnd);
+    break;
+  }
   case IDM_TOOLS_TERMINAL: {
     CreateNewTerminal(hwnd, L"powershell.exe");
     break;
@@ -706,7 +799,34 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     UpdateMenu(hwnd);
     break;
   }
+  case IDM_DIRED_CONFIGURE: {
+    Dialogs::ShowDiredPairsDialog(hwnd);
+    UpdateMenu(hwnd);
+    break;
+  }
   default:
+    if (LOWORD(wParam) >= IDM_DIRED_START && LOWORD(wParam) < IDM_DIRED_START + 100) {
+      size_t idx = LOWORD(wParam) - IDM_DIRED_START;
+      const auto &pairs = SettingsManager::Instance().GetDiredPairs();
+      if (idx < pairs.size()) {
+        std::wstring diredPath;
+        wchar_t modulePath[MAX_PATH];
+        GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+        diredPath = std::wstring(modulePath);
+        size_t pos = diredPath.find_last_of(L"\\/");
+        if (pos != std::wstring::npos) diredPath = diredPath.substr(0, pos + 1);
+        diredPath += L"Dired.exe";
+
+        std::wstring cmd = L"\"" + diredPath + L"\" \"" + pairs[idx].leftDir + L"\"";
+        if (!pairs[idx].rightDir.empty()) cmd += L" \"" + pairs[idx].rightDir + L"\"";
+
+        STARTUPINFOW si = { sizeof(si) };
+        PROCESS_INFORMATION pi;
+        CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+      }
+    } else
     if (LOWORD(wParam) >= IDM_TERMINALS_START && LOWORD(wParam) < IDM_TERMINALS_START + 100) {
       int termIdx = LOWORD(wParam) - IDM_TERMINALS_START;
       if (termIdx >= 0 && termIdx < static_cast<int>(g_terminalTabs.size())) {

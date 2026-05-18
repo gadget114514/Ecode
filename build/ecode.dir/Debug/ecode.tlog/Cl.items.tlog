@@ -16,7 +16,4 @@ D:\ws\Ecode\src\TerminalBuffer.cpp;D:\ws\Ecode\build\ecode.dir\Debug\TerminalBuf
 D:\ws\Ecode\src\TerminalEmulator.cpp;D:\ws\Ecode\build\ecode.dir\Debug\TerminalEmulator.obj
 D:\ws\Ecode\src\TerminalView.cpp;D:\ws\Ecode\build\ecode.dir\Debug\TerminalView.obj
 D:\ws\Ecode\src\main.cpp;D:\ws\Ecode\build\ecode.dir\Debug\main.obj
-D:\ws\Ecode\FastFileSearch\src\FatReader.cpp;D:\ws\Ecode\build\ecode.dir\Debug\FatReader.obj
-D:\ws\Ecode\FastFileSearch\src\MFTReader.cpp;D:\ws\Ecode\build\ecode.dir\Debug\MFTReader.obj
-D:\ws\Ecode\FastFileSearch\src\exFatReader.cpp;D:\ws\Ecode\build\ecode.dir\Debug\exFatReader.obj
 D:\ws\Ecode\src-duktape\duktape.c;D:\ws\Ecode\build\ecode.dir\Debug\duktape.obj

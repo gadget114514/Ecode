@@ -786,6 +786,126 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
   return (INT_PTR)FALSE;
 }
 
+static void RefreshDpList(HWND hDlg) {
+  HWND hList = GetDlgItem(hDlg, IDC_DP_LIST);
+  SendMessage(hList, LB_RESETCONTENT, 0, 0);
+  const auto &pairs = SettingsManager::Instance().GetDiredPairs();
+  for (size_t i = 0; i < pairs.size(); ++i) {
+    std::wstring text = pairs[i].label + L"  →  " + pairs[i].leftDir + L" | " + pairs[i].rightDir;
+    SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)text.c_str());
+  }
+}
+
+static void OpenDiredPair(const DiredPair &pair) {
+  if (pair.leftDir.empty() && pair.rightDir.empty()) return;
+  // Find Dired.exe alongside ecode.exe
+  wchar_t modulePath[MAX_PATH];
+  GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+  std::wstring dir = modulePath;
+  size_t pos = dir.find_last_of(L"\\/");
+  if (pos != std::wstring::npos) dir = dir.substr(0, pos + 1);
+  std::wstring diredPath = dir + L"Dired.exe";
+  if (GetFileAttributesW(diredPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+    diredPath = L"Dired.exe";
+
+  std::wstring cmd = L"\"" + diredPath + L"\" \"" + pair.leftDir + L"\"";
+  if (!pair.rightDir.empty())
+    cmd += L" \"" + pair.rightDir + L"\"";
+
+  STARTUPINFOW si = { sizeof(si) };
+  PROCESS_INFORMATION pi;
+  CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+}
+
+INT_PTR CALLBACK DiredPairsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                   LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    RefreshDpList(hDlg);
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_DP_LIST && HIWORD(wParam) == LBN_SELCHANGE) {
+      HWND hList = GetDlgItem(hDlg, IDC_DP_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        const auto &pairs = SettingsManager::Instance().GetDiredPairs();
+        if (sel >= 0 && sel < (int)pairs.size()) {
+          SetDlgItemTextW(hDlg, IDC_DP_LABEL, pairs[sel].label.c_str());
+          SetDlgItemTextW(hDlg, IDC_DP_LEFT, pairs[sel].leftDir.c_str());
+          SetDlgItemTextW(hDlg, IDC_DP_RIGHT, pairs[sel].rightDir.c_str());
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_DP_LEFT_BROWSE) {
+      std::wstring p = Dialogs::BrowseForFolder(hDlg);
+      if (!p.empty()) SetDlgItemTextW(hDlg, IDC_DP_LEFT, p.c_str());
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_DP_RIGHT_BROWSE) {
+      std::wstring p = Dialogs::BrowseForFolder(hDlg);
+      if (!p.empty()) SetDlgItemTextW(hDlg, IDC_DP_RIGHT, p.c_str());
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_DP_ADD) {
+      wchar_t label[256], left[MAX_PATH], right[MAX_PATH];
+      GetDlgItemTextW(hDlg, IDC_DP_LABEL, label, 256);
+      GetDlgItemTextW(hDlg, IDC_DP_LEFT, left, MAX_PATH);
+      GetDlgItemTextW(hDlg, IDC_DP_RIGHT, right, MAX_PATH);
+      if (wcslen(label) > 0 && wcslen(left) > 0) {
+        SettingsManager::Instance().AddDiredPair(label, left, right);
+        SettingsManager::Instance().Save();
+        RefreshDpList(hDlg);
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_DP_DUPLICATE) {
+      HWND hList = GetDlgItem(hDlg, IDC_DP_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        const auto &pairs = SettingsManager::Instance().GetDiredPairs();
+        if (sel >= 0 && sel < (int)pairs.size()) {
+          auto &p = pairs[sel];
+          SettingsManager::Instance().AddDiredPair(p.label, p.leftDir, p.rightDir);
+          SettingsManager::Instance().Save();
+          RefreshDpList(hDlg);
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_DP_REMOVE) {
+      HWND hList = GetDlgItem(hDlg, IDC_DP_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        SettingsManager::Instance().RemoveDiredPair(sel);
+        SettingsManager::Instance().Save();
+        RefreshDpList(hDlg);
+        SetDlgItemTextW(hDlg, IDC_DP_LABEL, L"");
+        SetDlgItemTextW(hDlg, IDC_DP_LEFT, L"");
+        SetDlgItemTextW(hDlg, IDC_DP_RIGHT, L"");
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_DP_OPEN) {
+      wchar_t label[256], left[MAX_PATH], right[MAX_PATH];
+      GetDlgItemTextW(hDlg, IDC_DP_LABEL, label, 256);
+      GetDlgItemTextW(hDlg, IDC_DP_LEFT, left, MAX_PATH);
+      GetDlgItemTextW(hDlg, IDC_DP_RIGHT, right, MAX_PATH);
+      if (wcslen(label) > 0 && wcslen(left) > 0) {
+        OpenDiredPair({label, left, right});
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void Dialogs::ShowDiredPairsDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_DIRED_PAIRS), hwnd,
+             DiredPairsDlgProc);
+}
+
 void ShowCliDialog(HWND hwnd) {
   DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_CLI_SETTINGS), hwnd,
              CliSettingsDlgProc);

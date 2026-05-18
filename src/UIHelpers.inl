@@ -261,6 +261,7 @@ void UpdateMenu(HWND hwnd) {
              L10N("menu_tools_run_macro"));
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_CONSOLE, L10N("menu_tools_console"));
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_SHELL_MODE, L"Shell Mode");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_DIRED, L"Dired\tC-x d");
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL, L"New Terminal (powershell)");
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_CMD, L"New Terminal (cmd)");
@@ -349,7 +350,19 @@ void UpdateMenu(HWND hwnd) {
     DestroyMenu(hAi);
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
+  // Dired Menu
+  HMENU hDired = CreatePopupMenu();
+  const auto &diredPairs = SettingsManager::Instance().GetDiredPairs();
+  for (size_t i = 0; i < diredPairs.size(); ++i) {
+    std::wstring text = diredPairs[i].label + L"  →  " + diredPairs[i].leftDir;
+    AppendMenu(hDired, MF_STRING, IDM_DIRED_START + i, text.c_str());
+  }
+  if (!diredPairs.empty())
+    AppendMenu(hDired, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hDired, MF_STRING, IDM_DIRED_CONFIGURE, L"Configure Dired Pairs...");
+
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hDired, L"Dired");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hTerminals, L"Terminals");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hHelp, L10N("menu_help"));
 

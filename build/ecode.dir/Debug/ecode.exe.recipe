@@ -5,6 +5,9 @@
       <FullPath>D:\ws\Ecode\build\x64\Debug\ZERO_CHECK</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>D:\ws\Ecode\Application\Dired\bin\Debug\Dired.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>D:\ws\Ecode\bin\Debug\ecode.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>

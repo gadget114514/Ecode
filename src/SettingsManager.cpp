@@ -139,6 +139,20 @@ void SettingsManager::Load() {
       m_cliEntries.push_back({cmdBuf, dirBuf});
     }
   }
+
+  // Load Dired pairs
+  m_diredPairs.clear();
+  for (int i = 0; i < 50; ++i) {
+    std::wstring keyLabel = L"DP_Label_" + std::to_wstring(i);
+    std::wstring keyLeft  = L"DP_Left_" + std::to_wstring(i);
+    std::wstring keyRight = L"DP_Right_" + std::to_wstring(i);
+    wchar_t labelBuf[256], leftBuf[MAX_PATH], rightBuf[MAX_PATH];
+    if (GetPrivateProfileStringW(L"DiredPairs", keyLabel.c_str(), L"", labelBuf, 256, path.c_str()) > 0) {
+      GetPrivateProfileStringW(L"DiredPairs", keyLeft.c_str(), L"", leftBuf, MAX_PATH, path.c_str());
+      GetPrivateProfileStringW(L"DiredPairs", keyRight.c_str(), L"", rightBuf, MAX_PATH, path.c_str());
+      m_diredPairs.push_back({labelBuf, leftBuf, rightBuf});
+    }
+  }
 }
 
 std::wstring SettingsManager::GetAIApiKey(const std::wstring &vendor) const {
@@ -335,12 +349,34 @@ void SettingsManager::RemoveCliEntry(size_t index) {
 
 void SettingsManager::SaveCliEntries() {
   std::wstring path = GetSettingsPath();
-  // Clear existing CLI entries
   WritePrivateProfileStringW(L"CLI", NULL, NULL, path.c_str());
   for (size_t i = 0; i < m_cliEntries.size(); ++i) {
     std::wstring keyCmd = L"CLI_Cmd_" + std::to_wstring(i);
     std::wstring keyDir = L"CLI_Dir_" + std::to_wstring(i);
     WritePrivateProfileStringW(L"CLI", keyCmd.c_str(), m_cliEntries[i].command.c_str(), path.c_str());
     WritePrivateProfileStringW(L"CLI", keyDir.c_str(), m_cliEntries[i].folder.c_str(), path.c_str());
+  }
+}
+
+void SettingsManager::AddDiredPair(const std::wstring &label, const std::wstring &leftDir, const std::wstring &rightDir) {
+  m_diredPairs.push_back({label, leftDir, rightDir});
+}
+
+void SettingsManager::RemoveDiredPair(size_t index) {
+  if (index < m_diredPairs.size()) {
+    m_diredPairs.erase(m_diredPairs.begin() + index);
+  }
+}
+
+void SettingsManager::SaveDiredPairs() {
+  std::wstring path = GetSettingsPath();
+  WritePrivateProfileStringW(L"DiredPairs", NULL, NULL, path.c_str());
+  for (size_t i = 0; i < m_diredPairs.size(); ++i) {
+    std::wstring keyLabel = L"DP_Label_" + std::to_wstring(i);
+    std::wstring keyLeft  = L"DP_Left_" + std::to_wstring(i);
+    std::wstring keyRight = L"DP_Right_" + std::to_wstring(i);
+    WritePrivateProfileStringW(L"DiredPairs", keyLabel.c_str(), m_diredPairs[i].label.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"DiredPairs", keyLeft.c_str(), m_diredPairs[i].leftDir.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"DiredPairs", keyRight.c_str(), m_diredPairs[i].rightDir.c_str(), path.c_str());
   }
 }

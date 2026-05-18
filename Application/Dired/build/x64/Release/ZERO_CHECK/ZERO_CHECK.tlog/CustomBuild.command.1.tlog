@@ -1,0 +1,10 @@
+^D:\WS\ECODE\APPLICATION\DIRED\BUILD\CMAKEFILES\DE6676E758AFD845574D37F5BE5C4DDD\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SD:/ws/Ecode/Application/Dired -BD:/ws/Ecode/Application/Dired/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/ws/Ecode/Application/Dired/build/Dired.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
