@@ -124,7 +124,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     NMHDR *pnm = (NMHDR *)lParam;
     if (pnm->hwndFrom == g_tabHwnd && pnm->code == TCN_SELCHANGE) {
       int sel = TabCtrl_GetCurSel(g_tabHwnd);
-      if (sel != -1) {
+      if (sel == g_terminalTabIndex) {
+        // Switch to terminal tab
+        ShowScrollBar(hwnd, SB_BOTH, FALSE);
+        if (g_terminalViewHwnd) {
+          ShowWindow(g_terminalViewHwnd, SW_SHOW);
+          SetFocus(g_terminalViewHwnd);
+          // Lazy-start PTY on first activation
+          if (g_terminalView && !g_terminalView->IsStarted())
+            g_terminalView->StartSession(L"powershell.exe", {});
+        }
+      } else if (sel != -1) {
+        // Switch to an editor buffer tab
+        if (g_terminalViewHwnd)
+          ShowWindow(g_terminalViewHwnd, SW_HIDE);
+        ShowScrollBar(hwnd, SB_BOTH, TRUE);
         g_editor->SwitchToBuffer(static_cast<size_t>(sel));
         UpdateMenu(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);

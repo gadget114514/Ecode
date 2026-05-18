@@ -94,9 +94,9 @@ void Localization::LoadTranslations() {
 
   en["menu_language"] = L"&Language";
   en["menu_language_en"] = L"English";
-  en["menu_language_jp"] = L"譌･譛ｬ隱・(Japanese)";
-  en["menu_language_es"] = L"Espaﾃｱol (Spanish)";
-  en["menu_language_fr"] = L"Franﾃｧais (French)";
+  en["menu_language_jp"] = L"Japanese";
+  en["menu_language_es"] = L"Español (Spanish)";
+  en["menu_language_fr"] = L"Français (French)";
   en["menu_language_de"] = L"Deutsch (German)";
 
   en["menu_buffers"] = L"&Buffers";
@@ -161,9 +161,9 @@ void Localization::LoadTranslations() {
   es["menu_file_save"] = L"&Guardar";
   es["menu_file_save_as"] = L"Guardar &como...";
   es["menu_file_close"] = L"&Cerrar";
-  es["menu_file_scratch"] = L"Nuevo &bﾃｺfer de notas";
+  es["menu_file_scratch"] = L"Nuevo &búfer de notas";
   es["menu_file_recent"] = L"Archivos &recientes";
-  es["menu_file_recent_empty"] = L"(Vacﾃｭo)";
+  es["menu_file_recent_empty"] = L"(Vacío)";
   es["menu_file_exit"] = L"&Salir";
 
   es["menu_edit"] = L"&Editar";
@@ -175,18 +175,18 @@ void Localization::LoadTranslations() {
   es["menu_edit_select_all"] = L"Seleccionar &todo";
   es["menu_edit_find"] = L"&Buscar...";
   es["menu_edit_replace"] = L"&Reemplazar...";
-  es["menu_edit_goto"] = L"&Ir a la lﾃｭnea...";
+  es["menu_edit_goto"] = L"&Ir a la línea...";
 
   es["menu_view"] = L"&Vista";
-  es["menu_config"] = L"&Configuraciﾃｳn";
+  es["menu_config"] = L"&Configuración";
   es["menu_tools"] = L"&Herramientas";
   es["menu_language"] = L"&Idioma";
-  es["menu_buffers"] = L"&Bﾃｺferes";
+  es["menu_buffers"] = L"&Búferes";
   es["menu_help"] = L"&Ayuda";
 
   // French
   auto &fr = m_translations[Language::French];
-  fr["title"] = L"Ecode - ﾃ嬰iteur de texte natif Win32";
+  fr["title"] = L"Ecode - Éditeur de texte natif Win32";
   fr["menu_file"] = L"&Fichier";
   fr["menu_file_new"] = L"&Nouveau";
   fr["menu_file_open"] = L"&Ouvrir...";
@@ -194,20 +194,20 @@ void Localization::LoadTranslations() {
   fr["menu_file_save_as"] = L"Enregistrer &sous...";
   fr["menu_file_close"] = L"&Fermer";
   fr["menu_file_scratch"] = L"Nouveau &brouillon";
-  fr["menu_file_recent"] = L"Fichiers &rﾃｩcents";
+  fr["menu_file_recent"] = L"Fichiers &récents";
   fr["menu_file_recent_empty"] = L"(Vide)";
   fr["menu_file_exit"] = L"&Quitter";
 
   fr["menu_edit"] = L"&Modifier";
   fr["menu_edit_undo"] = L"&Annuler";
-  fr["menu_edit_redo"] = L"&Rﾃｩtablir";
+  fr["menu_edit_redo"] = L"&Rétablir";
   fr["menu_edit_cut"] = L"Cou&per";
   fr["menu_edit_copy"] = L"&Copier";
   fr["menu_edit_paste"] = L"&Coller";
-  fr["menu_edit_select_all"] = L"&Tout sﾃｩlectionner";
+  fr["menu_edit_select_all"] = L"&Tout sélectionner";
   fr["menu_edit_find"] = L"&Rechercher...";
   fr["menu_edit_replace"] = L"&Remplacer...";
-  fr["menu_edit_goto"] = L"&Aller ﾃ� la ligne...";
+  fr["menu_edit_goto"] = L"&Aller à la ligne...";
 
   fr["menu_view"] = L"&Affichage";
   fr["menu_config"] = L"&Configuration";
@@ -221,22 +221,22 @@ void Localization::LoadTranslations() {
   de["title"] = L"Ecode - Nativer Win32-Texteditor";
   de["menu_file"] = L"&Datei";
   de["menu_file_new"] = L"&Neu";
-  de["menu_file_open"] = L"&ﾃ貿fnen...";
+  de["menu_file_open"] = L"&Öffnen...";
   de["menu_file_save"] = L"&Speichern";
   de["menu_file_save_as"] = L"Speichern &unter...";
-  de["menu_file_close"] = L"&Schlieﾃ歹n";
+  de["menu_file_close"] = L"&Schließen";
   de["menu_file_scratch"] = L"Neuer &Notizblock";
-  de["menu_file_recent"] = L"&Zuletzt geﾃｶffnete Dateien";
+  de["menu_file_recent"] = L"&Zuletzt geöffnete Dateien";
   de["menu_file_recent_empty"] = L"(Leer)";
   de["menu_file_exit"] = L"&Beenden";
 
   de["menu_edit"] = L"&Bearbeiten";
-  de["menu_edit_undo"] = L"&Rﾃｼckgﾃ､ngig";
+  de["menu_edit_undo"] = L"&Rückgängig";
   de["menu_edit_redo"] = L"&Wiederherstellen";
   de["menu_edit_cut"] = L"Aus&schneiden";
   de["menu_edit_copy"] = L"&Kopieren";
-  de["menu_edit_paste"] = L"&Einfﾃｼgen";
-  de["menu_edit_select_all"] = L"&Alles auswﾃ､hlen";
+  de["menu_edit_paste"] = L"&Einfügen";
+  de["menu_edit_select_all"] = L"&Alles auswählen";
   de["menu_edit_find"] = L"&Suchen...";
   de["menu_edit_replace"] = L"&Ersetzen...";
   de["menu_edit_goto"] = L"&Gehe zu Zeile...";
