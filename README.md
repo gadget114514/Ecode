@@ -7,6 +7,8 @@
 
 **Ecode** is a blazing-fast, native Win32 text editor designed for efficiency, visual excellence, and extreme programmability. Built from the ground up for modern developers who demand performance without compromising on customization.
 
+![Ecode Screenshot](images/opencode.jpg)
+
 ---
 
 ## ✨ Key Technical Pillars
