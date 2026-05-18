@@ -55,6 +55,8 @@ int g_currentLogLevel = LOG_INFO;
 WNDPROC g_oldMinibufferProc = NULL;
 bool g_bypassCache = false;
 bool g_compileAllScripts = false;
+volatile LONG g_grepCancelFlag = 0;
+bool g_grepSearchActive = false;
 
 #include "TreeViewHelpers.inl"
 #include "AppMain.inl"

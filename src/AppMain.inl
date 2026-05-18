@@ -190,6 +190,66 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
+  case WM_GREP_RESULT: {
+    HWND hListView = (HWND)wParam;
+    GrepSearchResult *batch = (GrepSearchResult*)lParam;
+    if (batch && IsWindow(hListView)) {
+      GrepResultData *data = (GrepResultData*)GetWindowLongPtr(hListView, GWLP_USERDATA);
+      if (data) {
+        int base = (int)data->files.size();
+        for (int i = 0; i < (int)batch->files.size(); i++) {
+          data->files.push_back(std::move(batch->files[i]));
+          data->lines.push_back(batch->lines[i]);
+          data->contents.push_back(std::move(batch->contents[i]));
+          LVITEMW item = {0};
+          item.mask = LVIF_TEXT;
+          item.iItem = base + i;
+          item.pszText = (LPWSTR)data->files[base + i].c_str();
+          ListView_InsertItem(hListView, &item);
+          std::wstring ln = std::to_wstring(data->lines[base + i]);
+          ListView_SetItemText(hListView, base + i, 1, (LPWSTR)ln.c_str());
+          ListView_SetItemText(hListView, base + i, 2, (LPWSTR)data->contents[base + i].c_str());
+        }
+      }
+      delete batch;
+    }
+    return 0;
+  }
+  case WM_GREP_PROGRESS: {
+    HWND hListView = (HWND)wParam;
+    int filesProcessed = (int)lParam;
+    for (auto &tab : g_appTabs) {
+      if (tab.hwnd == hListView) {
+        GrepResultData *data = (GrepResultData*)tab.data;
+        int cnt = data ? (int)data->files.size() : 0;
+        size_t paren = tab.label.find(L'(');
+        std::wstring base = (paren != std::wstring::npos) ? tab.label.substr(0, paren) : tab.label;
+        while (!base.empty() && base.back() == L' ') base.pop_back();
+        tab.label = base + L" (" + std::to_wstring(cnt) + L" matches, " + std::to_wstring(filesProcessed) + L" files)";
+        break;
+      }
+    }
+    SendMessage(g_progressHwnd, PBM_SETPOS, filesProcessed % 100, 0);
+    return 0;
+  }
+  case WM_GREP_COMPLETE: {
+    HWND hListView = (HWND)wParam;
+    int totalMatches = (int)lParam;
+    g_grepSearchActive = false;
+    SendMessage(g_progressHwnd, PBM_SETPOS, 0, 0);
+    if (IsWindow(hListView)) {
+      for (auto &tab : g_appTabs) {
+        if (tab.hwnd == hListView) {
+          size_t end = tab.label.find(L'(');
+          std::wstring base = (end != std::wstring::npos) ? tab.label.substr(0, end) : tab.label;
+          tab.label = base + L" (" + std::to_wstring(totalMatches) + L" matches)";
+          UpdateTabs(hwnd);
+          break;
+        }
+      }
+    }
+    return 0;
+  }
   case WM_DROPFILES: {
     HDROP hDrop = (HDROP)wParam;
     UINT count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);

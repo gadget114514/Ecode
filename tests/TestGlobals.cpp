@@ -34,4 +34,7 @@ std::vector<AppTabInfo> g_appTabs;
 int g_activeAppTab = -1;
 std::vector<TerminalTabInfo> g_terminalTabs;
 int g_activeTerminalTab = -1;
+volatile LONG g_grepCancelFlag = 0;
+bool g_grepSearchActive = false;
 void UpdateMenu(HWND) {}
+void UpdateTabs(HWND) {}

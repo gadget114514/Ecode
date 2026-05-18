@@ -82,11 +82,6 @@ size_t Editor::OpenJsShell() {
   return m_activeBufferIndex;
 }
 
-struct GrepResultData {
-  std::vector<std::wstring> files;
-  std::vector<int> lines;
-};
-
 static LRESULT CALLBACK GrepListSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   if (msg == WM_NOTIFY) {
     LPNMHDR nm = (LPNMHDR)lp;
@@ -95,13 +90,125 @@ static LRESULT CALLBACK GrepListSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPA
       if (sel >= 0) {
         GrepResultData *data = (GrepResultData*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
         if (data && sel < (int)data->files.size()) {
-          g_editor->OpenFile(data->files[sel]);
+          size_t bufIdx = g_editor->OpenFile(data->files[sel]);
+          if (bufIdx != (size_t)-1) {
+            g_editor->SwitchToBuffer(bufIdx);
+            Buffer *buf = g_editor->GetActiveBuffer();
+            if (buf && data->lines[sel] >= 1) {
+              size_t line = (size_t)data->lines[sel] - 1;
+              size_t offset = buf->GetLineOffset(line);
+              buf->SetCaretPos(offset);
+              buf->SetSelectionAnchor(offset);
+              buf->SetScrollLine(line > 20 ? line - 20 : 0);
+              InvalidateRect(g_mainHwnd, NULL, FALSE);
+            }
+          }
         }
       }
       return 0;
     }
   }
   return DefWindowProc(hwnd, msg, wp, lp);
+}
+
+static void SendBatch(HWND hwndListView, std::vector<std::wstring> &files,
+                      std::vector<int> &lines, std::vector<std::wstring> &contents) {
+  if (files.empty()) return;
+  auto *batch = new GrepSearchResult();
+  batch->files.swap(files);
+  batch->lines.swap(lines);
+  batch->contents.swap(contents);
+  PostMessage(g_mainHwnd, WM_GREP_RESULT, (WPARAM)hwndListView, (LPARAM)batch);
+}
+
+static DWORD WINAPI GrepSearchThread(LPVOID param) {
+  GrepSearchParams *params = (GrepSearchParams*)param;
+
+  std::wregex re;
+  bool hasRegex = false;
+  if (params->useRegex && !params->pattern.empty()) {
+    try {
+      std::wregex::flag_type flags = std::wregex::ECMAScript;
+      if (!params->matchCase) flags |= std::wregex::icase;
+      re.assign(params->pattern, flags);
+      hasRegex = true;
+    } catch (...) {
+      hasRegex = false;
+    }
+  }
+
+  std::vector<std::wstring> batchFiles;
+  std::vector<int> batchLines;
+  std::vector<std::wstring> batchContents;
+  int totalMatches = 0;
+  int filesProcessed = 0;
+
+  auto MatchLine = [&](const std::string &line) -> bool {
+    if (hasRegex)
+      return std::regex_search(StringToWString(line), re);
+    std::string pat = WStringToString(params->pattern);
+    if (params->matchCase)
+      return line.find(pat) != std::string::npos;
+    std::string lowerLine = line;
+    std::string lowerPat = pat;
+    std::transform(lowerLine.begin(), lowerLine.end(), lowerLine.begin(), ::tolower);
+    std::transform(lowerPat.begin(), lowerPat.end(), lowerPat.begin(), ::tolower);
+    return lowerLine.find(lowerPat) != std::string::npos;
+  };
+
+  try {
+    if (fs::exists(params->dir) && fs::is_directory(params->dir)) {
+      for (const auto &entry : fs::recursive_directory_iterator(params->dir)) {
+        if (InterlockedCompareExchange(&g_grepCancelFlag, 1, 1))
+          break;
+        if (!fs::is_regular_file(entry.status()))
+          continue;
+        if (!params->extFilter.empty()) {
+          std::wstring ext = entry.path().extension().wstring();
+          if (ext.empty()) continue;
+          bool found = false;
+          std::wstring filter = params->extFilter;
+          size_t p = 0;
+          while ((p = filter.find(L';')) != std::wstring::npos) {
+            std::wstring e = filter.substr(0, p);
+            if (_wcsicmp(ext.c_str(), e.c_str()) == 0) { found = true; break; }
+            filter.erase(0, p + 1);
+          }
+          if (!found && _wcsicmp(ext.c_str(), filter.c_str()) != 0) continue;
+        }
+        std::ifstream file(entry.path());
+        if (!file) continue;
+        std::string line;
+        int lineNum = 0;
+        while (std::getline(file, line)) {
+          if (line.length() > 4096) break;
+          lineNum++;
+          if (MatchLine(line)) {
+            batchFiles.push_back(entry.path().wstring());
+            batchLines.push_back(lineNum);
+            batchContents.push_back(StringToWString(line));
+            totalMatches++;
+            if (batchFiles.size() >= 50) {
+              SendBatch(params->hwndListView, batchFiles, batchLines, batchContents);
+            }
+          }
+        }
+        filesProcessed++;
+        if (filesProcessed % 25 == 0) {
+          PostMessage(g_mainHwnd, WM_GREP_PROGRESS, (WPARAM)params->hwndListView, filesProcessed);
+        }
+      }
+    }
+  } catch (const fs::filesystem_error &) {
+  } catch (...) {
+    DebugLog("GrepSearchThread - Exception during search", LOG_ERROR);
+  }
+
+  SendBatch(params->hwndListView, batchFiles, batchLines, batchContents);
+  PostMessage(g_mainHwnd, WM_GREP_COMPLETE, (WPARAM)params->hwndListView, totalMatches);
+
+  delete params;
+  return 0;
 }
 
 void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
@@ -111,7 +218,6 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
   extern std::vector<AppTabInfo> g_appTabs;
   extern int g_activeAppTab;
 
-  // Create a ListView in an app tab
   HWND hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
       WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL | LVS_NOSORTHEADER,
       0, 0, 100, 100, g_mainHwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -128,91 +234,28 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
 
   AppTabInfo tab;
   tab.hwnd = hListView;
-  tab.label = L"Grep: " + pattern;
+  tab.label = L"Grep: " + pattern + L" (searching...)";
   tab.type = 1;
   tab.data = grepData;
   g_appTabs.push_back(std::move(tab));
   int appIdx = static_cast<int>(g_appTabs.size()) - 1;
   g_activeAppTab = appIdx;
   UpdateMenu(g_mainHwnd);
+  UpdateTabs(g_mainHwnd);
 
-  // Build regex if needed
-  std::wregex re;
-  std::wstring searchStr = pattern;
-  bool hasRegex = false;
-  if (useRegex && !pattern.empty()) {
-    try {
-      std::wregex::flag_type flags = std::wregex::ECMAScript;
-      if (!matchCase) flags |= std::wregex::icase;
-      re.assign(pattern, flags);
-      hasRegex = true;
-    } catch (...) {
-      hasRegex = false;
-    }
-  }
+  auto *params = new GrepSearchParams{
+    dir, pattern, extFilter, useRegex, matchCase, hListView
+  };
 
-  // Simple recursive search (blocking)
-  int matchCount = 0;
-  try {
-    if (fs::exists(dir) && fs::is_directory(dir)) {
-      for (const auto &entry : fs::recursive_directory_iterator(dir)) {
-        if (!fs::is_regular_file(entry.status())) continue;
-        // Apply extension filter
-        if (!extFilter.empty()) {
-          std::wstring ext = entry.path().extension().wstring();
-          if (ext.empty()) continue;
-          bool found = false;
-          std::wstring filter = extFilter;
-          size_t p = 0;
-          while ((p = filter.find(L';')) != std::wstring::npos) {
-            std::wstring e = filter.substr(0, p);
-            if (_wcsicmp(ext.c_str(), e.c_str()) == 0) { found = true; break; }
-            filter.erase(0, p + 1);
-          }
-          if (!found && _wcsicmp(ext.c_str(), filter.c_str()) != 0) continue;
-        }
-        std::ifstream file(entry.path());
-        if (!file) continue;
-        std::string line;
-        int lineNum = 0;
-        while (std::getline(file, line)) {
-          lineNum++;
-          bool matched = false;
-          if (hasRegex) {
-            matched = std::regex_search(StringToWString(line), re);
-          } else {
-            std::string pat = WStringToString(pattern);
-            if (matchCase) {
-              matched = line.find(pat) != std::string::npos;
-            } else {
-              std::string lowerLine = line;
-              std::string lowerPat = pat;
-              std::transform(lowerLine.begin(), lowerLine.end(), lowerLine.begin(), ::tolower);
-              std::transform(lowerPat.begin(), lowerPat.end(), lowerPat.begin(), ::tolower);
-              matched = lowerLine.find(lowerPat) != std::string::npos;
-            }
-          }
-          if (matched) {
-            grepData->files.push_back(entry.path().wstring());
-            grepData->lines.push_back(lineNum);
-            LVITEMW item = {0};
-            item.mask = LVIF_TEXT;
-            item.iItem = matchCount;
-            std::wstring fpath = entry.path().wstring();
-            item.pszText = (LPWSTR)fpath.c_str();
-            ListView_InsertItem(hListView, &item);
-            std::wstring ln = std::to_wstring(lineNum);
-            ListView_SetItemText(hListView, matchCount, 1, (LPWSTR)ln.c_str());
-            ListView_SetItemText(hListView, matchCount, 2, (LPWSTR)StringToWString(line).c_str());
-            matchCount++;
-          }
-        }
-      }
-    }
-  } catch (...) {
-    DebugLog("Editor::FindInFiles - Exception during search", LOG_ERROR);
-  }
-  DebugLog("FindInFiles: " + std::to_string(matchCount) + " matches found", LOG_INFO);
+  g_grepSearchActive = true;
+  InterlockedExchange(&g_grepCancelFlag, 0);
+  CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)GrepSearchThread, params, 0, NULL);
+
+  DebugLog("FindInFiles: background search started", LOG_INFO);
+}
+
+void Editor::CancelFindInFiles() {
+  InterlockedExchange(&g_grepCancelFlag, 1);
 }
 
 void Editor::FindFile(const std::wstring &pattern, const std::wstring &dir) {
