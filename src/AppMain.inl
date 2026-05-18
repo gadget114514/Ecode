@@ -127,6 +127,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       if (g_appTabs[appIdx].hwnd) {
         DestroyWindow(g_appTabs[appIdx].hwnd);
       }
+
+      // Sync thread input queues for robust cross-process keyboard and focus interaction
+      DWORD childThreadId = GetWindowThreadProcessId(childHwnd, NULL);
+      DWORD parentThreadId = GetCurrentThreadId();
+      AttachThreadInput(childThreadId, parentThreadId, TRUE);
+
       SetParent(childHwnd, hwnd);
       LONG style = GetWindowLong(childHwnd, GWL_STYLE);
       style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
@@ -156,6 +162,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       if (g_terminalTabs[termIdx].hwnd) {
         DestroyWindow(g_terminalTabs[termIdx].hwnd);
       }
+
+      // Sync thread input queues for robust cross-process keyboard and focus interaction
+      DWORD childThreadId = GetWindowThreadProcessId(childHwnd, NULL);
+      DWORD parentThreadId = GetCurrentThreadId();
+      AttachThreadInput(childThreadId, parentThreadId, TRUE);
+
       SetParent(childHwnd, hwnd);
       LONG style = GetWindowLong(childHwnd, GWL_STYLE);
       style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
