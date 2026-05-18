@@ -146,8 +146,7 @@ void EditorBufferRenderer::DrawEditorLines(
   {
     HRESULT hr = S_OK;
     float lineHeight = this->GetLineHeight();
-    float yOffset = -(static_cast<float>(firstLineNumber - 1) * lineHeight) +
-                    this->val_TopPadding;
+    float yOffset = this->val_TopPadding; // Text is exactly the viewport content, so draw from top
     float xOffset = gutterWidth + 5 - scrollX;
 
     // Selection Highlighting
