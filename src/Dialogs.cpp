@@ -633,8 +633,30 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       if (g_editor && wcslen(pattern) > 0 && wcslen(dir) > 0) {
         SettingsManager::Instance().SetFindStartDirectory(dir);
         SettingsManager::Instance().Save();
-        // Launch grep in an app tab via the editor
+
+        // Disable controls, start search
+        EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_PATTERN), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_DIR), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_EXT), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_REGEX), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_MATCH_CASE), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_BROWSE), FALSE);
+        SetDlgItemTextW(hDlg, IDCANCEL, L"Stop");
+
         g_editor->FindInFiles(dir, pattern, ext, useRegex ? true : false, matchCase ? true : false);
+
+        // Nested message loop while search is active
+        MSG msg;
+        while (g_grepSearchActive) {
+          while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (!IsDialogMessage(hDlg, &msg)) {
+              TranslateMessage(&msg);
+              DispatchMessage(&msg);
+            }
+          }
+          Sleep(10);
+        }
       }
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
@@ -645,6 +667,9 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       }
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDCANCEL) {
+      if (g_grepSearchActive) {
+        g_editor->CancelFindInFiles();
+      }
       EndDialog(hDlg, IDCANCEL);
       return (INT_PTR)TRUE;
     }
