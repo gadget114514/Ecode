@@ -15,6 +15,20 @@ struct DiredPair {
   std::wstring rightDir;
 };
 
+struct ThemeEntry {
+  std::wstring name;
+  std::wstring background;  // 8-char hex RRGGBBAA
+  std::wstring foreground;
+  std::wstring caret;
+  std::wstring selection;
+  std::wstring lineNumbers;
+  std::wstring keyword;
+  std::wstring string;
+  std::wstring number;
+  std::wstring comment;
+  std::wstring function;
+};
+
 class SettingsManager {
 public:
   static SettingsManager &Instance();
@@ -97,6 +111,15 @@ public:
   void RemoveDiredPair(size_t index);
   void SaveDiredPairs();
 
+  // Theme management
+  const std::vector<ThemeEntry> &GetThemes() const { return m_themes; }
+  std::wstring GetActiveThemeName() const { return m_activeTheme; }
+  void SetActiveThemeName(const std::wstring &name) { m_activeTheme = name; }
+  void AddTheme(const ThemeEntry &theme);
+  void RemoveTheme(size_t index);
+  void SaveThemes();
+  const ThemeEntry *FindTheme(const std::wstring &name) const;
+
 private:
   SettingsManager();
   std::wstring GetSettingsPath() const;
@@ -125,4 +148,7 @@ private:
   std::wstring m_aiVendor;
   std::wstring m_aiModel;
   std::vector<std::pair<std::wstring, std::wstring>> m_aiApiKeys; // vendor -> key
+
+  std::vector<ThemeEntry> m_themes;
+  std::wstring m_activeTheme;
 };

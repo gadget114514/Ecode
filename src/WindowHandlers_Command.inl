@@ -697,6 +697,12 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   case IDM_CONFIG_SETTINGS:
     Dialogs::ShowSettingsDialog(hwnd);
     break;
+  case IDM_CONFIG_THEME: {
+    Dialogs::ShowThemeManagerDialog(hwnd);
+    UpdateMenu(hwnd);
+    InvalidateRect(hwnd, NULL, FALSE);
+    break;
+  }
   case IDM_SHELL_ENC_UTF8:
     SettingsManager::Instance().SetShellEncoding(0);
     SettingsManager::Instance().Save();
@@ -844,6 +850,38 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         if (g_terminalTabs[termIdx].hwnd) {
           SetFocus(g_terminalTabs[termIdx].hwnd);
         }
+      }
+    } else if (LOWORD(wParam) >= IDM_THEME_START && LOWORD(wParam) < IDM_THEME_START + 100) {
+      size_t idx = LOWORD(wParam) - IDM_THEME_START;
+      const auto &themes = SettingsManager::Instance().GetThemes();
+      if (idx < themes.size()) {
+        auto &t = themes[idx];
+        Theme theme;
+        theme.name = t.name;
+        auto HexToColor = [](const std::wstring &hex) -> D2D1_COLOR_F {
+          unsigned int r = 0, g = 0, b = 0, a = 255;
+          if (hex.length() >= 8) {
+            swscanf_s(hex.c_str(), L"%02x%02x%02x%02x", &r, &g, &b, &a);
+          } else if (hex.length() >= 6) {
+            swscanf_s(hex.c_str(), L"%02x%02x%02x", &r, &g, &b);
+          }
+          return {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+        };
+        theme.background = HexToColor(t.background);
+        theme.foreground = HexToColor(t.foreground);
+        theme.caret = HexToColor(t.caret);
+        theme.selection = HexToColor(t.selection);
+        theme.lineNumbers = HexToColor(t.lineNumbers);
+        theme.keyword = HexToColor(t.keyword);
+        theme.string = HexToColor(t.string);
+        theme.number = HexToColor(t.number);
+        theme.comment = HexToColor(t.comment);
+        theme.function = HexToColor(t.function);
+        g_renderer->SetTheme(theme);
+        SettingsManager::Instance().SetActiveThemeName(t.name);
+        SettingsManager::Instance().Save();
+        UpdateMenu(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
       }
     } else if (LOWORD(wParam) >= IDM_CLI_START && LOWORD(wParam) < IDM_CLI_START + 100) {
       size_t idx = LOWORD(wParam) - IDM_CLI_START;
