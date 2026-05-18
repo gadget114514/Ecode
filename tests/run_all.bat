@@ -136,4 +136,36 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
+echo Running String Helpers Tests...
+..\bin\Debug\test_string_helpers.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo String Helpers Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Localization Tests...
+..\bin\Debug\test_localization.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Localization Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Selection JS Tests...
+..\bin\Debug\ecode_console.exe -headless -e "load('tests/selection_test.js'); Editor.setStatusText('Selection JS Tests Completed')"
+if %ERRORLEVEL% NEQ 0 (
+    echo Selection JS Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Find API JS Tests...
+..\bin\Debug\ecode_console.exe -headless -e "load('tests/find_test.js'); Editor.setStatusText('Find API JS Tests Completed')"
+if %ERRORLEVEL% NEQ 0 (
+    echo Find API JS Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
 echo === ALL TESTS PASSED ===

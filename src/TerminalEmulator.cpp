@@ -238,23 +238,50 @@ void TerminalEmulator::process(const std::wstring& text) {
 // ESC X handling
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handleEscape(wchar_t ch) {
+    wchar_t buf[128];
     switch (ch) {
-    case L'[': state_ = State::Csi; csiParams_.clear(); break;
-    case L']': state_ = State::Osc; oscText_.clear();   break;
-    case L'P': state_ = State::DcsEntry;                break;
-    case L'(': state_ = State::CharsetG0;               break;
-    case L')': state_ = State::CharsetG1;               break;
-    case L'7': buffer_->saveCursor();                   break;
-    case L'8': buffer_->restoreCursor();                break;
-    case L'D': buffer_->lineFeed();                     break;
-    case L'E': buffer_->carriageReturn(); buffer_->lineFeed(); break;
-    case L'M': buffer_->reverseIndex();                 break;
+    case L'[':
+        logDebug(L"[VT] ESC [ (CSI)");
+        state_ = State::Csi; csiParams_.clear(); break;
+    case L']':
+        logDebug(L"[VT] ESC ] (OSC)");
+        state_ = State::Osc; oscText_.clear();   break;
+    case L'P':
+        logDebug(L"[VT] ESC P (DCS)");
+        state_ = State::DcsEntry;                break;
+    case L'(':
+        swprintf_s(buf, L"[VT] ESC ( (charset G0)\n");
+        logDebug(buf);
+        state_ = State::CharsetG0;               break;
+    case L')':
+        logDebug(L"[VT] ESC ) (charset G1)");
+        state_ = State::CharsetG1;               break;
+    case L'7':
+        logDebug(L"[VT] ESC 7 (save cursor)");
+        buffer_->saveCursor();                   break;
+    case L'8':
+        logDebug(L"[VT] ESC 8 (restore cursor)");
+        buffer_->restoreCursor();                break;
+    case L'D':
+        logDebug(L"[VT] ESC D (line feed / IND)");
+        buffer_->lineFeed();                     break;
+    case L'E':
+        logDebug(L"[VT] ESC E (CR+LF / NEL)");
+        buffer_->carriageReturn(); buffer_->lineFeed(); break;
+    case L'M':
+        logDebug(L"[VT] ESC M (reverse index / RI)");
+        buffer_->reverseIndex();                 break;
     case L'c': // RIS – full reset
+        logDebug(L"[VT] ESC c (RIS – full reset)");
         buffer_->clearScreen();
         buffer_->resetScrollRegion();
         reset(buffer_);
         break;
-    default: break;
+    default: {
+        swprintf_s(buf, L"[VT] unknown ESC %c (0x%02x)\n", ch, (unsigned)ch);
+        logDebug(buf);
+        break;
+    }
     }
 }
 
@@ -262,10 +289,15 @@ void TerminalEmulator::handleEscape(wchar_t ch) {
 // CSI dispatch
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
+    {
+        wchar_t buf[256];
+        swprintf_s(buf, L"[VT] CSI %s%c\n", raw.c_str(), fin);
+        logDebug(buf);
+    }
     // strip leading parameter bytes that aren't digits/semicolons
     std::wstring params;
     for (wchar_t c : raw)
-        if ((c >= L'0' && c <= L'9') || c == L';' || c == L':' || c == L'?' || c == L'>' || c == L'<' || c == L'!')
+        if ((c >= L'0' && c <= L'9') || c == L';' || c == L':' || c == L'?' || c == L'>' || c == L'<' || c == L'!' || c == L'$')
             params += c;
 
     // --- private / extended first-byte prefixes ---
@@ -302,6 +334,67 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
     auto parts = splitParams(params);
     auto P = [&](size_t idx, int def) { return paramInt(parts, idx, def); };
 
+    // --- DECSACE: CSI Ps *x (before $ check — no $ intermediate) ---
+    if (fin == L'x' && params.find(L'*') != std::wstring::npos) {
+        std::wstring clean;
+        for (wchar_t c : params)
+            if (c != L'*' && c != L' ') clean += c;
+        int ps = 2;
+        try { ps = std::stoi(clean); } catch(...) { ps = 2; }
+        buffer_->setAttributeChangeExtent(ps);
+        return;
+    }
+
+    // --- rectangle operations ($ intermediate byte) ---
+    if (params.find(L'$') != std::wstring::npos) {
+        std::wstring clean;
+        for (wchar_t c : params)
+            if (c != L'$') clean += c;
+        auto rparts = splitParams(clean);
+        auto RP = [&](size_t idx, int def) { return paramInt(rparts, idx, def); };
+
+        if (fin == L'v') {
+            // DECCRA: CSI Pts;Pls;Pbs;Prs;Pps;Ptd;Pld;Ppd $v
+            buffer_->copyRect(RP(0,1)-1, RP(1,1)-1, RP(2,1)-1, RP(3,1)-1,
+                              RP(5,1)-1, RP(6,1)-1);
+            return;
+        }
+        if (fin == L'z') {
+            // DECERA: CSI Pt;Pl;Pb;Pr $z
+            buffer_->eraseRect(RP(0,1)-1, RP(1,1)-1, RP(2,1)-1, RP(3,1)-1, currentAttrs_);
+            return;
+        }
+        if (fin == L'x') {
+            // DECFRA: CSI Pch;Pt;Pl;Pb;Pr $x
+            buffer_->fillRect(RP(1,1)-1, RP(2,1)-1, RP(3,1)-1, RP(4,1)-1,
+                              (wchar_t)RP(0, L' '), currentAttrs_);
+            return;
+        }
+        if (fin == L'{') {
+            // DECSERA: CSI Pt;Pl;Pb;Pr ${
+            buffer_->eraseRect(RP(0,1)-1, RP(1,1)-1, RP(2,1)-1, RP(3,1)-1, currentAttrs_);
+            return;
+        }
+        if (fin == L'r') {
+            // DECCARA: CSI Pt;Pl;Pb;Pr;Ps1..Psn $r
+            int pt = RP(0,1)-1, pl = RP(1,1)-1, pb = RP(2,1)-1, pr = RP(3,1)-1;
+            std::vector<int> attrs;
+            for (size_t i = 4; i < rparts.size(); i++)
+                attrs.push_back(RP(i, 0));
+            buffer_->changeRectAttr(pt, pl, pb, pr, attrs);
+            return;
+        }
+        if (fin == L't') {
+            // DECRARA: CSI Pt;Pl;Pb;Pr;Ps1..Psn $t
+            buffer_->reverseRectAttr(RP(0,1)-1, RP(1,1)-1, RP(2,1)-1, RP(3,1)-1);
+            return;
+        }
+        wchar_t buf[256];
+        swprintf_s(buf, L"[VT] unknown CSI $ %s%c\n", clean.c_str(), fin);
+        logDebug(buf);
+        return;
+    }
+
     switch (fin) {
     // --- cursor movement ---
     case L'A': buffer_->moveCursorRelative(-std::max(1, P(0,1)), 0);  break;
@@ -318,9 +411,9 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
     case L'a': buffer_->moveCursorRelative(0, std::max(1, P(0,1)));   break;
 
     // --- erase ---
-    case L'J': buffer_->clearScreenMode(P(0,0)); break;
-    case L'K': buffer_->clearLine(P(0,0));        break;
-    case L'X': buffer_->eraseCharacters(std::max(1, P(0,1))); break;
+    case L'J': buffer_->clearScreenMode(P(0,0), currentAttrs_); break;
+    case L'K': buffer_->clearLine(P(0,0), currentAttrs_);        break;
+    case L'X': buffer_->eraseCharacters(std::max(1, P(0,1)), currentAttrs_); break;
 
     // --- insert / delete ---
     case L'@': buffer_->insertCharacters(std::max(1, P(0,1))); break;
@@ -370,7 +463,12 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             handleCursorStyle(P(0,0));
         break;
 
-    default: break;
+    default: {
+        wchar_t buf[256];
+        swprintf_s(buf, L"[VT] unknown CSI %s%c\n", params.c_str(), fin);
+        logDebug(buf);
+        break;
+    }
     }
 }
 
@@ -389,19 +487,41 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
         case 12:   buffer_->setCursorBlink(enabled);                  break;
         case 25:   buffer_->setCursorVisible(enabled);                break;
         case 1000: buffer_->setMouseTrackingMode(enabled ? 1000 : 0); break;
-        case 1001: /* highlight mouse — not supported */              break;
+        case 1001: /* highlight mouse — not supported */
+            logDebug(L"[VT] private mode 1001 (highlight mouse) not supported");
+            break;
         case 1002: buffer_->setMouseTrackingMode(enabled ? 1002 : 0); break;
         case 1003: buffer_->setMouseTrackingMode(enabled ? 1003 : 0); break;
         case 1004: buffer_->setFocusEventReportingEnabled(enabled);   break;
-        case 1005: /* UTF-8 mouse encoding — not supported */         break;
+        case 1005: /* UTF-8 mouse encoding — not supported */
+            logDebug(L"[VT] private mode 1005 (UTF-8 mouse) not supported");
+            break;
         case 1006: buffer_->setSgrMouseEnabled(enabled);              break; // SGR mouse (terminalpp)
         case 47:
         case 1047:
         case 1049: buffer_->useAlternateScreen(enabled);              break;
         case 2004: buffer_->setBracketedPasteEnabled(enabled);        break;
-        default:   break;
-        }
+        // Windows Terminal extensions – not implemented
+        case 2026:
+            logDebug(L"[VT] private mode 2026 (win32-input-mode) not implemented");
+            break;
+        case 2027:
+            logDebug(L"[VT] private mode 2027 (win32-keyboard-mode) not implemented");
+            break;
+        case 2031:
+            logDebug(L"[VT] private mode 2031 not implemented");
+            break;
+        case 9001:
+            logDebug(L"[VT] private mode 9001 not implemented");
+            break;
+    default: {
+        wchar_t buf[128];
+        swprintf_s(buf, L"[VT] unknown %s mode %d\n", enabled ? L"SET" : L"RST", value);
+        logDebug(buf);
+        break;
     }
+    }
+}
 }
 
 // ---------------------------------------------------------------------------
@@ -507,6 +627,10 @@ void TerminalEmulator::handleSgr(const std::vector<std::wstring>& parts) {
                 currentAttrs_.decorColor = currentAttrs_.foreground;
             } else if (v >= 100 && v <= 107) {
                 currentAttrs_.background = ansiColor(v - 92);
+            } else {
+                wchar_t buf[128];
+                swprintf_s(buf, L"[VT] unknown SGR %d\n", v);
+                logDebug(buf);
             }
             break;
         }
@@ -587,7 +711,12 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
         buffer_->setCursorBlink(true);
         break;
 
-    default: break;
+    default: {
+        wchar_t buf[256];
+        swprintf_s(buf, L"[VT] unknown OSC %d (%s)\n", num, text.c_str());
+        logDebug(buf);
+        break;
+    }
     }
 }
 

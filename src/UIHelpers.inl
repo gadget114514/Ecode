@@ -170,17 +170,6 @@ void UpdateMenu(HWND hwnd) {
 
   // File Menu
   HMENU hFile = CreatePopupMenu();
-  AppendMenu(
-      hFile, MF_STRING, IDM_FILE_NEW,
-      L"New\tCtrl+N"); // Keep Ctrl+N for New? Emacs is usually C-x C-f for new
-                       // file too if it doesn't exist. Let's keep Ctrl+N as
-                       // alternative or just C-x C-f. User said "file operation
-                       // keybindings use emacs like key bindings". Let's stick
-                       // to the plan: Open, Save, Save As, Close, Exit.
-  // Actually, I'll keep Ctrl+N for New as it wasn't explicitly mapped to
-  // something else in my plan, but maybe C-x C-f does it all. The plan said:
-  // Open: C-x C-f, Save: C-x C-s, Save As: C-x C-w, Close: C-x k, Exit: C-x
-  // C-c.
   AppendMenu(hFile, MF_STRING, IDM_FILE_NEW, L"New\tCtrl+N");
   AppendMenu(hFile, MF_STRING, IDM_FILE_OPEN, L"Open\tC-x C-f");
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE, L"Save\tC-x C-s");

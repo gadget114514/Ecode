@@ -3,67 +3,17 @@ struct EnumData {
   HWND hwnd;
 };
 
-struct TerminalThreadParams {
-  HWND hwnd;
-  int termIdx;
-  std::wstring shell;
-  std::wstring uniqueTitle;
-  HWND foundHwnd;
-};
-
-static BOOL CALLBACK EnumConsoleWindowsProc(HWND hwnd, LPARAM lParam) {
-  TerminalThreadParams *params = (TerminalThreadParams *)lParam;
-  wchar_t className[256];
-  GetClassNameW(hwnd, className, 256);
-  if (wcscmp(className, L"ConsoleWindowClass") == 0) {
-    wchar_t windowTitle[512];
-    GetWindowTextW(hwnd, windowTitle, 512);
-    if (wcsstr(windowTitle, params->uniqueTitle.c_str()) != nullptr) {
-      params->foundHwnd = hwnd;
-      return FALSE; // found, stop
-    }
-  }
-  return TRUE;
-}
-
-static DWORD WINAPI TerminalEmbedThread(LPVOID lpParam) {
-  TerminalThreadParams *params = (TerminalThreadParams *)lpParam;
-  HWND hwnd = params->hwnd;
-  int termIdx = params->termIdx;
-  std::wstring shell = params->shell;
-  std::wstring uniqueTitle = params->uniqueTitle;
-
-  STARTUPINFOW si = { sizeof(si) };
-  si.lpTitle = &uniqueTitle[0];
-  PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"conhost.exe " + shell;
-  if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-    HWND foundHwnd = NULL;
-    for (int i = 0; i < 50; ++i) {
-      Sleep(100);
-      params->foundHwnd = NULL;
-      EnumWindows(EnumConsoleWindowsProc, (LPARAM)params);
-      if (params->foundHwnd != NULL) {
-        foundHwnd = params->foundHwnd;
-        break;
-      }
-    }
-    if (foundHwnd) {
-      PostMessageW(hwnd, WM_EMBED_TERMINAL, (WPARAM)foundHwnd, (LPARAM)termIdx);
-    }
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-  }
-  delete params;
-  return 0;
-}
-
 void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring &label) {
+  auto *view = new TerminalView();
+  HWND childHwnd = view->Create(hwnd);
+  if (!childHwnd) {
+    delete view;
+    return;
+  }
+
   TerminalTabInfo tab;
-  tab.view = nullptr;
-  tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting Terminal...",
-                             WS_CHILD | WS_VISIBLE | SS_CENTER,
-                             0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+  tab.view = view;
+  tab.hwnd = childHwnd;
   tab.shell = shell;
   if (label.empty()) {
     int count = static_cast<int>(g_terminalTabs.size());
@@ -81,7 +31,7 @@ void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring 
   TabCtrl_SetCurSel(g_tabHwnd, tabIndex);
   g_suppressTabChange = false;
 
-  // Position the terminal placeholder to fill content area
+  // Position the terminal to fill content area
   RECT rc;
   GetClientRect(hwnd, &rc);
   int treeWidth = g_treeVisible ? 200 : 0;
@@ -97,25 +47,30 @@ void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring 
   int contentTop = tabHeight;
   int contentHeight = rc.bottom - tabHeight - statusHeight - minibufferHeight - safetyMargin;
   int contentWidth = rc.right - treeWidth;
-  MoveWindow(g_terminalTabs[termIdx].hwnd, treeWidth, contentTop,
-             contentWidth, contentHeight + safetyMargin, TRUE);
+  view->MoveAndResize(treeWidth, contentTop, contentWidth, contentHeight + safetyMargin);
 
   for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
     if (g_terminalTabs[i].hwnd)
       ShowWindow(g_terminalTabs[i].hwnd, static_cast<int>(i) == termIdx ? SW_SHOW : SW_HIDE);
   }
   ShowScrollBar(hwnd, SB_BOTH, FALSE);
+  g_activeAppTab = -1;
   g_activeTerminalTab = termIdx;
-  SetFocus(g_terminalTabs[termIdx].hwnd);
+  PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)childHwnd, 0);
   InvalidateRect(hwnd, NULL, FALSE);
 
-  TerminalThreadParams *params = new TerminalThreadParams();
-  params->hwnd = hwnd;
-  params->termIdx = termIdx;
-  params->shell = shell;
-  params->uniqueTitle = L"EcodeTerminalTab_" + std::to_wstring(GetCurrentProcessId()) + L"_" + std::to_wstring(termIdx);
-  params->foundHwnd = NULL;
-  CreateThread(NULL, 0, TerminalEmbedThread, params, 0, NULL);
+  // Route VT debug logs to *Messages* buffer
+  view->SetLogCallback([hwnd](const std::wstring& msg) {
+      if (g_editor) {
+          std::string utf8;
+          int len = WideCharToMultiByte(CP_UTF8, 0, msg.c_str(), -1, NULL, 0, NULL, NULL);
+          if (len > 1) { utf8.resize(len - 1); WideCharToMultiByte(CP_UTF8, 0, msg.c_str(), -1, &utf8[0], len, NULL, NULL); }
+          g_editor->LogMessage(utf8);
+      }
+  });
+
+  // Start ConPTY session (lazy, no background thread needed)
+  view->StartSession(shell);
 }
 
 
@@ -870,6 +825,7 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
             ShowWindow(g_terminalTabs[i].hwnd, static_cast<int>(i) == termIdx ? SW_SHOW : SW_HIDE);
         }
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
+        g_activeAppTab = -1;
         g_activeTerminalTab = termIdx;
         if (g_terminalTabs[termIdx].hwnd) {
           PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_terminalTabs[termIdx].hwnd, 0);
@@ -924,7 +880,12 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&
                LOWORD(wParam) < IDM_BUFFERS_START + 100) {
+      for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+      for (auto &t : g_terminalTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+      g_activeAppTab = -1;
+      g_activeTerminalTab = -1;
       g_editor->SwitchToBuffer(LOWORD(wParam) - IDM_BUFFERS_START);
+      SetFocus(hwnd);
       UpdateMenu(hwnd);
     } else if (LOWORD(wParam) >= IDM_RECENT_START &&
                LOWORD(wParam) < IDM_RECENT_START + 10) {

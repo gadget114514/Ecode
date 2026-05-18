@@ -159,38 +159,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
-  case WM_EMBED_TERMINAL: {
-    HWND childHwnd = (HWND)wParam;
-    int termIdx = (int)lParam;
-    if (termIdx >= 0 && (size_t)termIdx < g_terminalTabs.size()) {
-      if (g_terminalTabs[termIdx].hwnd) {
-        DestroyWindow(g_terminalTabs[termIdx].hwnd);
-      }
-
-      // Sync thread input queues for robust cross-process keyboard and focus interaction
-      DWORD childThreadId = GetWindowThreadProcessId(childHwnd, NULL);
-      DWORD parentThreadId = GetCurrentThreadId();
-      AttachThreadInput(childThreadId, parentThreadId, TRUE);
-
-      SetParent(childHwnd, hwnd);
-      LONG style = GetWindowLong(childHwnd, GWL_STYLE);
-      style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
-      style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS;
-      SetWindowLong(childHwnd, GWL_STYLE, style);
-      SetMenu(childHwnd, NULL);
-      SetWindowPos(childHwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-      g_terminalTabs[termIdx].hwnd = childHwnd;
-      RECT rc;
-      GetClientRect(hwnd, &rc);
-      SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
-      if (g_activeTerminalTab == termIdx) {
-        ShowWindow(childHwnd, SW_SHOW);
-        SetFocus(childHwnd);
-      } else {
-        ShowWindow(childHwnd, SW_HIDE);
-      }
-      UpdateMenu(hwnd);
-      InvalidateRect(hwnd, NULL, FALSE);
+  case WM_DEFERRED_FOCUS: {
+    HWND target = (HWND)wParam;
+    if (target && IsWindow(target)) {
+      SetFocus(target);
     }
     return 0;
   }
@@ -279,6 +251,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         g_activeAppTab = -1;
         g_activeTerminalTab = termIdx;
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
+        // Defer focus so the tab control's click processing finishes first
         if (g_terminalTabs[termIdx].hwnd) {
           PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_terminalTabs[termIdx].hwnd, 0);
         }
