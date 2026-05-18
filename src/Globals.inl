@@ -155,6 +155,30 @@ void HandleDestroy(HWND hwnd);
 #define WM_SHELL_OUTPUT (WM_USER + 101)
 #define WM_EMBED_APP (WM_USER + 200)
 #define WM_EMBED_TERMINAL (WM_USER + 201)
+#define WM_GREP_RESULT   (WM_USER + 202)
+#define WM_GREP_PROGRESS (WM_USER + 203)
+#define WM_GREP_COMPLETE (WM_USER + 204)
+
+struct GrepSearchResult {
+    std::vector<std::wstring> files;
+    std::vector<int> lines;
+    std::vector<std::wstring> contents;
+};
+
+struct GrepResultData {
+    std::vector<std::wstring> files;
+    std::vector<int> lines;
+    std::vector<std::wstring> contents;
+};
+
+struct GrepSearchParams {
+    std::wstring dir;
+    std::wstring pattern;
+    std::wstring extFilter;
+    bool useRegex;
+    bool matchCase;
+    HWND hwndListView;
+};
 
 struct ShellOutput {
   Buffer *buffer;
@@ -196,6 +220,8 @@ struct AppTabInfo {
 };
 extern std::vector<AppTabInfo> g_appTabs;
 extern int g_activeAppTab; // -1 = no app tab active, 0+ = index in g_appTabs
+extern volatile LONG g_grepCancelFlag;
+extern bool g_grepSearchActive;
 extern bool g_isDragging;
 extern bool g_isDraggingTab;
 extern int  g_dragTabFrom;

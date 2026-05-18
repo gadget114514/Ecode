@@ -23,6 +23,7 @@ public:
                    const std::wstring &extFilter = L"",
                    bool useRegex = false, bool matchCase = false);
   void FindFile(const std::wstring &pattern, const std::wstring &dir);
+  void CancelFindInFiles();
   void CloseBuffer(size_t index);
 
   void SwitchToBuffer(size_t index);
