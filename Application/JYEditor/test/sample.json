@@ -1,0 +1,30 @@
+{
+  "name": "山田太郎",
+  "age": 30,
+  "isStudent": false,
+  "address": {
+    "street": "東京都千代田区1-1",
+    "zipCode": "100-0001"
+  },
+  "hobbies": [
+    "読書",
+    "プログラミング",
+    "旅行"
+  ],
+  "contact": null
+}
+{
+  "name": "山田太郎",
+  "age": 30,
+  "isStudent": false,
+  "address": {
+    "street": "東京都千代田区1-1",
+    "zipCode": "100-0001"
+  },
+  "hobbies": [
+    "読書",
+    "プログラミング",
+    "旅行"
+  ],
+  "contact": null
+}
