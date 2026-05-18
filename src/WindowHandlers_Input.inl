@@ -649,6 +649,17 @@ LRESULT HandleMouseDown(HWND hwnd, LPARAM lParam) {
   g_isDragging = true;
   SetCapture(hwnd);
   int x = LOWORD(lParam), y = HIWORD(lParam);
+
+  // Redirect mouse clicks to terminal or app tab child windows
+  if (g_activeTerminalTab >= 0 && (size_t)g_activeTerminalTab < g_terminalTabs.size()) {
+    SetFocus(g_terminalTabs[g_activeTerminalTab].hwnd);
+    return 0;
+  }
+  if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size()) {
+    SetFocus(g_appTabs[g_activeAppTab].hwnd);
+    return 0;
+  }
+
   Buffer *activeBuffer = g_editor->GetActiveBuffer();
   if (activeBuffer) {
     size_t visualLineIndex;

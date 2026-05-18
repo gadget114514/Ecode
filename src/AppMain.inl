@@ -12,6 +12,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   switch (uMsg) {
   case WM_CREATE:
     return HandleCreate(hwnd);
+  case WM_SETFOCUS:
+    // Route focus to the active child based on current tab
+    if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size()) {
+      SetFocus(g_appTabs[g_activeAppTab].hwnd);
+    } else if (g_activeTerminalTab >= 0 && (size_t)g_activeTerminalTab < g_terminalTabs.size()) {
+      SetFocus(g_terminalTabs[g_activeTerminalTab].hwnd);
+    }
+    return 0;
   case WM_SIZE:
     return HandleSize(hwnd, lParam);
   case WM_PAINT:
@@ -128,21 +136,49 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   case WM_NOTIFY: {
     NMHDR *pnm = (NMHDR *)lParam;
     if (pnm->hwndFrom == g_tabHwnd && pnm->code == TCN_SELCHANGE) {
+      if (g_suppressTabChange) break;
       int sel = TabCtrl_GetCurSel(g_tabHwnd);
-      if (sel == g_terminalTabIndex) {
-        // Switch to terminal tab
+      size_t bufCount = g_editor->GetBuffers().size();
+      int appStart = static_cast<int>(bufCount);
+      int appEnd = appStart + static_cast<int>(g_appTabs.size());
+      int termStart = appEnd;
+      int termEnd = termStart + static_cast<int>(g_terminalTabs.size());
+
+      if (sel >= appStart && sel < appEnd) {
+        // Switch to an app tab
+        int appIdx = sel - appStart;
+        for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+        for (auto &t : g_terminalTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+        g_activeAppTab = appIdx;
+        g_activeTerminalTab = -1;
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
-        if (g_terminalViewHwnd) {
-          ShowWindow(g_terminalViewHwnd, SW_SHOW);
-          SetFocus(g_terminalViewHwnd);
-          // Lazy-start PTY on first activation
-          if (g_terminalView && !g_terminalView->IsStarted())
-            g_terminalView->StartSession(L"powershell.exe", {});
+        if (g_appTabs[appIdx].hwnd) {
+          ShowWindow(g_appTabs[appIdx].hwnd, SW_SHOW);
+          SetFocus(g_appTabs[appIdx].hwnd);
         }
-      } else if (sel != -1) {
+        UpdateMenu(hwnd);
+      } else if (sel >= termStart && sel < termEnd) {
+        // Switch to a terminal tab
+        int termIdx = sel - termStart;
+        for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+        for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
+          if (g_terminalTabs[i].hwnd)
+            ShowWindow(g_terminalTabs[i].hwnd, static_cast<int>(i) == termIdx ? SW_SHOW : SW_HIDE);
+        }
+        g_activeAppTab = -1;
+        g_activeTerminalTab = termIdx;
+        ShowScrollBar(hwnd, SB_BOTH, FALSE);
+        if (g_terminalTabs[termIdx].hwnd) {
+          SetFocus(g_terminalTabs[termIdx].hwnd);
+          if (g_terminalTabs[termIdx].view && !g_terminalTabs[termIdx].view->IsStarted())
+            g_terminalTabs[termIdx].view->StartSession(g_terminalTabs[termIdx].shell, {});
+        }
+      } else if (sel >= 0 && sel < static_cast<int>(bufCount)) {
         // Switch to an editor buffer tab
-        if (g_terminalViewHwnd)
-          ShowWindow(g_terminalViewHwnd, SW_HIDE);
+        for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+        for (auto &t : g_terminalTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+        g_activeAppTab = -1;
+        g_activeTerminalTab = -1;
         ShowScrollBar(hwnd, SB_BOTH, TRUE);
         g_editor->SwitchToBuffer(static_cast<size_t>(sel));
         UpdateMenu(hwnd);
@@ -187,8 +223,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       ScreenToClient(g_tabHwnd, &hti.pt);
       int tabIndex = TabCtrl_HitTest(g_tabHwnd, &hti);
       if (tabIndex != -1) {
+        size_t bufCount = g_editor->GetBuffers().size();
+        int appStart = static_cast<int>(bufCount);
+        int appEnd = appStart + static_cast<int>(g_appTabs.size());
+        int termStart = appEnd;
+        int termEnd = termStart + static_cast<int>(g_terminalTabs.size());
+        bool isAppTab = (tabIndex >= appStart && tabIndex < appEnd);
+        bool isTerminalTab = (tabIndex >= termStart && tabIndex < termEnd);
         HMENU hMenu = CreatePopupMenu();
-        AppendMenu(hMenu, MF_STRING, IDM_TAB_COPY_PATH, L"Copy Full Path");
+        if (isTerminalTab) {
+          AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close Terminal");
+        } else if (isAppTab) {
+          AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close");
+        } else if (tabIndex >= 0 && tabIndex < static_cast<int>(bufCount)) {
+          AppendMenu(hMenu, MF_STRING, IDM_TAB_COPY_PATH, L"Copy Full Path");
+        }
         int res = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_NONOTIFY | TPM_RETURNCMD, ptScreen.x, ptScreen.y, 0, hwnd, NULL);
         DestroyMenu(hMenu);
 
@@ -209,6 +258,36 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                 SetClipboardData(CF_UNICODETEXT, hMem);
               }
               CloseClipboard();
+            }
+          }
+        } else if (res == IDM_TAB_CLOSE_TERMINAL) {
+          int appStart = static_cast<int>(bufCount);
+          int appEnd = appStart + static_cast<int>(g_appTabs.size());
+          if (tabIndex >= appStart && tabIndex < appEnd) {
+            // Close app tab
+            int appIdx = tabIndex - appStart;
+            if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
+              if (g_appTabs[appIdx].hwnd) DestroyWindow(g_appTabs[appIdx].hwnd);
+              g_appTabs.erase(g_appTabs.begin() + appIdx);
+              if (g_activeAppTab == appIdx) g_activeAppTab = -1;
+              else if (g_activeAppTab > appIdx) g_activeAppTab--;
+              UpdateMenu(hwnd);
+              InvalidateRect(hwnd, NULL, FALSE);
+            }
+          } else {
+            int termIdx = tabIndex - (appEnd);
+            if (termIdx >= 0 && termIdx < static_cast<int>(g_terminalTabs.size())) {
+              if (g_terminalTabs[termIdx].hwnd)
+                DestroyWindow(g_terminalTabs[termIdx].hwnd);
+              delete g_terminalTabs[termIdx].view;
+              g_terminalTabs.erase(g_terminalTabs.begin() + termIdx);
+              if (g_activeTerminalTab == termIdx) {
+                g_activeTerminalTab = -1;
+              } else if (g_activeTerminalTab > termIdx) {
+                g_activeTerminalTab--;
+              }
+              UpdateMenu(hwnd);
+              InvalidateRect(hwnd, NULL, FALSE);
             }
           }
         }

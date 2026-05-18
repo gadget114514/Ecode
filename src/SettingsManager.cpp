@@ -13,6 +13,7 @@ SettingsManager::SettingsManager()
       m_enableLigatures(true), m_showStatusBar(true), m_logLevel(1),
       m_caretBlinking(true), m_shellEncoding(0) {
   m_windowRect = {100, 100, 900, 700};
+  m_bashPath = DetectBashPath();
 }
 
 std::wstring SettingsManager::GetAppDataPath() const {
@@ -71,6 +72,17 @@ void SettingsManager::Load() {
       GetPrivateProfileIntW(L"Editor", L"CaretStyle", 0, path.c_str());
   m_shellEncoding =
       GetPrivateProfileIntW(L"Editor", L"ShellEncoding", 0, path.c_str());
+  m_showAI =
+      GetPrivateProfileIntW(L"Editor", L"ShowAI", 0, path.c_str()) != 0;
+
+  wchar_t bashBuf[MAX_PATH];
+  if (GetPrivateProfileStringW(L"Editor", L"BashPath", L"", bashBuf,
+                               MAX_PATH, path.c_str()) > 0) {
+    m_bashPath = bashBuf;
+  }
+  if (m_bashPath.empty()) {
+    m_bashPath = DetectBashPath();
+  }
 
   wchar_t projDirBuf[MAX_PATH];
   if (GetPrivateProfileStringW(L"Editor", L"ProjectDirectory", L"", projDirBuf,
@@ -113,6 +125,18 @@ void SettingsManager::Load() {
         m_aiApiKeys.push_back({line.substr(0, pos), line.substr(pos + 1)});
       }
       p += line.length() + 1;
+    }
+  }
+
+  // Load CLI entries
+  m_cliEntries.clear();
+  for (int i = 0; i < 50; ++i) {
+    std::wstring keyCmd = L"CLI_Cmd_" + std::to_wstring(i);
+    std::wstring keyDir = L"CLI_Dir_" + std::to_wstring(i);
+    wchar_t cmdBuf[1024], dirBuf[MAX_PATH];
+    if (GetPrivateProfileStringW(L"CLI", keyCmd.c_str(), L"", cmdBuf, 1024, path.c_str()) > 0) {
+      GetPrivateProfileStringW(L"CLI", keyDir.c_str(), L"", dirBuf, MAX_PATH, path.c_str());
+      m_cliEntries.push_back({cmdBuf, dirBuf});
     }
   }
 }
@@ -161,6 +185,11 @@ void SettingsManager::Save() {
   WriteInt(L"Editor", L"CaretBlinking", m_caretBlinking ? 1 : 0);
   WriteInt(L"Editor", L"CaretStyle", m_caretStyle);
   WriteInt(L"Editor", L"ShellEncoding", m_shellEncoding);
+  WriteInt(L"Editor", L"ShowAI", m_showAI ? 1 : 0);
+  if (!m_bashPath.empty()) {
+    WritePrivateProfileStringW(L"Editor", L"BashPath", m_bashPath.c_str(),
+                               path.c_str());
+  }
   if (!m_projectDirectory.empty()) {
     WritePrivateProfileStringW(L"Editor", L"ProjectDirectory",
                                m_projectDirectory.c_str(), path.c_str());
@@ -183,6 +212,103 @@ void SettingsManager::Save() {
   for (const auto& pair : m_aiApiKeys) {
     WritePrivateProfileStringW(L"AI_API_KEYS", pair.first.c_str(), pair.second.c_str(), path.c_str());
   }
+
+  SaveCliEntries();
+}
+
+std::wstring SettingsManager::DetectBashPath() {
+  HKEY hKey;
+  if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\GitForWindows", 0,
+                    KEY_READ, &hKey) == ERROR_SUCCESS) {
+    wchar_t installPath[MAX_PATH];
+    DWORD bufSize = sizeof(installPath);
+    if (RegQueryValueExW(hKey, L"InstallPath", nullptr, nullptr,
+                         (LPBYTE)installPath, &bufSize) == ERROR_SUCCESS) {
+      RegCloseKey(hKey);
+      std::wstring bashPath = std::wstring(installPath) + L"\\usr\\bin\\bash.exe";
+      if (GetFileAttributesW(bashPath.c_str()) != INVALID_FILE_ATTRIBUTES)
+        return bashPath;
+    } else {
+      RegCloseKey(hKey);
+    }
+  }
+  return L"";
+}
+
+std::wstring SettingsManager::GetBashCommand(std::wstring *workingDir) const {
+  HKEY hKey;
+  if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                    L"SOFTWARE\\Classes\\Directory\\Background\\shell\\git_shell\\command",
+                    0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+    return L"";
+  }
+
+  wchar_t cmdBuf[1024];
+  DWORD bufSize = sizeof(cmdBuf);
+  if (RegQueryValueExW(hKey, nullptr, nullptr, nullptr,
+                       (LPBYTE)cmdBuf, &bufSize) != ERROR_SUCCESS) {
+    RegCloseKey(hKey);
+    return L"";
+  }
+  RegCloseKey(hKey);
+
+  std::wstring rawCmd(cmdBuf);
+
+  // Expand %v with current working directory + path separator
+  wchar_t curDir[MAX_PATH];
+  GetCurrentDirectoryW(MAX_PATH, curDir);
+  std::wstring dirStr = std::wstring(curDir) + L"\\";
+  size_t pctV = rawCmd.find(L"%v");
+  while (pctV != std::wstring::npos) {
+    rawCmd.replace(pctV, 2, dirStr);
+    pctV = rawCmd.find(L"%v", pctV + dirStr.size());
+  }
+
+  // Parse with CommandLineToArgvW
+  int argc;
+  LPWSTR *argv = CommandLineToArgvW(rawCmd.c_str(), &argc);
+  if (!argv || argc < 1) {
+    if (argv) LocalFree(argv);
+    return L"";
+  }
+
+  // Replace git-bash.exe with usr\bin\bash.exe for ConPTY embedding
+  std::wstring exe = argv[0];
+  size_t gpos = exe.find(L"git-bash.exe");
+  if (gpos != std::wstring::npos) {
+    exe = exe.substr(0, gpos) + L"usr\\bin\\bash.exe";
+  }
+
+  // Extract --cd value and strip --cd arguments; set working directory
+  std::vector<std::wstring> filteredArgs;
+  for (int i = 1; i < argc; ++i) {
+    std::wstring arg = argv[i];
+    if (arg.find(L"--cd=") == 0) {
+      std::wstring cdVal = arg.substr(5);
+      // Remove surrounding quotes if present
+      if (cdVal.size() >= 2 && cdVal.front() == L'"' && cdVal.back() == L'"')
+        cdVal = cdVal.substr(1, cdVal.size() - 2);
+      // Remove trailing .\ or . if present
+      while (!cdVal.empty() && (cdVal.back() == L'.' || cdVal.back() == L'\\'))
+        cdVal.pop_back();
+      if (workingDir) *workingDir = cdVal;
+    } else {
+      filteredArgs.push_back(arg);
+    }
+  }
+
+  // Rebuild command line (exe only, without --cd)
+  std::wstring result;
+  result = (exe.find(L' ') != std::wstring::npos) ? (L"\"" + exe + L"\"") : exe;
+  for (auto &arg : filteredArgs) {
+    result += L' ';
+    result += (arg.find(L' ') != std::wstring::npos) ? (L"\"" + arg + L"\"") : arg;
+  }
+
+  result += L" --login -i";
+
+  LocalFree(argv);
+  return result;
 }
 
 void SettingsManager::AddRecentFile(const std::wstring &path) {
@@ -195,4 +321,26 @@ void SettingsManager::AddRecentFile(const std::wstring &path) {
     m_recentFiles.pop_back();
   }
   Save();
+}
+
+void SettingsManager::AddCliEntry(const std::wstring &cmd, const std::wstring &folder) {
+  m_cliEntries.push_back({cmd, folder});
+}
+
+void SettingsManager::RemoveCliEntry(size_t index) {
+  if (index < m_cliEntries.size()) {
+    m_cliEntries.erase(m_cliEntries.begin() + index);
+  }
+}
+
+void SettingsManager::SaveCliEntries() {
+  std::wstring path = GetSettingsPath();
+  // Clear existing CLI entries
+  WritePrivateProfileStringW(L"CLI", NULL, NULL, path.c_str());
+  for (size_t i = 0; i < m_cliEntries.size(); ++i) {
+    std::wstring keyCmd = L"CLI_Cmd_" + std::to_wstring(i);
+    std::wstring keyDir = L"CLI_Dir_" + std::to_wstring(i);
+    WritePrivateProfileStringW(L"CLI", keyCmd.c_str(), m_cliEntries[i].command.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"CLI", keyDir.c_str(), m_cliEntries[i].folder.c_str(), path.c_str());
+  }
 }

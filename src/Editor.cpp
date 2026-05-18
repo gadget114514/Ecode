@@ -5,6 +5,8 @@
 #include "Globals.inl"
 
 #include <filesystem>
+#include <regex>
+#include <algorithm>
 // namespace fs alias is already in Globals.inl
 
 Editor::Editor() : m_activeBufferIndex(0) {}
@@ -80,66 +82,181 @@ size_t Editor::OpenJsShell() {
   return m_activeBufferIndex;
 }
 
-void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern) {
-  // Create or clear *Find Results* buffer
-  Buffer *resultsBuf = GetBufferByName(L"*Find Results*");
-  if (!resultsBuf) {
-    auto buffer = std::make_unique<Buffer>();
-    buffer->SetPath(L"*Find Results*");
-    buffer->SetScratch(true);
-    resultsBuf = buffer.get();
-    m_buffers.push_back(std::move(buffer));
-  } else {
-    resultsBuf->Delete(0, resultsBuf->GetTotalLength());
-  }
+struct GrepResultData {
+  std::vector<std::wstring> files;
+  std::vector<int> lines;
+};
 
-  // Switch to results buffer
-  for (size_t i = 0; i < m_buffers.size(); ++i) {
-    if (m_buffers[i].get() == resultsBuf) {
-      SwitchToBuffer(i);
-      break;
+static LRESULT CALLBACK GrepListSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+  if (msg == WM_NOTIFY) {
+    LPNMHDR nm = (LPNMHDR)lp;
+    if (nm->code == NM_DBLCLK || nm->code == NM_RETURN) {
+      int sel = ListView_GetNextItem(hwnd, -1, LVNI_SELECTED);
+      if (sel >= 0) {
+        GrepResultData *data = (GrepResultData*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+        if (data && sel < (int)data->files.size()) {
+          g_editor->OpenFile(data->files[sel]);
+        }
+      }
+      return 0;
+    }
+  }
+  return DefWindowProc(hwnd, msg, wp, lp);
+}
+
+void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
+                         const std::wstring &extFilter,
+                         bool useRegex, bool matchCase) {
+  extern HWND g_mainHwnd;
+  extern std::vector<AppTabInfo> g_appTabs;
+  extern int g_activeAppTab;
+
+  // Create a ListView in an app tab
+  HWND hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
+      WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL | LVS_NOSORTHEADER,
+      0, 0, 100, 100, g_mainHwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+
+  LVCOLUMNW lvc = {0};
+  lvc.mask = LVCF_TEXT | LVCF_WIDTH;
+  lvc.cx = 300; lvc.pszText = L"File"; ListView_InsertColumn(hListView, 0, &lvc);
+  lvc.cx = 60;  lvc.pszText = L"Line"; ListView_InsertColumn(hListView, 1, &lvc);
+  lvc.cx = 500; lvc.pszText = L"Content"; ListView_InsertColumn(hListView, 2, &lvc);
+
+  auto *grepData = new GrepResultData();
+  SetWindowLongPtr(hListView, GWLP_USERDATA, (LONG_PTR)grepData);
+  SetWindowLongPtr(hListView, GWLP_WNDPROC, (LONG_PTR)GrepListSubclassProc);
+
+  AppTabInfo tab;
+  tab.hwnd = hListView;
+  tab.label = L"Grep: " + pattern;
+  tab.type = 1;
+  tab.data = grepData;
+  g_appTabs.push_back(std::move(tab));
+  int appIdx = static_cast<int>(g_appTabs.size()) - 1;
+  g_activeAppTab = appIdx;
+  UpdateMenu(g_mainHwnd);
+
+  // Build regex if needed
+  std::wregex re;
+  std::wstring searchStr = pattern;
+  bool hasRegex = false;
+  if (useRegex && !pattern.empty()) {
+    try {
+      std::wregex::flag_type flags = std::wregex::ECMAScript;
+      if (!matchCase) flags |= std::wregex::icase;
+      re.assign(pattern, flags);
+      hasRegex = true;
+    } catch (...) {
+      hasRegex = false;
     }
   }
 
-  std::string patternUtf8 = StringHelpers::Utf16ToUtf8(pattern);
-  std::string dirUtf8 = StringHelpers::Utf16ToUtf8(dir);
-
-  resultsBuf->Insert(0, "Searching for \"" + patternUtf8 + "\" in " + dirUtf8 +
-                            "...\n");
-
-  std::wstring searchDir = dir;
-
-  // Simple recursive search (blocking for now)
+  // Simple recursive search (blocking)
+  int matchCount = 0;
   try {
-    if (fs::exists(searchDir) && fs::is_directory(searchDir)) {
-      for (const auto &entry : fs::recursive_directory_iterator(searchDir)) {
-        if (fs::is_regular_file(entry.status())) {
-          std::ifstream file(entry.path());
-          if (file) {
-            std::string line;
-            int lineNum = 0;
-            while (std::getline(file, line)) {
-              lineNum++;
-              if (line.find(patternUtf8) != std::string::npos) {
-                std::string out = entry.path().string() + "(" +
-                                  std::to_string(lineNum) + "): " + line + "\n";
-                resultsBuf->Insert(resultsBuf->GetTotalLength(), out);
-              }
+    if (fs::exists(dir) && fs::is_directory(dir)) {
+      for (const auto &entry : fs::recursive_directory_iterator(dir)) {
+        if (!fs::is_regular_file(entry.status())) continue;
+        // Apply extension filter
+        if (!extFilter.empty()) {
+          std::wstring ext = entry.path().extension().wstring();
+          if (ext.empty()) continue;
+          bool found = false;
+          std::wstring filter = extFilter;
+          size_t p = 0;
+          while ((p = filter.find(L';')) != std::wstring::npos) {
+            std::wstring e = filter.substr(0, p);
+            if (_wcsicmp(ext.c_str(), e.c_str()) == 0) { found = true; break; }
+            filter.erase(0, p + 1);
+          }
+          if (!found && _wcsicmp(ext.c_str(), filter.c_str()) != 0) continue;
+        }
+        std::ifstream file(entry.path());
+        if (!file) continue;
+        std::string line;
+        int lineNum = 0;
+        while (std::getline(file, line)) {
+          lineNum++;
+          bool matched = false;
+          if (hasRegex) {
+            matched = std::regex_search(StringToWString(line), re);
+          } else {
+            std::string pat = WStringToString(pattern);
+            if (matchCase) {
+              matched = line.find(pat) != std::string::npos;
+            } else {
+              std::string lowerLine = line;
+              std::string lowerPat = pat;
+              std::transform(lowerLine.begin(), lowerLine.end(), lowerLine.begin(), ::tolower);
+              std::transform(lowerPat.begin(), lowerPat.end(), lowerPat.begin(), ::tolower);
+              matched = lowerLine.find(lowerPat) != std::string::npos;
             }
+          }
+          if (matched) {
+            grepData->files.push_back(entry.path().wstring());
+            grepData->lines.push_back(lineNum);
+            LVITEMW item = {0};
+            item.mask = LVIF_TEXT;
+            item.iItem = matchCount;
+            std::wstring fpath = entry.path().wstring();
+            item.pszText = (LPWSTR)fpath.c_str();
+            ListView_InsertItem(hListView, &item);
+            std::wstring ln = std::to_wstring(lineNum);
+            ListView_SetItemText(hListView, matchCount, 1, (LPWSTR)ln.c_str());
+            ListView_SetItemText(hListView, matchCount, 2, (LPWSTR)StringToWString(line).c_str());
+            matchCount++;
           }
         }
       }
     }
-  } catch (const std::exception &e) {
-    DebugLog("Editor::FindInFiles - Exception: " + std::string(e.what()),
-             LOG_ERROR);
-    resultsBuf->Insert(resultsBuf->GetTotalLength(),
-                       "Error during search: " + std::string(e.what()) + "\n");
   } catch (...) {
-    DebugLog("Editor::FindInFiles - Unknown error", LOG_ERROR);
-    resultsBuf->Insert(resultsBuf->GetTotalLength(), "Error during search.\n");
+    DebugLog("Editor::FindInFiles - Exception during search", LOG_ERROR);
   }
-  resultsBuf->Insert(resultsBuf->GetTotalLength(), "Done.\n");
+  DebugLog("FindInFiles: " + std::to_string(matchCount) + " matches found", LOG_INFO);
+}
+
+void Editor::FindFile(const std::wstring &pattern, const std::wstring &dir) {
+  extern HWND g_mainHwnd;
+  extern std::vector<AppTabInfo> g_appTabs;
+  extern int g_activeAppTab;
+
+  HWND hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
+      WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL,
+      0, 0, 100, 100, g_mainHwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+
+  LVCOLUMNW lvc = {0};
+  lvc.mask = LVCF_TEXT | LVCF_WIDTH;
+  lvc.cx = 250; lvc.pszText = L"Name"; ListView_InsertColumn(hListView, 0, &lvc);
+  lvc.cx = 400; lvc.pszText = L"Path"; ListView_InsertColumn(hListView, 1, &lvc);
+
+  AppTabInfo tab;
+  tab.hwnd = hListView;
+  tab.label = L"Files: " + pattern;
+  tab.type = 0;
+  tab.data = nullptr;
+  g_appTabs.push_back(std::move(tab));
+  int appIdx = static_cast<int>(g_appTabs.size()) - 1;
+  g_activeAppTab = appIdx;
+  UpdateMenu(g_mainHwnd);
+
+  int idx = 0;
+  try {
+    if (fs::exists(dir) && fs::is_directory(dir)) {
+      for (const auto &entry : fs::recursive_directory_iterator(dir)) {
+        if (!fs::is_regular_file(entry.status())) continue;
+        std::wstring fname = entry.path().filename().wstring();
+        if (fname.find(pattern) == std::wstring::npos) continue;
+        LVITEMW item = {0};
+        item.mask = LVIF_TEXT;
+        item.iItem = idx;
+        item.pszText = (LPWSTR)fname.c_str();
+        ListView_InsertItem(hListView, &item);
+        ListView_SetItemText(hListView, idx, 1, (LPWSTR)entry.path().wstring().c_str());
+        idx++;
+      }
+    }
+  } catch (...) {}
+  DebugLog("FindFile: " + std::to_string(idx) + " files found", LOG_INFO);
 }
 
 void Editor::CloseBuffer(size_t index) {

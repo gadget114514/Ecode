@@ -166,6 +166,7 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                         LPARAM lParam);
 INT_PTR CALLBACK AiSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                    LPARAM lParam);
+void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring &label);
 
 INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                  LPARAM lParam) {
@@ -275,9 +276,29 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hCombo, CB_SETCURSEL,
                 (WPARAM)Localization::Instance().GetCurrentLanguage(), 0);
 
+    SetDlgItemTextW(hDlg, IDC_BASH_PATH,
+                    SettingsManager::Instance().GetBashPath().c_str());
+    CheckDlgButton(hDlg, IDC_SHOW_AI,
+                   SettingsManager::Instance().IsShowAI() ? BST_CHECKED : BST_UNCHECKED);
+
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_BASH_BROWSE) {
+      std::wstring path = Dialogs::BrowseForFolder(hDlg);
+      if (!path.empty()) {
+        std::wstring bashPath = path + L"\\usr\\bin\\bash.exe";
+        if (GetFileAttributesW(bashPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+          bashPath = path + L"\\bin\\bash.exe";
+        }
+        if (GetFileAttributesW(bashPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+          SetDlgItemTextW(hDlg, IDC_BASH_PATH, bashPath.c_str());
+        } else {
+          SetDlgItemTextW(hDlg, IDC_BASH_PATH, path.c_str());
+        }
+      }
+      return (INT_PTR)TRUE;
+    }
     if (LOWORD(wParam) == IDOK) {
       wchar_t fontFamily[256];
       GetDlgItemTextW(hDlg, IDC_FONT_FAMILY, fontFamily, 256);
@@ -311,6 +332,13 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       SettingsManager::Instance().SetLogLevel(logLevel);
       SettingsManager::Instance().SetCaretBlinking(caretBlinking ==
                                                    BST_CHECKED);
+
+      wchar_t bashPath[MAX_PATH];
+      GetDlgItemTextW(hDlg, IDC_BASH_PATH, bashPath, MAX_PATH);
+      SettingsManager::Instance().SetBashPath(bashPath);
+      SettingsManager::Instance().SetShowAI(
+          IsDlgButtonChecked(hDlg, IDC_SHOW_AI) == BST_CHECKED);
+
       SettingsManager::Instance().Save();
     }
     break;
@@ -551,6 +579,37 @@ void Dialogs::ShowFindReplaceDialog(HWND hwnd, bool replaceMode) {
               type.c_str(), MB_OK);
 }
 
+INT_PTR CALLBACK FindFileDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                 LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    SetDlgItemTextW(hDlg, IDC_FILE_SEARCH_DIR, L".");
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_FILE_SEARCH_BROWSE) {
+      std::wstring path = Dialogs::BrowseForFolder(hDlg);
+      if (!path.empty()) SetDlgItemTextW(hDlg, IDC_FILE_SEARCH_DIR, path.c_str());
+      return (INT_PTR)TRUE;
+    }
+    if (LOWORD(wParam) == IDOK) {
+      wchar_t pattern[256], dir[MAX_PATH];
+      GetDlgItemTextW(hDlg, IDC_FIND_PATTERN, pattern, 256);
+      GetDlgItemTextW(hDlg, IDC_FILE_SEARCH_DIR, dir, MAX_PATH);
+      if (g_editor && wcslen(pattern) > 0) {
+        g_editor->FindFile(pattern, dir);
+      }
+      EndDialog(hDlg, IDOK);
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
 INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                     LPARAM lParam) {
   switch (message) {
@@ -558,19 +617,24 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     std::wstring findStart = SettingsManager::Instance().GetFindStartDirectory();
     if (findStart.empty()) findStart = L".";
     SetDlgItemTextW(hDlg, IDC_FIND_DIR, findStart.c_str());
+    CheckDlgButton(hDlg, IDC_FIND_REGEX, BST_UNCHECKED);
+    CheckDlgButton(hDlg, IDC_FIND_MATCH_CASE, BST_UNCHECKED);
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
     if (LOWORD(wParam) == IDOK) {
-      wchar_t pattern[256];
-      wchar_t dir[MAX_PATH];
+      wchar_t pattern[256], dir[MAX_PATH], ext[256];
       GetDlgItemTextW(hDlg, IDC_FIND_PATTERN, pattern, 256);
       GetDlgItemTextW(hDlg, IDC_FIND_DIR, dir, MAX_PATH);
+      GetDlgItemTextW(hDlg, IDC_FIND_EXT, ext, 256);
+      BOOL useRegex = IsDlgButtonChecked(hDlg, IDC_FIND_REGEX);
+      BOOL matchCase = IsDlgButtonChecked(hDlg, IDC_FIND_MATCH_CASE);
 
-      if (g_editor) {
+      if (g_editor && wcslen(pattern) > 0 && wcslen(dir) > 0) {
         SettingsManager::Instance().SetFindStartDirectory(dir);
         SettingsManager::Instance().Save();
-        g_editor->FindInFiles(dir, pattern);
+        // Launch grep in an app tab via the editor
+        g_editor->FindInFiles(dir, pattern, ext, useRegex ? true : false, matchCase ? true : false);
       }
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
@@ -592,6 +656,139 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 void Dialogs::ShowFindInFilesDialog(HWND hwnd) {
   DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_FIND_IN_FILES), hwnd,
              FindInFilesDlgProc);
+}
+
+void Dialogs::ShowFindFileDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_FIND_FILE), hwnd,
+             FindFileDlgProc);
+}
+
+static void RefreshCliList(HWND hDlg) {
+  HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
+  SendMessage(hList, LB_RESETCONTENT, 0, 0);
+  const auto &entries = SettingsManager::Instance().GetCliEntries();
+  for (size_t i = 0; i < entries.size(); ++i) {
+    std::wstring text = entries[i].command + L"  →  " + entries[i].folder;
+    SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)text.c_str());
+  }
+}
+
+INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                    LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    RefreshCliList(hDlg);
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_CLI_LIST && HIWORD(wParam) == LBN_SELCHANGE) {
+      HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        const auto &entries = SettingsManager::Instance().GetCliEntries();
+        if (sel >= 0 && sel < (int)entries.size()) {
+          SetDlgItemTextW(hDlg, IDC_CLI_CMD, entries[sel].command.c_str());
+          SetDlgItemTextW(hDlg, IDC_CLI_FOLDER, entries[sel].folder.c_str());
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CLI_BROWSE) {
+      std::wstring path = Dialogs::BrowseForFolder(hDlg);
+      if (!path.empty()) {
+        SetDlgItemTextW(hDlg, IDC_CLI_FOLDER, path.c_str());
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CLI_ADD) {
+      wchar_t cmd[1024], folder[MAX_PATH];
+      GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);
+      GetDlgItemTextW(hDlg, IDC_CLI_FOLDER, folder, MAX_PATH);
+      if (wcslen(cmd) > 0 && wcslen(folder) > 0) {
+        SettingsManager::Instance().AddCliEntry(cmd, folder);
+        SettingsManager::Instance().Save();
+        RefreshCliList(hDlg);
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CLI_DUPLICATE) {
+      HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        const auto &entries = SettingsManager::Instance().GetCliEntries();
+        if (sel >= 0 && sel < (int)entries.size()) {
+          auto &entry = entries[sel];
+          SettingsManager::Instance().AddCliEntry(entry.command, entry.folder);
+          SettingsManager::Instance().Save();
+          RefreshCliList(hDlg);
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CLI_REMOVE) {
+      HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        SettingsManager::Instance().RemoveCliEntry(sel);
+        SettingsManager::Instance().Save();
+        RefreshCliList(hDlg);
+        SetDlgItemTextW(hDlg, IDC_CLI_CMD, L"");
+        SetDlgItemTextW(hDlg, IDC_CLI_FOLDER, L"");
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CLI_RUN) {
+      wchar_t cmd[1024], folder[MAX_PATH];
+      GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);
+      GetDlgItemTextW(hDlg, IDC_CLI_FOLDER, folder, MAX_PATH);
+      if (wcslen(cmd) == 0 || wcslen(folder) == 0) {
+        HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
+        int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+        if (sel != LB_ERR) {
+          const auto &entries = SettingsManager::Instance().GetCliEntries();
+          if (sel >= 0 && sel < (int)entries.size()) {
+            wcscpy_s(cmd, 1024, entries[sel].command.c_str());
+            wcscpy_s(folder, MAX_PATH, entries[sel].folder.c_str());
+          }
+        }
+      }
+      // Validate inputs
+      if (wcslen(cmd) == 0) {
+        MessageBoxW(hDlg, L"Command cannot be empty.", L"Error", MB_ICONERROR);
+        return (INT_PTR)TRUE;
+      }
+      if (wcslen(folder) == 0) {
+        MessageBoxW(hDlg, L"Folder cannot be empty.", L"Error", MB_ICONERROR);
+        return (INT_PTR)TRUE;
+      }
+      DWORD folderAttr = GetFileAttributesW(folder);
+      if (folderAttr == INVALID_FILE_ATTRIBUTES || !(folderAttr & FILE_ATTRIBUTE_DIRECTORY)) {
+        MessageBoxW(hDlg, L"Folder does not exist.", L"Error", MB_ICONERROR);
+        return (INT_PTR)TRUE;
+      }
+      std::wstring bashDir;
+      std::wstring bashCmd = SettingsManager::Instance().GetBashCommand(&bashDir);
+      if (bashCmd.empty()) {
+        MessageBoxW(hDlg, L"Git Bash is not installed. Configure Bash Path in Settings.", L"Error", MB_ICONERROR);
+        return (INT_PTR)TRUE;
+      }
+      HWND parent = GetParent(hDlg);
+      SetCurrentDirectoryW(folder);
+      std::wstring cmdLine = bashCmd + L" -c \"" + cmd + L"; exec bash --login -i\"";
+      std::wstring label = std::wstring(folder);
+      size_t pos = label.find_last_of(L"\\/");
+      if (pos != std::wstring::npos) label = label.substr(pos + 1);
+      if (label.empty()) label = L"CLI";
+      CreateNewTerminal(parent, cmdLine, label);
+      EndDialog(hDlg, IDOK);
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void ShowCliDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_CLI_SETTINGS), hwnd,
+             CliSettingsDlgProc);
 }
 
 Dialogs::ConfirmationResult

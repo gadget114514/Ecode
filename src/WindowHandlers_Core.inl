@@ -85,13 +85,12 @@ static LRESULT HandleCreate(HWND hwnd) {
   g_uFindMsgString = RegisterWindowMessageW(FINDMSGSTRINGW);
   DragAcceptFiles(hwnd, TRUE);
 
-  // --- Terminal tab ---
+  // Register terminal window class (terminals created on-demand)
   TerminalView::RegisterWindowClass(GetModuleHandle(NULL));
-  g_terminalView     = new TerminalView();
-  g_terminalViewHwnd = g_terminalView->Create(hwnd);
-  ShowWindow(g_terminalViewHwnd, SW_HIDE);
-  // Terminal tab is appended after all buffer tabs via UpdateTabs()
-  // (g_terminalTabIndex is set there)
+
+  // Subclass tab control for drag-reorder support
+  g_oldTabProc = (WNDPROC)SetWindowLongPtr(
+      g_tabHwnd, GWLP_WNDPROC, (LONG_PTR)TabSubclassProc);
 
   auto &settings = SettingsManager::Instance();
   settings.Load();
@@ -190,10 +189,17 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
   g_renderer->SetLeftOffset((float)treeWidth);
   g_renderer->Resize(width, height);
 
-  // Position terminal view to cover the same content area as the editor
-  if (g_terminalViewHwnd)
-    MoveWindow(g_terminalViewHwnd, treeWidth, contentTop,
-               contentWidth, contentHeight + safetyMargin, TRUE);
+  // Position all app views and terminal views to cover the same content area
+  for (auto &t : g_appTabs) {
+    if (t.hwnd)
+      MoveWindow(t.hwnd, treeWidth, contentTop,
+                 contentWidth, contentHeight + safetyMargin, TRUE);
+  }
+  for (auto &tab : g_terminalTabs) {
+    if (tab.hwnd)
+      MoveWindow(tab.hwnd, treeWidth, contentTop,
+                 contentWidth, contentHeight + safetyMargin, TRUE);
+  }
 
   UpdateScrollbars(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
@@ -287,6 +293,20 @@ static LRESULT HandleFindReplace(HWND hwnd, LPARAM lParam) {
   return 0;
 }
 
+static bool HasRunningProcesses() {
+  const auto &buffers = g_editor->GetBuffers();
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    if (buffers[i]->IsShell()) {
+      Process *proc = buffers[i]->GetShellProcess();
+      if (proc && proc->IsRunning()) return true;
+    }
+  }
+  for (auto &tab : g_terminalTabs) {
+    if (tab.view && tab.view->IsStarted()) return true;
+  }
+  return false;
+}
+
 static LRESULT HandleClose(HWND hwnd) {
   const auto &buffers = g_editor->GetBuffers();
   for (size_t i = 0; i < buffers.size(); ++i) {
@@ -299,6 +319,12 @@ static LRESULT HandleClose(HWND hwnd) {
       if (!PromptSaveBuffer(hwnd, buffers[i].get()))
         return 0;
     }
+  }
+  if (HasRunningProcesses()) {
+    int res = MessageBoxW(hwnd,
+        L"Active terminal or shell sessions are running.\nClose anyway?",
+        L"Ecode", MB_YESNO | MB_ICONWARNING);
+    if (res != IDYES) return 0;
   }
   DestroyWindow(hwnd);
   return 0;
@@ -323,6 +349,21 @@ static void HandleDestroy(HWND hwnd) {
   }
 
   settings.Save();
+
+  // Cleanup all app views
+  for (auto &t : g_appTabs) {
+    if (t.hwnd) DestroyWindow(t.hwnd);
+  }
+  g_appTabs.clear();
+
+  // Cleanup all terminal views
+  for (auto &tab : g_terminalTabs) {
+    if (tab.view) {
+      if (tab.hwnd) DestroyWindow(tab.hwnd);
+      delete tab.view;
+    }
+  }
+  g_terminalTabs.clear();
 
   delete g_scriptEngine;
   g_scriptEngine = nullptr;

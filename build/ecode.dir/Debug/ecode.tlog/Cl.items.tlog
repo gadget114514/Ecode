@@ -1,4 +1,5 @@
 D:\ws\Ecode\src\Buffer.cpp;D:\ws\Ecode\build\ecode.dir\Debug\Buffer.obj
+D:\ws\Ecode\src\ConPtySession.cpp;D:\ws\Ecode\build\ecode.dir\Debug\ConPtySession.obj
 D:\ws\Ecode\src\Dialogs.cpp;D:\ws\Ecode\build\ecode.dir\Debug\Dialogs.obj
 D:\ws\Ecode\src\Editor.cpp;D:\ws\Ecode\build\ecode.dir\Debug\Editor.obj
 D:\ws\Ecode\src\EditorBufferRenderer.cpp;D:\ws\Ecode\build\ecode.dir\Debug\EditorBufferRenderer.obj
@@ -11,5 +12,11 @@ D:\ws\Ecode\src\PieceTable.cpp;D:\ws\Ecode\build\ecode.dir\Debug\PieceTable.obj
 D:\ws\Ecode\src\Process.cpp;D:\ws\Ecode\build\ecode.dir\Debug\Process.obj
 D:\ws\Ecode\src\ScriptEngine.cpp;D:\ws\Ecode\build\ecode.dir\Debug\ScriptEngine.obj
 D:\ws\Ecode\src\SettingsManager.cpp;D:\ws\Ecode\build\ecode.dir\Debug\SettingsManager.obj
+D:\ws\Ecode\src\TerminalBuffer.cpp;D:\ws\Ecode\build\ecode.dir\Debug\TerminalBuffer.obj
+D:\ws\Ecode\src\TerminalEmulator.cpp;D:\ws\Ecode\build\ecode.dir\Debug\TerminalEmulator.obj
+D:\ws\Ecode\src\TerminalView.cpp;D:\ws\Ecode\build\ecode.dir\Debug\TerminalView.obj
 D:\ws\Ecode\src\main.cpp;D:\ws\Ecode\build\ecode.dir\Debug\main.obj
+D:\ws\Ecode\FastFileSearch\src\FatReader.cpp;D:\ws\Ecode\build\ecode.dir\Debug\FatReader.obj
+D:\ws\Ecode\FastFileSearch\src\MFTReader.cpp;D:\ws\Ecode\build\ecode.dir\Debug\MFTReader.obj
+D:\ws\Ecode\FastFileSearch\src\exFatReader.cpp;D:\ws\Ecode\build\ecode.dir\Debug\exFatReader.obj
 D:\ws\Ecode\src-duktape\duktape.c;D:\ws\Ecode\build\ecode.dir\Debug\duktape.obj

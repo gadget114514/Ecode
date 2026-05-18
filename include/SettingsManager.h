@@ -4,6 +4,11 @@
 #include <vector>
 #include <windows.h>
 
+struct CliEntry {
+  std::wstring command;
+  std::wstring folder;
+};
+
 class SettingsManager {
 public:
   static SettingsManager &Instance();
@@ -38,6 +43,8 @@ public:
   void SetCaretBlinking(bool blink) { m_caretBlinking = blink; }
   int GetShellEncoding() const { return m_shellEncoding; }
   void SetShellEncoding(int encoding) { m_shellEncoding = encoding; }
+  bool IsShowAI() const { return m_showAI; }
+  void SetShowAI(bool show) { m_showAI = show; }
 
   // AI Settings
   std::wstring GetAIVendor() const { return m_aiVendor; }
@@ -61,7 +68,22 @@ public:
   int GetCaretStyle() const { return m_caretStyle; }
   void SetCaretStyle(int style) { m_caretStyle = style; }
 
+  std::wstring GetBashPath() const { return m_bashPath; }
+  void SetBashPath(const std::wstring &path) { m_bashPath = path; }
+
+  // Returns bash exe path (--cd stripped), sets workingDir to the directory from --cd if present
+  std::wstring GetBashCommand(std::wstring *workingDir = nullptr) const;
+
   std::wstring GetAppDataPath() const;
+
+  static std::wstring DetectBashPath();
+
+  // CLI entries
+  const std::vector<CliEntry> &GetCliEntries() const { return m_cliEntries; }
+  void SetCliEntries(const std::vector<CliEntry> &entries) { m_cliEntries = entries; }
+  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder);
+  void RemoveCliEntry(size_t index);
+  void SaveCliEntries();
 
 private:
   SettingsManager();
@@ -83,6 +105,9 @@ private:
   int m_shellEncoding; // 0=UTF8, 1=ShiftJIS
   std::wstring m_projectDirectory;
   std::wstring m_findStartDir;
+  std::wstring m_bashPath;
+  bool m_showAI = false;
+  std::vector<CliEntry> m_cliEntries;
 
   std::wstring m_aiVendor;
   std::wstring m_aiModel;

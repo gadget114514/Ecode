@@ -33,9 +33,14 @@ Editor *g_editor = nullptr;
 EditorBufferRenderer *g_renderer = nullptr;
 ScriptEngine *g_scriptEngine = nullptr;
 LspClient *g_lspClient = nullptr;
-TerminalView *g_terminalView     = nullptr;
-HWND          g_terminalViewHwnd = nullptr;
-int           g_terminalTabIndex = -1;
+std::vector<TerminalTabInfo> g_terminalTabs;
+int g_activeTerminalTab = -1;
+std::vector<AppTabInfo> g_appTabs;
+int g_activeAppTab = -1;
+bool g_isDraggingTab = false;
+int  g_dragTabFrom = -1;
+bool g_suppressTabChange = false;
+WNDPROC g_oldTabProc = nullptr;
 LogCallback g_logCallback = nullptr;
 std::wstring g_scriptsDir;
 bool g_isDragging = false;
@@ -56,5 +61,6 @@ bool g_compileAllScripts = false;
 #include "MinibufferHandler.inl"
 #include "UIHelpers.inl"
 #include "WindowHandlers_Command.inl"
+#include "TabDragHandler.inl"
 #include "WindowHandlers_Core.inl"
 #include "WindowHandlers_Input.inl"
