@@ -124,6 +124,9 @@ void HandleDestroy(HWND hwnd);
 #define IDM_TOOLS_SHELL_MODE 513
 #define IDM_TOOLS_TERMINAL_CMD 514
 #define IDM_TOOLS_TERMINAL_BASH 515
+#define IDM_TOOLS_FILE_SEARCH 516
+#define IDM_TOOLS_CSV_EDITOR 517
+#define IDM_TOOLS_JY_EDITOR 518
 
 #define IDM_LANG_EN 601
 #define IDM_LANG_JP 602
@@ -146,6 +149,8 @@ void HandleDestroy(HWND hwnd);
 #define IDM_HELP_KEYBINDINGS 804
 
 #define WM_SHELL_OUTPUT (WM_USER + 101)
+#define WM_EMBED_APP (WM_USER + 200)
+#define WM_EMBED_TERMINAL (WM_USER + 201)
 
 struct ShellOutput {
   Buffer *buffer;

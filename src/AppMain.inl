@@ -120,6 +120,64 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
+  case WM_EMBED_APP: {
+    HWND childHwnd = (HWND)wParam;
+    int appIdx = (int)lParam;
+    if (appIdx >= 0 && (size_t)appIdx < g_appTabs.size()) {
+      if (g_appTabs[appIdx].hwnd) {
+        DestroyWindow(g_appTabs[appIdx].hwnd);
+      }
+      SetParent(childHwnd, hwnd);
+      LONG style = GetWindowLong(childHwnd, GWL_STYLE);
+      style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+      style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS;
+      SetWindowLong(childHwnd, GWL_STYLE, style);
+      SetMenu(childHwnd, NULL);
+      SetWindowPos(childHwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+      g_appTabs[appIdx].hwnd = childHwnd;
+      RECT rc;
+      GetClientRect(hwnd, &rc);
+      SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
+      if (g_activeAppTab == appIdx) {
+        ShowWindow(childHwnd, SW_SHOW);
+        SetFocus(childHwnd);
+      } else {
+        ShowWindow(childHwnd, SW_HIDE);
+      }
+      UpdateMenu(hwnd);
+      InvalidateRect(hwnd, NULL, FALSE);
+    }
+    return 0;
+  }
+  case WM_EMBED_TERMINAL: {
+    HWND childHwnd = (HWND)wParam;
+    int termIdx = (int)lParam;
+    if (termIdx >= 0 && (size_t)termIdx < g_terminalTabs.size()) {
+      if (g_terminalTabs[termIdx].hwnd) {
+        DestroyWindow(g_terminalTabs[termIdx].hwnd);
+      }
+      SetParent(childHwnd, hwnd);
+      LONG style = GetWindowLong(childHwnd, GWL_STYLE);
+      style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+      style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS;
+      SetWindowLong(childHwnd, GWL_STYLE, style);
+      SetMenu(childHwnd, NULL);
+      SetWindowPos(childHwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+      g_terminalTabs[termIdx].hwnd = childHwnd;
+      RECT rc;
+      GetClientRect(hwnd, &rc);
+      SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
+      if (g_activeTerminalTab == termIdx) {
+        ShowWindow(childHwnd, SW_SHOW);
+        SetFocus(childHwnd);
+      } else {
+        ShowWindow(childHwnd, SW_HIDE);
+      }
+      UpdateMenu(hwnd);
+      InvalidateRect(hwnd, NULL, FALSE);
+    }
+    return 0;
+  }
   case WM_DROPFILES: {
     HDROP hDrop = (HDROP)wParam;
     UINT count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
@@ -170,8 +228,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
         if (g_terminalTabs[termIdx].hwnd) {
           SetFocus(g_terminalTabs[termIdx].hwnd);
-          if (g_terminalTabs[termIdx].view && !g_terminalTabs[termIdx].view->IsStarted())
-            g_terminalTabs[termIdx].view->StartSession(g_terminalTabs[termIdx].shell, {});
         }
       } else if (sel >= 0 && sel < static_cast<int>(bufCount)) {
         // Switch to an editor buffer tab

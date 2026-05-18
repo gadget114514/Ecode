@@ -438,9 +438,6 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="D:\ws\Ecode\src\TerminalEmulator.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\TerminalView.cpp" />
     <ClCompile Include="D:\ws\Ecode\src\main.cpp" />
-    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\FatReader.cpp" />
-    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\MFTReader.cpp" />
-    <ClCompile Include="D:\ws\Ecode\FastFileSearch\src\exFatReader.cpp" />
     <ClCompile Include="D:\ws\Ecode\src-duktape\duktape.c" />
     <ResourceCompile Include="D:\ws\Ecode\src\Ecode.rc" />
   </ItemGroup>
