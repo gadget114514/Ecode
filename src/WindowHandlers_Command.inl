@@ -848,7 +848,7 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
         g_activeTerminalTab = termIdx;
         if (g_terminalTabs[termIdx].hwnd) {
-          SetFocus(g_terminalTabs[termIdx].hwnd);
+          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_terminalTabs[termIdx].hwnd, 0);
         }
       }
     } else if (LOWORD(wParam) >= IDM_THEME_START && LOWORD(wParam) < IDM_THEME_START + 100) {
