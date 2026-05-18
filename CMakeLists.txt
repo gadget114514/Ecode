@@ -284,6 +284,20 @@ add_custom_command(TARGET ecode_console POST_BUILD
     COMMENT "Copying doc to output directory..."
 )
 
+# Dired standalone app
+add_subdirectory(Application/Dired Application/Dired/build EXCLUDE_FROM_ALL)
+
+# Build Dired as part of ecode build
+add_dependencies(ecode Dired)
+
+# Copy Dired binary to ecode output
+add_custom_command(TARGET ecode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/Application/Dired/bin/$<CONFIG>/Dired.exe"
+    "$<TARGET_FILE_DIR:ecode>/Dired.exe"
+    COMMENT "Copying Dired.exe..."
+)
+
 # Installer
 find_program(ISCC_EXECUTABLE ISCC 
     PATHS "C:/Program Files (x86)/Inno Setup 6"

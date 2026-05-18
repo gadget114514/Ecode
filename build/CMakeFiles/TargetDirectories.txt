@@ -13,3 +13,5 @@ D:/ws/Ecode/build/CMakeFiles/test_shortcuts.dir
 D:/ws/Ecode/build/CMakeFiles/installer.dir
 D:/ws/Ecode/build/CMakeFiles/ALL_BUILD.dir
 D:/ws/Ecode/build/CMakeFiles/ZERO_CHECK.dir
+D:/ws/Ecode/build/Application/Dired/build/CMakeFiles/Dired.dir
+D:/ws/Ecode/build/Application/Dired/build/CMakeFiles/ALL_BUILD.dir

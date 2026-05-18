@@ -1000,3 +1000,5 @@ WM_SHOWWINDOW Received, wParam=1
 [INFO]   Minibuffer Layout: mbTop=706 mbHeight=0 promptWidth=0
 [INFO] HandleSize: width=978 height=728 g_minibufferVisible=0
 [INFO]   Minibuffer Layout: mbTop=706 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=961 height=728 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=706 mbHeight=0 promptWidth=0

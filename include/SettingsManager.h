@@ -9,6 +9,12 @@ struct CliEntry {
   std::wstring folder;
 };
 
+struct DiredPair {
+  std::wstring label;
+  std::wstring leftDir;
+  std::wstring rightDir;
+};
+
 class SettingsManager {
 public:
   static SettingsManager &Instance();
@@ -85,6 +91,12 @@ public:
   void RemoveCliEntry(size_t index);
   void SaveCliEntries();
 
+  // Dired pairs
+  const std::vector<DiredPair> &GetDiredPairs() const { return m_diredPairs; }
+  void AddDiredPair(const std::wstring &label, const std::wstring &leftDir, const std::wstring &rightDir);
+  void RemoveDiredPair(size_t index);
+  void SaveDiredPairs();
+
 private:
   SettingsManager();
   std::wstring GetSettingsPath() const;
@@ -108,6 +120,7 @@ private:
   std::wstring m_bashPath;
   bool m_showAI = false;
   std::vector<CliEntry> m_cliEntries;
+  std::vector<DiredPair> m_diredPairs;
 
   std::wstring m_aiVendor;
   std::wstring m_aiModel;

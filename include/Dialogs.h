@@ -13,6 +13,7 @@ public:
   static void ShowFindReplaceDialog(HWND hwnd, bool replaceMode);
   static void ShowFindInFilesDialog(HWND hwnd);
   static void ShowFindFileDialog(HWND hwnd);
+  static void ShowDiredPairsDialog(HWND hwnd);
   static void ShowJumpToLineDialog(HWND hwnd);
   static void ShowMacroGalleryDialog(HWND hwnd);
   static std::wstring BrowseForFolder(HWND hwnd);

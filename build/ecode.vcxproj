@@ -119,7 +119,7 @@
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <PostBuildEvent>
-      <Message>Copying scripts to output directory...	Copying doc to output directory...</Message>
+      <Message>Copying scripts to output directory...	Copying doc to output directory...	Copying Dired.exe...</Message>
       <Command>setlocal
 "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_directory D:/ws/Ecode/scripts D:/ws/Ecode/bin/Debug/scripts
 if %errorlevel% neq 0 goto :cmEnd
@@ -131,6 +131,15 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd
 setlocal
 "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_directory D:/ws/Ecode/doc D:/ws/Ecode/bin/Debug/doc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_if_different D:/ws/Ecode/Application/Dired/bin/Debug/Dired.exe D:/ws/Ecode/bin/Debug/Dired.exe
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
@@ -189,7 +198,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <PostBuildEvent>
-      <Message>Copying scripts to output directory...	Copying doc to output directory...</Message>
+      <Message>Copying scripts to output directory...	Copying doc to output directory...	Copying Dired.exe...</Message>
       <Command>setlocal
 "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_directory D:/ws/Ecode/scripts D:/ws/Ecode/bin/Release/scripts
 if %errorlevel% neq 0 goto :cmEnd
@@ -201,6 +210,15 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd
 setlocal
 "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_directory D:/ws/Ecode/doc D:/ws/Ecode/bin/Release/doc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_if_different D:/ws/Ecode/Application/Dired/bin/Release/Dired.exe D:/ws/Ecode/bin/Release/Dired.exe
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
@@ -259,7 +277,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <PostBuildEvent>
-      <Message>Copying scripts to output directory...	Copying doc to output directory...</Message>
+      <Message>Copying scripts to output directory...	Copying doc to output directory...	Copying Dired.exe...</Message>
       <Command>setlocal
 "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_directory D:/ws/Ecode/scripts D:/ws/Ecode/bin/MinSizeRel/scripts
 if %errorlevel% neq 0 goto :cmEnd
@@ -271,6 +289,15 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd
 setlocal
 "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_directory D:/ws/Ecode/doc D:/ws/Ecode/bin/MinSizeRel/doc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_if_different D:/ws/Ecode/Application/Dired/bin/MinSizeRel/Dired.exe D:/ws/Ecode/bin/MinSizeRel/Dired.exe
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
@@ -328,7 +355,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <PostBuildEvent>
-      <Message>Copying scripts to output directory...	Copying doc to output directory...</Message>
+      <Message>Copying scripts to output directory...	Copying doc to output directory...	Copying Dired.exe...</Message>
       <Command>setlocal
 "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_directory D:/ws/Ecode/scripts D:/ws/Ecode/bin/RelWithDebInfo/scripts
 if %errorlevel% neq 0 goto :cmEnd
@@ -340,6 +367,15 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd
 setlocal
 "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_directory D:/ws/Ecode/doc D:/ws/Ecode/bin/RelWithDebInfo/doc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E copy_if_different D:/ws/Ecode/Application/Dired/bin/RelWithDebInfo/Dired.exe D:/ws/Ecode/bin/RelWithDebInfo/Dired.exe
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
@@ -448,6 +484,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Name>ZERO_CHECK</Name>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="D:\ws\Ecode\build\Application\Dired\build\Dired.vcxproj">
+      <Project>{505E2031-AA82-30DE-8BC5-51A0F4B5CD1B}</Project>
+      <Name>Dired</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
