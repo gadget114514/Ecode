@@ -153,6 +153,15 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_MOUSEWHEEL:
         ScrollBy(-(GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA) * 3);
         return 0;
+    case WM_LBUTTONDOWN:
+        OnLButtonDown(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+        return 0;
+    case WM_MOUSEMOVE:
+        OnMouseMove(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+        return 0;
+    case WM_LBUTTONUP:
+        OnLButtonUp();
+        return 0;
     case WM_SETFOCUS:
         // Notify PTY of focus (if focus events enabled)
         if (buffer_.focusEventReportingEnabled())
@@ -170,6 +179,7 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_COMMAND:
         if (LOWORD(wp) == 1 /* ID_TERMINAL_PASTE */) { PasteFromClipboard(); return 0; }
+        if (LOWORD(wp) == 2 /* ID_TERMINAL_COPY */)  { CopySelectionToClipboard(); return 0; }
         break;
     case WM_TERMINAL_OUTPUT: {
         const char* data = (const char*)wp;
@@ -370,7 +380,8 @@ void TerminalView::OnPaint() {
 
             bool isCursor = (logRow == curRow && col == buffer_.cursorColumn()
                              && scrollOffset_ == 0);
-            DrawCell(rt, screenRow, col, cell, isCursor, cursorBlink_);
+            bool isSelected = IsSelected(logRow, col);
+            DrawCell(rt, screenRow, col, cell, isCursor, cursorBlink_, isSelected);
         }
     }
 
@@ -380,7 +391,8 @@ void TerminalView::OnPaint() {
 }
 
 void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
-                            const TerminalCell& cell, bool isCursor, bool cursorVisible) {
+                            const TerminalCell& cell, bool isCursor, bool cursorVisible,
+                            bool isSelected) {
     const float x = col * cellWidth_;
     const float y = row * cellHeight_;
     const float w = cellWidth_ * (cell.wide ? 2.0f : 1.0f);
@@ -393,11 +405,23 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     // Apply inverse (reverse video) at render time — swap fg/bg
     if (cell.inverse) std::swap(fg, bg);
 
-    // Draw background
+    // Draw background first
     if (!bg.isDefault || isCursor) {
         TermColor drawBg = isCursor ? fg : bg;
         if (auto* b = GetBrush(drawBg))
             rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
+    }
+
+    // Selection overlay (drawn after background so it's visible on any cell bg)
+    if (isSelected) {
+        TermColor selColor;
+        selColor.r = 80; selColor.g = 130; selColor.b = 220; selColor.isDefault = false;
+        if (auto* b = GetBrush(selColor, 0.4f))
+            rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
+        // Lighten foreground for readability on selection
+        fg.r = (uint8_t)std::min(255, (int)fg.r + 60);
+        fg.g = (uint8_t)std::min(255, (int)fg.g + 60);
+        fg.b = (uint8_t)std::min(255, (int)fg.b + 60);
     }
 
     // Draw text
@@ -438,6 +462,94 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
                 rt->DrawLine({x, y}, {x, y + h}, b, 2.0f);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mouse selection
+// ---------------------------------------------------------------------------
+void TerminalView::BufferCoordFromPoint(int px, int py, int& outRow, int& outCol) const {
+    RECT clientRc; GetClientRect(hwnd_, &clientRc);
+    const int visRows  = (int)((clientRc.bottom - clientRc.top) / cellHeight_);
+    const int totalLog = buffer_.totalLineCount();
+    const int histLines= buffer_.historyLineCount();
+    const int firstRow = std::max(0, totalLog - visRows - scrollOffset_);
+
+    outCol = (int)(px / cellWidth_);
+    outCol = std::max(0, std::min(outCol, buffer_.columns() - 1));
+
+    int screenRow = (int)(py / cellHeight_);
+    screenRow = std::max(0, std::min(screenRow, visRows - 1));
+    outRow = firstRow + screenRow;
+    if (outRow >= totalLog) outRow = totalLog - 1;
+}
+
+bool TerminalView::IsSelected(int logRow, int col) const {
+    if (!selecting_ && selAnchorRow_ < 0) return false;
+    int ar = selAnchorRow_, ac = selAnchorCol_;
+    int er = selEndRow_,    ec = selEndCol_;
+    if (!selecting_) { er = ar; ec = ac; }
+    int r1 = std::min(ar, er), r2 = std::max(ar, er);
+    int c1 = std::min(ac, ec), c2 = std::max(ac, ec);
+    return logRow >= r1 && logRow <= r2 && col >= c1 && col <= c2;
+}
+
+void TerminalView::OnLButtonDown(int px, int py) {
+    // Click clears existing selection
+    selAnchorRow_ = -1;
+    selAnchorCol_ = -1;
+    selEndRow_ = -1;
+    selEndCol_ = -1;
+
+    SetCapture(hwnd_);
+    selecting_ = true;
+    BufferCoordFromPoint(px, py, selAnchorRow_, selAnchorCol_);
+    selEndRow_ = selAnchorRow_;
+    selEndCol_ = selAnchorCol_;
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void TerminalView::OnMouseMove(int px, int py) {
+    if (!selecting_) return;
+    BufferCoordFromPoint(px, py, selEndRow_, selEndCol_);
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void TerminalView::OnLButtonUp() {
+    selecting_ = false;
+    ReleaseCapture();
+    // selection remains active until next click or copy
+}
+
+void TerminalView::CopySelectionToClipboard() const {
+    if (selAnchorRow_ < 0) return;
+    int ar = selAnchorRow_, ac = selAnchorCol_;
+    int er = selEndRow_,    ec = selEndCol_;
+    int r1 = std::min(ar, er), r2 = std::max(ar, er);
+    int c1 = std::min(ac, ec), c2 = std::max(ac, ec);
+
+    std::wstring wtext;
+    for (int r = r1; r <= r2; ++r) {
+        const auto& line = buffer_.lineAt(r);
+        int startCol = (r == r1) ? c1 : 0;
+        int endCol   = (r == r2) ? c2 : (buffer_.columns() - 1);
+        for (int c = startCol; c <= endCol && c < (int)line.size(); ++c) {
+            if (line[c].wideContinuation) continue;
+            wtext += line[c].text;
+        }
+        if (r < r2) wtext += L"\r\n";
+    }
+
+    if (wtext.empty()) return;
+    if (!OpenClipboard(const_cast<HWND>(hwnd_))) return;
+    EmptyClipboard();
+    size_t bytes = (wtext.size() + 1) * sizeof(wchar_t);
+    HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (hg) {
+        memcpy(GlobalLock(hg), wtext.c_str(), bytes);
+        GlobalUnlock(hg);
+        SetClipboardData(CF_UNICODETEXT, hg);
+    }
+    CloseClipboard();
 }
 
 // ---------------------------------------------------------------------------
@@ -503,13 +615,18 @@ void TerminalView::OnContextMenu(int screenX, int screenY) {
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
 
+    bool hasSel = selAnchorRow_ >= 0;
+    AppendMenuW(hMenu, MF_STRING | (hasSel ? 0 : MF_GRAYED), 2, L"Copy");
+    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     bool canPaste = IsClipboardFormatAvailable(CF_UNICODETEXT);
     AppendMenuW(hMenu, MF_STRING | (canPaste ? 0 : MF_GRAYED), 1, L"Paste");
 
-    // TrackPopupMenu sends WM_COMMAND with our ID back to hwnd_
-    TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_LEFTALIGN,
-                   screenX, screenY, 0, hwnd_, nullptr);
+    UINT cmd = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_RETURNCMD,
+                              screenX, screenY, 0, hwnd_, nullptr);
     DestroyMenu(hMenu);
+
+    if (cmd == 1) { PasteFromClipboard(); }
+    else if (cmd == 2) { CopySelectionToClipboard(); }
 }
 
 // ---------------------------------------------------------------------------
@@ -520,8 +637,34 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
     bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
     bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
 
+    // Ctrl+C / Ctrl+Insert: copy selection to clipboard
+    if ((ctrl && vk == 'C') || (ctrl && vk == VK_INSERT)) {
+        if (selAnchorRow_ >= 0) {
+            CopySelectionToClipboard();
+            return;
+        }
+    }
+    // Ctrl+Shift+C: also copy
+    if (ctrl && shift && vk == 'C') {
+        if (selAnchorRow_ >= 0) {
+            CopySelectionToClipboard();
+            return;
+        }
+    }
+
+    // Clear selection on any typing
+    bool clearSel = false;
+    if (vk >= 0x20 && vk <= 0xFE) clearSel = true;
+    else if (vk == VK_RETURN || vk == VK_BACK || vk == VK_TAB || vk == VK_ESCAPE) clearSel = true;
+    else if (vk == VK_DELETE) clearSel = true;
+
     std::string seq = EncodeKey(vk, ctrl, shift, alt);
     if (!seq.empty()) {
+        if (clearSel && selAnchorRow_ >= 0) {
+            selAnchorRow_ = -1; selAnchorCol_ = -1;
+            selEndRow_ = -1; selEndCol_ = -1;
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
         scrollOffset_ = 0; // snap to bottom on any keystroke
         session_.Write(seq.data(), seq.size());
     }
@@ -530,6 +673,13 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
 void TerminalView::OnChar(wchar_t ch) {
     // Ignore control characters already handled by OnKeyDown
     if (ch < 0x20 || ch == 0x7f) return;
+
+    // Clear selection on character input
+    if (selAnchorRow_ >= 0) {
+        selAnchorRow_ = -1; selAnchorCol_ = -1;
+        selEndRow_ = -1; selEndCol_ = -1;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
 
     scrollOffset_ = 0;
 
