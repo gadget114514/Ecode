@@ -1,5 +1,5 @@
 // =============================================================================
-// FastDired — Two-pane directory browser with Direct2D rendering
+// FastFD — Two-pane directory browser with Direct2D rendering
 // Incremental scanning: results appear as the scan progresses.
 // =============================================================================
 
@@ -570,10 +570,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nCmdShow) {
     wc.hInstance     = hInst;
     wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    wc.lpszClassName = L"FastDiredWindowClass";
+    wc.lpszClassName = L"FastFDWindowClass";
     RegisterClassW(&wc);
 
-    HWND hwnd = CreateWindowExW(0, L"FastDiredWindowClass", L"FastDired",
+    HWND hwnd = CreateWindowExW(0, L"FastFDWindowClass", L"FastFD",
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, CW_USEDEFAULT, 900, 550,
         nullptr, nullptr, hInst, nullptr);

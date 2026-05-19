@@ -4,9 +4,9 @@ project(FastDired LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(FastDired WIN32 src/main.cpp)
+add_executable(FastFD WIN32 src/main.cpp)
 
-target_link_libraries(FastDired
+target_link_libraries(FastFD,
     d2d1
     dwrite
     shell32
@@ -17,14 +17,14 @@ target_link_libraries(FastDired
     ole32
 )
 
-target_compile_definitions(FastDired PRIVATE
+target_compile_definitions(FastFD PRIVATE
     UNICODE
     _UNICODE
     _CRT_SECURE_NO_WARNINGS
 )
 
 if(MSVC)
-    target_compile_options(FastDired PRIVATE /W4 /EHsc /utf-8)
+    target_compile_options(FastFD PRIVATE /W4 /EHsc /utf-8)
 endif()
 
 set_target_properties(FastDired PROPERTIES
