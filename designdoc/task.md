@@ -12,3 +12,4 @@
 - [x] Fix Alt+X not opening minibuffer (Fixed via ecodeinit.js)
 - [x] Verify all implementations
 - [x] Create walkthrough
+- [ ] implement FastFD : multi column Directory Viewer

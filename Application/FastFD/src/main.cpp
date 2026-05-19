@@ -46,12 +46,22 @@ struct FileEntry {
     bool IsDir() const { return (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0; }
 };
 
+enum SortColumn : int {
+    SORT_NAME = 0,
+    SORT_SIZE,
+    SORT_TYPE,
+    SORT_DATE,
+    SORT_NONE = -1
+};
+
 struct Pane {
     std::wstring           currentPath;
     std::vector<FileEntry> entries;
     int                    selectedIndex = 0;
     int                    scrollOffset  = 0; // first visible row
     int                    visibleRows   = 0;
+    SortColumn             sortColumn    = SORT_NONE;
+    bool                   sortAscending = true;
     HANDLE                 scanThread    = nullptr;
     CRITICAL_SECTION       cs;
     bool                   scanning      = false;
@@ -131,6 +141,45 @@ static void DiscardRT() {
     if (g_brushSel)    g_brushSel->Release();    g_brushSel    = nullptr;
     if (g_brushHeader) g_brushHeader->Release(); g_brushHeader = nullptr;
     if (g_brushDivider)g_brushDivider->Release();g_brushDivider= nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Sorting
+// ---------------------------------------------------------------------------
+static int CompareFileEntries(const FileEntry &a, const FileEntry &b, SortColumn col, bool asc) {
+    int cmp = 0;
+    switch (col) {
+    case SORT_NAME:
+        cmp = _wcsicmp(a.name.c_str(), b.name.c_str());
+        break;
+    case SORT_SIZE: {
+        // Dirs first, then by size
+        if (a.IsDir() != b.IsDir()) return a.IsDir() ? -1 : 1;
+        if (a.size < b.size) cmp = -1;
+        else if (a.size > b.size) cmp = 1;
+        break;
+    }
+    case SORT_TYPE:
+        cmp = _wcsicmp(a.ext.c_str(), b.ext.c_str());
+        break;
+    case SORT_DATE: {
+        // Dirs first, then by date
+        if (a.IsDir() != b.IsDir()) return a.IsDir() ? -1 : 1;
+        LONG64 ta = ((LONG64)a.lastWrite.dwHighDateTime << 32) | a.lastWrite.dwLowDateTime;
+        LONG64 tb = ((LONG64)b.lastWrite.dwHighDateTime << 32) | b.lastWrite.dwLowDateTime;
+        if (ta < tb) cmp = -1; else if (ta > tb) cmp = 1;
+        break;
+    }
+    }
+    return asc ? cmp : -cmp;
+}
+
+static void SortEntries(Pane *pane) {
+    if (pane->sortColumn == SORT_NONE) return;
+    std::sort(pane->entries.begin(), pane->entries.end(),
+        [pane](const FileEntry &a, const FileEntry &b) {
+            return CompareFileEntries(a, b, pane->sortColumn, pane->sortAscending) < 0;
+        });
 }
 
 // ---------------------------------------------------------------------------
