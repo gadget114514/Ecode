@@ -511,6 +511,7 @@ void ScanPlugins() {
         e.name = name;
         e.path = pluginDir + ffd.cFileName;
         e.isBuiltIn = false;
+        e.hidden = false;
         g_plugins.push_back(std::move(e));
       } while (FindNextFileW(hFind, &ffd));
       FindClose(hFind);
@@ -538,6 +539,7 @@ void ScanPlugins() {
           e.name = name;
           e.path = userDir + L"\\" + ffd.cFileName;
           e.isBuiltIn = false;
+          e.hidden = false;
           g_plugins.push_back(std::move(e));
         }
       } while (FindNextFileW(hFind, &ffd));
@@ -562,9 +564,15 @@ void ScanPlugins() {
         e.name = name;
         e.path = full;
         e.isBuiltIn = true;
+        e.hidden = false;
         g_plugins.push_back(std::move(e));
       }
     }
+  }
+
+  // Mark hidden plugins
+  for (auto &p : g_plugins) {
+    p.hidden = SettingsManager::Instance().IsPluginHidden(p.name);
   }
 }
 
@@ -623,6 +631,56 @@ void LaunchPlugin(HWND hwnd, size_t index) {
     }
     CloseHandle(pi.hThread);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Plugin Configuration Dialog
+// ---------------------------------------------------------------------------
+INT_PTR CALLBACK PluginConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                     LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    HWND hList = GetDlgItem(hDlg, IDC_PLUGIN_LIST);
+    for (size_t i = 0; i < g_plugins.size(); ++i) {
+      int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)g_plugins[i].name.c_str());
+      SendMessage(hList, LB_SETITEMDATA, idx, i);
+      if (g_plugins[i].hidden)
+        SendMessage(hList, LB_SETSEL, TRUE, idx);
+    }
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDOK) {
+      HWND hList = GetDlgItem(hDlg, IDC_PLUGIN_LIST);
+      int count = (int)SendMessage(hList, LB_GETCOUNT, 0, 0);
+      for (int i = 0; i < count; ++i) {
+        LRESULT sel = SendMessage(hList, LB_GETSEL, i, 0);
+        LRESULT idx = SendMessage(hList, LB_GETITEMDATA, i, 0);
+        if (idx >= 0 && idx < (int)g_plugins.size()) {
+          std::wstring name = g_plugins[(size_t)idx].name;
+          bool shouldHide = (sel != 0);
+          if (shouldHide != SettingsManager::Instance().IsPluginHidden(name)) {
+            SettingsManager::Instance().ToggleHiddenPlugin(name);
+          }
+        }
+      }
+      SettingsManager::Instance().SaveHiddenPlugins();
+      SettingsManager::Instance().Save();
+      ScanPlugins();
+      EndDialog(hDlg, IDOK);
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void ShowPluginConfigDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_PLUGIN_CONFIG), hwnd,
+             PluginConfigDlgProc);
 }
 
 static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
@@ -1003,7 +1061,7 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     break;
   }
   case IDM_PLUGINS_CONFIGURE: {
-    Dialogs::ShowSettingsDialog(hwnd);
+    ShowPluginConfigDialog(hwnd);
     UpdateMenu(hwnd);
     break;
   }
@@ -1070,7 +1128,8 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         if (!bashCmd.empty()) {
           std::wstring cliDir = entries[idx].folder;
           if (!cliDir.empty()) SetCurrentDirectoryW(cliDir.c_str());
-          std::wstring cmdLine = bashCmd + L" -c \"" + entries[idx].command + L"; exec bash --login -i\"";
+          std::wstring localePrefix = (entries[idx].encoding == 1) ? L"export LANG=ja_JP.UTF-8; " : L"export LANG=en_US.UTF-8; ";
+          std::wstring cmdLine = bashCmd + L" -c \"" + localePrefix + entries[idx].command + L"; exec bash --login -i\"";
           std::wstring label = cliDir.substr(cliDir.find_last_of(L"\\/") + 1);
           if (label.empty()) label = L"CLI";
           CreateNewTerminal(hwnd, cmdLine, label);

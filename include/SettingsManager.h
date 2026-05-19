@@ -7,6 +7,7 @@
 struct CliEntry {
   std::wstring command;
   std::wstring folder;
+  int encoding; // 0=UTF8, 1=ShiftJIS
 };
 
 struct DiredPair {
@@ -107,7 +108,7 @@ public:
   // CLI entries
   const std::vector<CliEntry> &GetCliEntries() const { return m_cliEntries; }
   void SetCliEntries(const std::vector<CliEntry> &entries) { m_cliEntries = entries; }
-  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder);
+  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding = 0);
   void RemoveCliEntry(size_t index);
   void SaveCliEntries();
 
@@ -116,6 +117,13 @@ public:
   void AddDiredPair(const std::wstring &label, const std::wstring &leftDir, const std::wstring &rightDir);
   void RemoveDiredPair(size_t index);
   void SaveDiredPairs();
+
+  // Hidden plugins
+  const std::vector<std::wstring> &GetHiddenPlugins() const { return m_hiddenPlugins; }
+  void SetHiddenPlugins(const std::vector<std::wstring> &list) { m_hiddenPlugins = list; }
+  bool IsPluginHidden(const std::wstring &name) const;
+  void ToggleHiddenPlugin(const std::wstring &name);
+  void SaveHiddenPlugins();
 
   // Theme management
   const std::vector<ThemeEntry> &GetThemes() const { return m_themes; }
@@ -159,4 +167,5 @@ private:
 
   std::vector<ThemeEntry> m_themes;
   std::wstring m_activeTheme;
+  std::vector<std::wstring> m_hiddenPlugins;
 };
