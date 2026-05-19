@@ -283,8 +283,6 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
-
-
   // Language Menu
   HMENU hLang = CreatePopupMenu();
   AppendMenu(hLang, MF_STRING, IDM_LANG_EN, L10N("menu_language_en"));
