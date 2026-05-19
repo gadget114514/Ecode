@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(FastFD WIN32 src/main.cpp)
 
-target_link_libraries(FastFD,
+target_link_libraries(FastFD
     d2d1
     dwrite
     shell32
@@ -15,6 +15,7 @@ target_link_libraries(FastFD,
     kernel32
     advapi32
     ole32
+    comctl32
 )
 
 target_compile_definitions(FastFD PRIVATE
@@ -27,6 +28,6 @@ if(MSVC)
     target_compile_options(FastFD PRIVATE /W4 /EHsc /utf-8)
 endif()
 
-set_target_properties(FastDired PROPERTIES
+set_target_properties(FastFD PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin"
 )
