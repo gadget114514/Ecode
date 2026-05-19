@@ -53,6 +53,11 @@ bool PromptSaveBuffer(HWND hwnd, Buffer *buf);
 void HideMinibuffer();
 void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring &label = L"");
 void ShowCliDialog(HWND hwnd);
+void KillAppProcessByIndex(HWND hwnd, size_t idx);
+void KillTerminalProcessByIndex(HWND hwnd, size_t idx);
+void KillActiveAppProcess(HWND hwnd);
+void ScanPlugins();
+void LaunchPlugin(HWND hwnd, size_t index);
 
 enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
 extern int g_currentLogLevel;
@@ -114,20 +119,23 @@ void HandleDestroy(HWND hwnd);
 #define IDM_SHELL_ENC_UTF8 504
 #define IDM_SHELL_ENC_SJIS 505
 #define IDM_EDIT_FIND_IN_FILES 506
+#define IDM_EDIT_GREP 507
 #define IDM_EDIT_FIND_FILE 215
 #define IDM_TOOLS_DIRED 216
-#define IDM_TOOLS_AI_ASSISTANT 507
-#define IDM_TOOLS_AI_CONSOLE 508
-#define IDM_TOOLS_AI_SET_KEY 509
-#define IDM_AI_MANAGER 510
-#define IDM_AI_SETUP_WIZARD 511
-#define IDM_TOOLS_TERMINAL 512
-#define IDM_TOOLS_SHELL_MODE 513
-#define IDM_TOOLS_TERMINAL_CMD 514
-#define IDM_TOOLS_TERMINAL_BASH 515
-#define IDM_TOOLS_FILE_SEARCH 516
-#define IDM_TOOLS_CSV_EDITOR 517
-#define IDM_TOOLS_JY_EDITOR 518
+#define IDM_TOOLS_AI_ASSISTANT 508
+#define IDM_TOOLS_AI_CONSOLE 509
+#define IDM_TOOLS_AI_SET_KEY 510
+#define IDM_AI_MANAGER 511
+#define IDM_AI_SETUP_WIZARD 512
+#define IDM_TOOLS_TERMINAL 513
+#define IDM_TOOLS_SHELL_MODE 514
+#define IDM_TOOLS_TERMINAL_CMD 515
+#define IDM_TOOLS_TERMINAL_BASH 516
+#define IDM_TOOLS_FILE_SEARCH 517
+#define IDM_TOOLS_CSV_EDITOR 518
+#define IDM_TOOLS_JY_EDITOR 519
+#define IDM_PROCESS_KILL 520
+#define IDM_PROCESS_KILL_START 7000
 
 #define IDM_LANG_EN 601
 #define IDM_LANG_JP 602
@@ -144,8 +152,11 @@ void HandleDestroy(HWND hwnd);
 #define IDM_TERMINALS_START 4000
 #define IDM_DIRED_START 5000
 #define IDM_DIRED_CONFIGURE 705
+#define IDM_PLUGINS_CONFIGURE 706
+#define IDM_PLUGINS_RESCAN 707
 #define IDM_BUFFERS_START 1000
 #define IDM_THEME_START 6000
+#define IDM_PLUGINS_START 8000
 
 #define IDM_HELP_DOC 801
 #define IDM_HELP_ABOUT 802
@@ -159,6 +170,7 @@ void HandleDestroy(HWND hwnd);
 #define WM_GREP_PROGRESS (WM_USER + 203)
 #define WM_GREP_COMPLETE (WM_USER + 204)
 #define WM_DEFERRED_FOCUS (WM_USER + 205)
+#define WM_SET_PROCESS_HANDLE (WM_USER + 206)
 
 struct GrepSearchParams {
     std::wstring dir;
@@ -167,8 +179,6 @@ struct GrepSearchParams {
     bool useRegex;
     bool matchCase;
 };
-#define WM_DEFERRED_FOCUS (WM_USER + 206)
-
 struct ShellOutput {
   Buffer *buffer;
   std::string text;
@@ -197,15 +207,24 @@ struct TerminalTabInfo {
     HWND hwnd = nullptr;
     std::wstring shell;
     std::wstring label;
+    HANDLE hProcess = nullptr;
 };
 extern std::vector<TerminalTabInfo> g_terminalTabs;
 extern int g_activeTerminalTab; // -1 = no terminal active, 0+ = index in g_terminalTabs
 
+struct PluginEntry {
+    std::wstring name;
+    std::wstring path;
+    bool isBuiltIn;
+};
+extern std::vector<PluginEntry> g_plugins;
+
 struct AppTabInfo {
     HWND hwnd = nullptr;
     std::wstring label;
-    int type; // 0 = file search, 1 = grep results
+    int type; // 0 = file search, 1 = grep results, 5 = dired
     void *data = nullptr; // type-specific data (e.g. ListView HWND or result list)
+    HANDLE hProcess = nullptr; // process handle for killing
 };
 extern std::vector<AppTabInfo> g_appTabs;
 extern int g_activeAppTab; // -1 = no app tab active, 0+ = index in g_appTabs

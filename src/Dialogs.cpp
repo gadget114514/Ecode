@@ -110,7 +110,64 @@ std::wstring Dialogs::OpenFileDialog(HWND hwnd) {
   ofn.hwndOwner = hwnd;
   ofn.lpstrFile = fileName;
   ofn.nMaxFile = MAX_PATH;
-  ofn.lpstrFilter = L"Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+
+  // Build filter buffer for Windows common dialog (embedded \0 separators)
+  std::wstring defExt = SettingsManager::Instance().GetDefaultExtension();
+  wchar_t filterBuf[512] = {0};
+  if (defExt.empty()) {
+    wcscpy_s(filterBuf, 512, L"Text Files (*.txt)");
+    size_t pos = wcslen(filterBuf) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"*.txt");
+    pos += wcslen(filterBuf + pos) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"All Files (*.*)");
+    pos += wcslen(filterBuf + pos) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"*.*");
+    pos += wcslen(filterBuf + pos) + 1;
+    filterBuf[pos] = L'\0';
+    ofn.lpstrDefExt = L"txt";
+  } else {
+    // Parse semicolon-separated extensions: "*.txt;*.md;*.json"
+    std::vector<std::wstring> exts;
+    size_t start = 0, end;
+    std::wstring extStr = defExt;
+    // Strip leading *. if present
+    while ((end = extStr.find(L';', start)) != std::wstring::npos) {
+      std::wstring e = extStr.substr(start, end - start);
+      if (!e.empty()) exts.push_back(e);
+      start = end + 1;
+    }
+    if (start < extStr.size()) exts.push_back(extStr.substr(start));
+
+    // Build: "Supported Files (*.ext1;*.ext2)\0*.ext1;*.ext2\0All Files (*.*)\0*.*\0"
+    std::wstring display = L"Supported Files (";
+    std::wstring pattern;
+    for (size_t i = 0; i < exts.size(); ++i) {
+      std::wstring e = exts[i];
+      if (e.find(L'.') == 0) e = L"*" + e;
+      else if (e.find(L'*') != 0) e = L"*." + e;
+      if (i > 0) { display += L"; "; pattern += L";"; }
+      display += e; pattern += e;
+    }
+    display += L")";
+
+    wcscpy_s(filterBuf, 512, display.c_str());
+    size_t pos = wcslen(filterBuf) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, pattern.c_str());
+    pos += wcslen(filterBuf + pos) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"All Files (*.*)");
+    pos += wcslen(filterBuf + pos) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"*.*");
+    pos += wcslen(filterBuf + pos) + 1;
+    filterBuf[pos] = L'\0';
+
+    // Use first extension as default
+    static std::wstring s_firstExt;
+    s_firstExt = exts.empty() ? L"txt" : exts[0];
+    if (s_firstExt.find(L'.') == 0) s_firstExt = s_firstExt.substr(1);
+    else if (s_firstExt.find(L"*.") == 0) s_firstExt = s_firstExt.substr(2);
+    ofn.lpstrDefExt = s_firstExt.c_str();
+  }
+  ofn.lpstrFilter = filterBuf;
   ofn.nFilterIndex = 1;
   ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
@@ -134,7 +191,60 @@ std::wstring Dialogs::SaveFileDialog(HWND hwnd) {
   ofn.hwndOwner = hwnd;
   ofn.lpstrFile = fileName;
   ofn.nMaxFile = MAX_PATH;
-  ofn.lpstrFilter = L"Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+
+  std::wstring defExt = SettingsManager::Instance().GetDefaultExtension();
+  wchar_t filterBuf[512] = {0};
+  if (defExt.empty()) {
+    wcscpy_s(filterBuf, 512, L"Text Files (*.txt)");
+    size_t pos = wcslen(filterBuf) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"*.txt");
+    pos += wcslen(filterBuf + pos) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"All Files (*.*)");
+    pos += wcslen(filterBuf + pos) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"*.*");
+    pos += wcslen(filterBuf + pos) + 1;
+    filterBuf[pos] = L'\0';
+    ofn.lpstrDefExt = L"txt";
+  } else {
+    // Parse semicolon-separated extensions
+    std::vector<std::wstring> exts;
+    size_t start = 0, end;
+    std::wstring extStr = defExt;
+    while ((end = extStr.find(L';', start)) != std::wstring::npos) {
+      std::wstring e = extStr.substr(start, end - start);
+      if (!e.empty()) exts.push_back(e);
+      start = end + 1;
+    }
+    if (start < extStr.size()) exts.push_back(extStr.substr(start));
+
+    std::wstring display = L"Supported Files (";
+    std::wstring pattern;
+    for (size_t i = 0; i < exts.size(); ++i) {
+      std::wstring e = exts[i];
+      if (e.find(L'.') == 0) e = L"*" + e;
+      else if (e.find(L'*') != 0) e = L"*." + e;
+      if (i > 0) { display += L"; "; pattern += L";"; }
+      display += e; pattern += e;
+    }
+    display += L")";
+
+    wcscpy_s(filterBuf, 512, display.c_str());
+    size_t pos = wcslen(filterBuf) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, pattern.c_str());
+    pos += wcslen(filterBuf + pos) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"All Files (*.*)");
+    pos += wcslen(filterBuf + pos) + 1;
+    wcscpy_s(filterBuf + pos, 512 - pos, L"*.*");
+    pos += wcslen(filterBuf + pos) + 1;
+    filterBuf[pos] = L'\0';
+
+    static std::wstring s_firstExt;
+    s_firstExt = exts.empty() ? L"txt" : exts[0];
+    if (s_firstExt.find(L'.') == 0) s_firstExt = s_firstExt.substr(1);
+    else if (s_firstExt.find(L"*.") == 0) s_firstExt = s_firstExt.substr(2);
+    ofn.lpstrDefExt = s_firstExt.c_str();
+  }
+  ofn.lpstrFilter = filterBuf;
   ofn.nFilterIndex = 1;
   ofn.Flags = OFN_OVERWRITEPROMPT;
 
@@ -160,7 +270,6 @@ void Dialogs::ShowAboutDialog(HWND hwnd) {
 }
 
 static HWND g_hDlgSettingsGeneral = NULL;
-static HWND g_hDlgSettingsAI = NULL;
 
 INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                         LPARAM lParam);
@@ -177,15 +286,10 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     tie.mask = TCIF_TEXT;
     tie.pszText = (LPWSTR)L"General";
     TabCtrl_InsertItem(hTab, 0, &tie);
-    tie.pszText = (LPWSTR)L"AI";
-    TabCtrl_InsertItem(hTab, 1, &tie);
 
     g_hDlgSettingsGeneral = CreateDialogW(
         GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_SETTINGS_GENERAL), hDlg,
         GeneralSettingsDlgProc);
-    g_hDlgSettingsAI =
-        CreateDialogW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_SETTINGS_AI),
-                      hDlg, AiSettingsDlgProc);
 
     RECT rcTab;
     GetWindowRect(hTab, &rcTab);
@@ -195,25 +299,12 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SetWindowPos(g_hDlgSettingsGeneral, HWND_TOP, rcTab.left, rcTab.top,
                  rcTab.right - rcTab.left, rcTab.bottom - rcTab.top,
                  SWP_SHOWWINDOW);
-    SetWindowPos(g_hDlgSettingsAI, HWND_TOP, rcTab.left, rcTab.top,
-                 rcTab.right - rcTab.left, rcTab.bottom - rcTab.top,
-                 SWP_HIDEWINDOW);
 
     return (INT_PTR)TRUE;
-  }
-  case WM_NOTIFY: {
-    LPNMHDR pnmh = (LPNMHDR)lParam;
-    if (pnmh->idFrom == IDC_TAB_SETTINGS && pnmh->code == TCN_SELCHANGE) {
-      int sel = TabCtrl_GetCurSel(pnmh->hwndFrom);
-      ShowWindow(g_hDlgSettingsGeneral, sel == 0 ? SW_SHOW : SW_HIDE);
-      ShowWindow(g_hDlgSettingsAI, sel == 1 ? SW_SHOW : SW_HIDE);
-    }
-    break;
   }
   case WM_COMMAND:
     if (LOWORD(wParam) == IDOK) {
       SendMessage(g_hDlgSettingsGeneral, WM_COMMAND, MAKEWPARAM(IDOK, 0), 0);
-      SendMessage(g_hDlgSettingsAI, WM_COMMAND, MAKEWPARAM(IDOK, 0), 0);
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDCANCEL) {
@@ -278,8 +369,14 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 
     SetDlgItemTextW(hDlg, IDC_BASH_PATH,
                     SettingsManager::Instance().GetBashPath().c_str());
-    CheckDlgButton(hDlg, IDC_SHOW_AI,
-                   SettingsManager::Instance().IsShowAI() ? BST_CHECKED : BST_UNCHECKED);
+    // Hide Show AI checkbox (AI is managed separately)
+    ShowWindow(GetDlgItem(hDlg, IDC_SHOW_AI), SW_HIDE);
+
+    SetDlgItemTextW(hDlg, IDC_DEFAULT_EXT,
+                    SettingsManager::Instance().GetDefaultExtension().c_str());
+
+    SetDlgItemTextW(hDlg, IDC_PLUGINS_DIR,
+                    SettingsManager::Instance().GetPluginsDirectory().c_str());
 
     return (INT_PTR)TRUE;
   }
@@ -296,6 +393,13 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         } else {
           SetDlgItemTextW(hDlg, IDC_BASH_PATH, path.c_str());
         }
+      }
+      return (INT_PTR)TRUE;
+    }
+    if (LOWORD(wParam) == IDC_PLUGINS_BROWSE) {
+      std::wstring path = Dialogs::BrowseForFolder(hDlg);
+      if (!path.empty()) {
+        SetDlgItemTextW(hDlg, IDC_PLUGINS_DIR, path.c_str());
       }
       return (INT_PTR)TRUE;
     }
@@ -336,8 +440,14 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       wchar_t bashPath[MAX_PATH];
       GetDlgItemTextW(hDlg, IDC_BASH_PATH, bashPath, MAX_PATH);
       SettingsManager::Instance().SetBashPath(bashPath);
-      SettingsManager::Instance().SetShowAI(
-          IsDlgButtonChecked(hDlg, IDC_SHOW_AI) == BST_CHECKED);
+
+      wchar_t defExt[64];
+      GetDlgItemTextW(hDlg, IDC_DEFAULT_EXT, defExt, 64);
+      SettingsManager::Instance().SetDefaultExtension(defExt);
+
+      wchar_t pluginDir[MAX_PATH];
+      GetDlgItemTextW(hDlg, IDC_PLUGINS_DIR, pluginDir, MAX_PATH);
+      SettingsManager::Instance().SetPluginsDirectory(pluginDir);
 
       SettingsManager::Instance().Save();
     }

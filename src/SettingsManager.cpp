@@ -30,6 +30,16 @@ std::wstring SettingsManager::GetSettingsPath() const {
   return GetAppDataPath() + L"\\settings.ini";
 }
 
+static std::wstring GetRecentFilePath() {
+  wchar_t path[MAX_PATH];
+  if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, path))) {
+    std::wstring dir = std::wstring(path) + L"\\Ecode";
+    CreateDirectoryW(dir.c_str(), NULL);
+    return dir + L"\\recent.ini";
+  }
+  return L".\\recent.ini";
+}
+
 void SettingsManager::Load() {
   std::wstring path = GetSettingsPath();
 
@@ -82,6 +92,18 @@ void SettingsManager::Load() {
   }
   if (m_bashPath.empty()) {
     m_bashPath = DetectBashPath();
+  }
+
+  wchar_t defExtBuf[64];
+  if (GetPrivateProfileStringW(L"Editor", L"DefaultExtension", L"", defExtBuf,
+                                64, path.c_str()) > 0) {
+    m_defaultExtension = defExtBuf;
+  }
+
+  wchar_t pluginDirBuf[MAX_PATH];
+  if (GetPrivateProfileStringW(L"Editor", L"PluginsDirectory", L"", pluginDirBuf,
+                               MAX_PATH, path.c_str()) > 0) {
+    m_pluginsDirectory = pluginDirBuf;
   }
 
   wchar_t projDirBuf[MAX_PATH];
@@ -296,6 +318,14 @@ void SettingsManager::Save() {
   WriteInt(L"Editor", L"CaretStyle", m_caretStyle);
   WriteInt(L"Editor", L"ShellEncoding", m_shellEncoding);
   WriteInt(L"Editor", L"ShowAI", m_showAI ? 1 : 0);
+  if (!m_defaultExtension.empty()) {
+    WritePrivateProfileStringW(L"Editor", L"DefaultExtension",
+                               m_defaultExtension.c_str(), path.c_str());
+  }
+  if (!m_pluginsDirectory.empty()) {
+    WritePrivateProfileStringW(L"Editor", L"PluginsDirectory",
+                               m_pluginsDirectory.c_str(), path.c_str());
+  }
   if (!m_bashPath.empty()) {
     WritePrivateProfileStringW(L"Editor", L"BashPath", m_bashPath.c_str(),
                                path.c_str());
@@ -309,6 +339,7 @@ void SettingsManager::Save() {
                                m_findStartDir.c_str(), path.c_str());
   }
 
+  WritePrivateProfileStringW(L"Recent", NULL, NULL, path.c_str());
   for (size_t i = 0; i < m_recentFiles.size(); ++i) {
     std::wstring key = L"Recent" + std::to_wstring(i + 1);
     WritePrivateProfileStringW(L"Recent", key.c_str(), m_recentFiles[i].c_str(),

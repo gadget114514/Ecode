@@ -18,6 +18,7 @@
 #include <commctrl.h>
 #include <commdlg.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <shlwapi.h>
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -33,6 +34,8 @@
 #define IDC_PATH_LEFT    103
 #define IDC_PATH_RIGHT   104
 #define IDC_STATUS       105
+#define IDC_BROWSE_LEFT  106
+#define IDC_BROWSE_RIGHT 107
 #define ID_OPEN          2001
 #define ID_DELETE        2002
 #define ID_RENAME        2003
@@ -43,6 +46,7 @@
 #define ID_MOVE          2008
 #define ID_REFRESH       2009
 #define ID_PARENT        2010
+#define ID_OPEN_WITH     2011
 #define WM_SCAN_DONE     (WM_USER + 10)
 
 enum SortColumn { SORT_NAME, SORT_SIZE, SORT_TYPE, SORT_DATE };
@@ -63,6 +67,7 @@ struct Pane {
     std::wstring  currentPath;
     std::vector<FileEntry> entries;
     SortColumn    sortCol = SORT_NAME;
+    SortColumn    sortCol2 = SORT_DATE; // secondary sort key (previous column)
     bool          sortAsc = true;
     HANDLE        scanThread = nullptr;
     CRITICAL_SECTION cs;
@@ -81,6 +86,85 @@ static int         g_dragging = 0; // 0=not dragging, 1=dragging from left, 2=fr
 static int         g_dragItems = 0; // number of items being dragged
 static int         g_dividerPos = -1; // divider X position
 static bool        g_draggingDivider = false;
+static HICON       g_hAppIcon = nullptr;
+static WNDPROC     g_oldPathProc[2] = {nullptr, nullptr};
+
+static LRESULT CALLBACK PathBarSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    // Find pane index for this path bar
+    int paneIdx = -1;
+    for (int i = 0; i < 2; ++i) {
+        if (hwnd == g_panes[i].hwndPath) { paneIdx = i; break; }
+    }
+    if (paneIdx < 0) return DefWindowProcW(hwnd, msg, wp, lp);
+
+    if (msg == WM_CONTEXTMENU) {
+        HMENU hMenu = CreatePopupMenu();
+        AppendMenuW(hMenu, MF_STRING, 1, L"Open in Windows Explorer");
+        AppendMenuW(hMenu, MF_STRING, 2, L"Copy Path");
+        int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
+        if (x == -1 && y == -1) {
+            RECT rc; GetWindowRect(hwnd, &rc);
+            x = rc.left + 10; y = rc.top + 10;
+        }
+        int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, x, y, 0, g_hwnd, nullptr);
+        DestroyMenu(hMenu);
+        if (cmd == 1) {
+            ShellExecuteW(g_hwnd, L"open", g_panes[paneIdx].currentPath.c_str(), nullptr, nullptr, SW_SHOW);
+        } else if (cmd == 2) {
+            std::wstring path = g_panes[paneIdx].currentPath;
+            if (OpenClipboard(g_hwnd)) {
+                EmptyClipboard();
+                size_t bytes = (path.size() + 1) * sizeof(wchar_t);
+                HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes);
+                if (h) { memcpy(GlobalLock(h), path.c_str(), bytes); GlobalUnlock(h); }
+                SetClipboardData(CF_UNICODETEXT, h);
+                CloseClipboard();
+            }
+        }
+        return 0;
+    }
+    return CallWindowProcW(g_oldPathProc[paneIdx], hwnd, msg, wp, lp);
+}
+
+// ---------------------------------------------------------------------------
+// Config save/load (INI file alongside exe)
+// ---------------------------------------------------------------------------
+static std::wstring GetConfigPath() {
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    std::wstring p(path);
+    size_t pos = p.find_last_of(L"\\/");
+    if (pos != std::wstring::npos) p = p.substr(0, pos + 1);
+    return p + L"dired.ini";
+}
+
+static void LoadConfig() {
+    std::wstring path = GetConfigPath();
+    g_dividerPos = GetPrivateProfileIntW(L"Dired", L"DividerPos", -1, path.c_str());
+    int x = GetPrivateProfileIntW(L"Dired", L"WinX", CW_USEDEFAULT, path.c_str());
+    int y = GetPrivateProfileIntW(L"Dired", L"WinY", CW_USEDEFAULT, path.c_str());
+    int w = GetPrivateProfileIntW(L"Dired", L"WinW", 900, path.c_str());
+    int h = GetPrivateProfileIntW(L"Dired", L"WinH", 550, path.c_str());
+    if (x != CW_USEDEFAULT && y != CW_USEDEFAULT && g_hwnd) {
+        SetWindowPos(g_hwnd, nullptr, x, y, w, h, SWP_NOZORDER);
+    }
+}
+
+static void SaveConfig() {
+    std::wstring path = GetConfigPath();
+    wchar_t buf[32];
+    swprintf_s(buf, L"%d", g_dividerPos);
+    WritePrivateProfileStringW(L"Dired", L"DividerPos", buf, path.c_str());
+    if (g_hwnd) {
+        RECT rc; GetWindowRect(g_hwnd, &rc);
+        if (!IsZoomed(g_hwnd) && !IsIconic(g_hwnd)) {
+            swprintf_s(buf, L"%d", rc.left);  WritePrivateProfileStringW(L"Dired", L"WinX", buf, path.c_str());
+            swprintf_s(buf, L"%d", rc.top);   WritePrivateProfileStringW(L"Dired", L"WinY", buf, path.c_str());
+            swprintf_s(buf, L"%d", rc.right - rc.left);  WritePrivateProfileStringW(L"Dired", L"WinW", buf, path.c_str());
+            swprintf_s(buf, L"%d", rc.bottom - rc.top);  WritePrivateProfileStringW(L"Dired", L"WinH", buf, path.c_str());
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Utility
@@ -91,15 +175,20 @@ static Pane* GetPane(HWND hList) {
     return nullptr;
 }
 
-static int CompareEntries(const FileEntry &a, const FileEntry &b, SortColumn col, bool asc) {
-    if (a.IsDir() != b.IsDir()) return a.IsDir() ? -1 : 1;
-    int r = 0;
+static int CompareField(const FileEntry &a, const FileEntry &b, SortColumn col) {
     switch (col) {
-    case SORT_NAME: r = _wcsicmp(a.name.c_str(), b.name.c_str()); break;
-    case SORT_SIZE: r = (a.size > b.size) ? 1 : (a.size < b.size) ? -1 : 0; break;
-    case SORT_TYPE: r = _wcsicmp(a.ext.c_str(), b.ext.c_str()); break;
-    case SORT_DATE: r = CompareFileTime(&a.lastWrite, &b.lastWrite); break;
+    case SORT_NAME: return _wcsicmp(a.name.c_str(), b.name.c_str());
+    case SORT_SIZE: return (a.size > b.size) ? 1 : (a.size < b.size) ? -1 : 0;
+    case SORT_TYPE: return _wcsicmp(a.ext.c_str(), b.ext.c_str());
+    case SORT_DATE: return CompareFileTime(&a.lastWrite, &b.lastWrite);
     }
+    return 0;
+}
+
+static int CompareEntries(const FileEntry &a, const FileEntry &b, SortColumn col, bool asc, SortColumn col2) {
+    if (a.IsDir() != b.IsDir()) return a.IsDir() ? -1 : 1;
+    int r = CompareField(a, b, col);
+    if (r == 0) r = CompareField(a, b, col2);
     return asc ? r : -r;
 }
 
@@ -139,7 +228,7 @@ static DWORD WINAPI ScanThreadProc(LPVOID lp) {
 
     std::sort(pane->entries.begin(), pane->entries.end(),
         [pane](const FileEntry &a, const FileEntry &b) {
-            return CompareEntries(a, b, pane->sortCol, pane->sortAsc);
+            return CompareEntries(a, b, pane->sortCol, pane->sortAsc, pane->sortCol2);
         });
 
     PostMessage(g_hwnd, WM_SCAN_DONE, 0, (LPARAM)pane);
@@ -161,9 +250,21 @@ static void StartScan(Pane *pane) {
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
+static void NormalizePath(std::wstring &path) {
+    // Resolve ".." and normalize separators
+    wchar_t full[MAX_PATH];
+    if (GetFullPathNameW(path.c_str(), MAX_PATH, full, nullptr)) {
+        path = full;
+    }
+    // Ensure backslash after drive letter (e.g., C: -> C:\)
+    if (path.size() == 2 && path[1] == L':') path += L'\\';
+}
+
 static void NavigateTo(Pane *pane, const std::wstring &path) {
-    pane->currentPath = path;
-    SetWindowTextW(pane->hwndPath, path.c_str());
+    std::wstring normalized = path;
+    NormalizePath(normalized);
+    pane->currentPath = normalized;
+    SetWindowTextW(pane->hwndPath, normalized.c_str());
     StartScan(pane);
 }
 
@@ -194,15 +295,19 @@ static void OpenItem(Pane *pane) {
 static void ShowContextMenu(HWND hwnd, Pane *pane, int x, int y) {
     HMENU hMenu = CreatePopupMenu();
     AppendMenuW(hMenu, MF_STRING, ID_OPEN,       L"Open\tEnter");
+    AppendMenuW(hMenu, MF_STRING, ID_PARENT,     L"Go to Parent\tBackspace");
+    AppendMenuW(hMenu, MF_STRING, ID_REFRESH,    L"Refresh\tF5");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, ID_COPY,       L"Copy to Other Pane\tF5");
-    AppendMenuW(hMenu, MF_STRING, ID_MOVE,       L"Move to Other Pane\tF6");
+    AppendMenuW(hMenu, MF_STRING, ID_COPY,       L"Copy to Other Pane\tCtrl+C");
+    AppendMenuW(hMenu, MF_STRING, ID_MOVE,       L"Move to Other Pane\tCtrl+M");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, ID_MKDIR,      L"New Folder...\tF7");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, ID_DELETE,     L"Delete\tDel");
     AppendMenuW(hMenu, MF_STRING, ID_RENAME,     L"Rename\tF2");
     AppendMenuW(hMenu, MF_STRING, ID_COPY_PATH,  L"Copy Path");
+    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(hMenu, MF_STRING, ID_OPEN_WITH,  L"Open with...");
     AppendMenuW(hMenu, MF_STRING, ID_PROPERTIES, L"Properties\tAlt+Enter");
 
     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
@@ -216,6 +321,12 @@ static void ShowContextMenu(HWND hwnd, Pane *pane, int x, int y) {
     switch (cmd) {
     case ID_OPEN:
         OpenItem(pane);
+        break;
+    case ID_PARENT:
+        GoToParent(pane);
+        break;
+    case ID_REFRESH:
+        StartScan(pane);
         break;
     case ID_COPY:
     case ID_MOVE: {
@@ -271,6 +382,15 @@ static void ShowContextMenu(HWND hwnd, Pane *pane, int x, int y) {
         sh.fFlags = FOF_ALLOWUNDO | FOF_RENAMEONCOLLISION;
         SHFileOperationW(&sh);
         StartScan(pane);
+        break;
+    }
+    case ID_OPEN_WITH: {
+        std::wstring full = pane->currentPath + L"\\" + pane->entries[sel].name;
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        sei.lpVerb = L"openas";
+        sei.lpFile = full.c_str();
+        sei.nShow = SW_SHOW;
+        ShellExecuteExW(&sei);
         break;
     }
     case ID_COPY_PATH: {
@@ -346,9 +466,21 @@ static void OnGetDispInfo(NMLVDISPINFOW *di, Pane *pane) {
     FileEntry &e = pane->entries[idx];
     if (di->item.mask & LVIF_TEXT) {
         switch (di->item.iSubItem) {
-        case 0:
-            wcsncpy_s(di->item.pszText, di->item.cchTextMax, e.name.c_str(), _TRUNCATE);
+        case 0: {
+            // Show real parent path for ".." entry
+            if (e.name == L"..") {
+                std::wstring parent = pane->currentPath;
+                size_t pos = parent.find_last_of(L"\\/");
+                if (pos != std::wstring::npos) {
+                    parent = parent.substr(0, pos);
+                    if (parent.size() == 2 && parent[1] == L':') parent += L'\\';
+                }
+                wcsncpy_s(di->item.pszText, di->item.cchTextMax, parent.c_str(), _TRUNCATE);
+            } else {
+                wcsncpy_s(di->item.pszText, di->item.cchTextMax, e.name.c_str(), _TRUNCATE);
+            }
             break;
+        }
         case 1:
             if (e.IsDir()) di->item.pszText[0] = L'\0';
             else { wchar_t b[64]; swprintf_s(b, L"%lld", e.size); wcsncpy_s(di->item.pszText, di->item.cchTextMax, b, _TRUNCATE); }
@@ -409,6 +541,22 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE: {
         g_hwnd = hwnd;
+
+        // Load app icon
+        wchar_t modulePath[MAX_PATH];
+        GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+        std::wstring iconDir = modulePath;
+        size_t pos = iconDir.find_last_of(L"\\/");
+        if (pos != std::wstring::npos) iconDir = iconDir.substr(0, pos + 1);
+        g_hAppIcon = (HICON)LoadImageW(nullptr, (iconDir + L"\\..\\..\\..\\images\\appicon.ico").c_str(),
+                                        IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
+        if (!g_hAppIcon)
+            g_hAppIcon = LoadIconW(g_hInst, MAKEINTRESOURCE(101));
+        if (g_hAppIcon) {
+            SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_hAppIcon);
+            SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_hAppIcon);
+        }
+
         SHFILEINFOW sfi = {0};
         SHGetFileInfoW(L"", 0, &sfi, sizeof(sfi), SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
         g_himlSmall = (HIMAGELIST)sfi.hIcon;
@@ -417,12 +565,23 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g_panes[i].InitCS();
             g_panes[i].hwndPath = CreatePathBar(hwnd, (i == 0) ? IDC_PATH_LEFT : IDC_PATH_RIGHT);
             g_panes[i].hwndList = CreatePaneList(hwnd, (i == 0) ? IDC_LIST_LEFT : IDC_LIST_RIGHT);
+            // Subclass path bar for custom right-click context menu
+            g_oldPathProc[i] = (WNDPROC)SetWindowLongPtrW(g_panes[i].hwndPath, GWLP_WNDPROC, (LONG_PTR)PathBarSubclass);
         }
+
+        // Create browse buttons for folder selection
+        CreateWindowW(L"BUTTON", L"...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                      0, 0, 22, 22, hwnd, (HMENU)(LONG_PTR)IDC_BROWSE_LEFT, g_hInst, nullptr);
+        CreateWindowW(L"BUTTON", L"...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                      0, 0, 22, 22, hwnd, (HMENU)(LONG_PTR)IDC_BROWSE_RIGHT, g_hInst, nullptr);
 
         g_hStatus = CreateWindowW(STATUSCLASSNAME, L"",
             WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 0, 0, hwnd, (HMENU)IDC_STATUS, g_hInst, nullptr);
 
-        // Init paths from command line args
+        // Load config (restores window position, divider, etc.)
+        LoadConfig();
+
+        // Init paths from command line args (override config paths if provided)
         wchar_t curDir[MAX_PATH];
         GetCurrentDirectoryW(MAX_PATH, curDir);
         int argc = 0;
@@ -445,24 +604,51 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
 
-        g_dividerPos = -1;
+        // Enable drag-and-drop on main window
+        DragAcceptFiles(hwnd, TRUE);
+
         SetFocus(g_panes[0].hwndList);
+        return 0;
+    }
+
+    case WM_DROPFILES: {
+        HDROP hDrop = (HDROP)wp;
+        POINT pt;
+        DragQueryPoint(hDrop, &pt);
+        ClientToScreen(hwnd, &pt);
+        // Check which pane's path bar the drop is over
+        for (int i = 0; i < 2; ++i) {
+            RECT rc;
+            GetWindowRect(g_panes[i].hwndPath, &rc);
+            if (pt.x >= rc.left && pt.x <= rc.right && pt.y >= rc.top && pt.y <= rc.bottom) {
+                wchar_t path[MAX_PATH];
+                DragQueryFileW(hDrop, 0, path, MAX_PATH);
+                DWORD attr = GetFileAttributesW(path);
+                if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                    NavigateTo(&g_panes[i], path);
+                }
+                break;
+            }
+        }
+        DragFinish(hDrop);
         return 0;
     }
 
     case WM_SIZE: {
         int w = LOWORD(lp), h = HIWORD(lp);
-        int pathH = 24, statusH = 22, divW = 4;
+        int pathH = 24, statusH = 22, divW = 4, btnW = 22;
         int halfW = (w - divW) / 2;
         if (g_dividerPos < 0) g_dividerPos = halfW;
-        int lw = g_dividerPos;
-        int rw = w - g_dividerPos - divW;
+        int lw = g_dividerPos - btnW;
+        int rw = w - g_dividerPos - divW - btnW;
         int listH = h - pathH - statusH;
 
         MoveWindow(g_panes[0].hwndPath, 0, 0, lw, pathH, TRUE);
+        MoveWindow(GetDlgItem(hwnd, IDC_BROWSE_LEFT), lw, 1, btnW, pathH - 2, TRUE);
         MoveWindow(g_panes[1].hwndPath, g_dividerPos + divW, 0, rw, pathH, TRUE);
-        MoveWindow(g_panes[0].hwndList, 0, pathH, lw, listH, TRUE);
-        MoveWindow(g_panes[1].hwndList, g_dividerPos + divW, pathH, rw, listH, TRUE);
+        MoveWindow(GetDlgItem(hwnd, IDC_BROWSE_RIGHT), g_dividerPos + divW + rw, 1, btnW, pathH - 2, TRUE);
+        MoveWindow(g_panes[0].hwndList, 0, pathH, lw + btnW, listH, TRUE);
+        MoveWindow(g_panes[1].hwndList, g_dividerPos + divW, pathH, rw + btnW, listH, TRUE);
         SendMessage(g_hStatus, WM_SIZE, 0, 0);
         return 0;
     }
@@ -516,12 +702,33 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case LVN_COLUMNCLICK: {
             int col = ((NMLISTVIEW*)lp)->iSubItem;
-            if (col == (int)pane->sortCol) pane->sortAsc = !pane->sortAsc;
-            else { pane->sortCol = (SortColumn)col; pane->sortAsc = true; }
+            if (col == (int)pane->sortCol) {
+                pane->sortAsc = !pane->sortAsc;
+            } else {
+                pane->sortCol2 = pane->sortCol;
+                pane->sortCol = (SortColumn)col;
+                pane->sortAsc = true;
+            }
             std::sort(pane->entries.begin(), pane->entries.end(),
-                [pane](const FileEntry &a, const FileEntry &b) { return CompareEntries(a, b, pane->sortCol, pane->sortAsc); });
+                [pane](const FileEntry &a, const FileEntry &b) { return CompareEntries(a, b, pane->sortCol, pane->sortAsc, pane->sortCol2); });
             ListView_SetItemCount(pane->hwndList, (int)pane->entries.size());
             ListView_RedrawItems(pane->hwndList, 0, (int)pane->entries.size());
+            // Update sort indicators on header using ASCII arrows
+            const wchar_t *hdrBase[] = { L"Name", L"Size", L"Type", L"Date" };
+            HWND hHeader = ListView_GetHeader(pane->hwndList);
+            if (hHeader) {
+                for (int i = 0; i < 4; ++i) {
+                    std::wstring text = hdrBase[i];
+                    if (i == (int)pane->sortCol) {
+                        text = pane->sortAsc ? (L"▲ " + text) : (L"▼ " + text);
+                    }
+                    HDITEMW hdi = {0};
+                    hdi.mask = HDI_TEXT;
+                    hdi.pszText = (LPWSTR)text.c_str();
+                    hdi.cchTextMax = (int)text.size() + 1;
+                    Header_SetItem(hHeader, i, &hdi);
+                }
+            }
             return 0;
         }
         case NM_DBLCLK:
@@ -535,7 +742,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case LVN_KEYDOWN: {
             int vk = ((NMLVKEYDOWN*)lp)->wVKey;
             if (vk == VK_RETURN) OpenItem(pane);
-            else if (vk == VK_BACK) GoToParent(pane);
+            else if (vk == VK_LEFT && pane == &g_panes[1]) {
+                SetFocus(g_panes[0].hwndList);
+                return 0;
+            } else if (vk == VK_RIGHT && pane == &g_panes[0]) {
+                SetFocus(g_panes[1].hwndList);
+                return 0;
+            } else if (vk == VK_BACK) GoToParent(pane);
             else if (vk == VK_F5) StartScan(pane);
             else if (vk == VK_F7) {
                 std::wstring nd = pane->currentPath + L"\\New Folder";
@@ -588,6 +801,21 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
 
     case WM_COMMAND:
+        if (HIWORD(wp) == BN_CLICKED) {
+            if (LOWORD(wp) == IDC_BROWSE_LEFT || LOWORD(wp) == IDC_BROWSE_RIGHT) {
+                int idx = (LOWORD(wp) == IDC_BROWSE_LEFT) ? 0 : 1;
+                wchar_t path[MAX_PATH];
+                BROWSEINFOW bi = { hwnd, nullptr, path, L"Select a folder", BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE, nullptr, 0, 0 };
+                PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
+                if (pidl) {
+                    wchar_t folder[MAX_PATH];
+                    SHGetPathFromIDListW(pidl, folder);
+                    CoTaskMemFree(pidl);
+                    NavigateTo(&g_panes[idx], folder);
+                }
+                return 0;
+            }
+        }
         if (HIWORD(wp) == EN_SETFOCUS) {
             HWND hEdit = (HWND)lp;
             if (hEdit == g_panes[0].hwndPath) SetFocus(g_panes[0].hwndList);
@@ -596,6 +824,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         break;
 
     case WM_DESTROY:
+        SaveConfig();
         for (int i = 0; i < 2; ++i) {
             if (g_panes[i].scanThread) {
                 WaitForSingleObject(g_panes[i].scanThread, 2000);
@@ -603,6 +832,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             g_panes[i].DoneCS();
         }
+        if (g_hAppIcon) DestroyIcon(g_hAppIcon);
         PostQuitMessage(0);
         return 0;
     }

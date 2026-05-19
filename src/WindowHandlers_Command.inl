@@ -71,6 +71,7 @@ void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring 
 
   // Start ConPTY session (lazy, no background thread needed)
   view->StartSession(shell);
+  g_terminalTabs[termIdx].hProcess = view->GetProcessHandle();
 }
 
 
@@ -91,6 +92,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
 struct SearchThreadParams {
   HWND hwnd;
   int appIdx;
+  HANDLE hProcess;
 };
 
 static DWORD WINAPI FastFileSearchThread(LPVOID lpParam) {
@@ -123,8 +125,10 @@ static DWORD WINAPI FastFileSearchThread(LPVOID lpParam) {
     }
     if (foundHwnd) {
       PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+      PostMessageW(hwnd, WM_SET_PROCESS_HANDLE, (WPARAM)appIdx, (LPARAM)pi.hProcess);
+    } else {
+      CloseHandle(pi.hProcess);
     }
-    CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
   }
   return 0;
@@ -182,6 +186,7 @@ void OpenFastFileSearch(HWND hwnd) {
 struct CSVThreadParams {
   HWND hwnd;
   int appIdx;
+  HANDLE hProcess;
 };
 
 static DWORD WINAPI CSVEditorThread(LPVOID lpParam) {
@@ -214,8 +219,10 @@ static DWORD WINAPI CSVEditorThread(LPVOID lpParam) {
     }
     if (foundHwnd) {
       PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+      PostMessageW(hwnd, WM_SET_PROCESS_HANDLE, (WPARAM)appIdx, (LPARAM)pi.hProcess);
+    } else {
+      CloseHandle(pi.hProcess);
     }
-    CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
   }
   return 0;
@@ -264,6 +271,7 @@ void OpenCSVEditor(HWND hwnd) {
 struct JYThreadParams {
   HWND hwnd;
   int appIdx;
+  HANDLE hProcess;
 };
 
 static DWORD WINAPI JYEditorThread(LPVOID lpParam) {
@@ -296,8 +304,10 @@ static DWORD WINAPI JYEditorThread(LPVOID lpParam) {
     }
     if (foundHwnd) {
       PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+      PostMessageW(hwnd, WM_SET_PROCESS_HANDLE, (WPARAM)appIdx, (LPARAM)pi.hProcess);
+    } else {
+      CloseHandle(pi.hProcess);
     }
-    CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
   }
   return 0;
@@ -346,6 +356,7 @@ void OpenJYEditor(HWND hwnd) {
 struct DiredThreadParams {
   HWND hwnd;
   int appIdx;
+  HANDLE hProcess;
 };
 
 static DWORD WINAPI DiredThread(LPVOID lpParam) {
@@ -385,8 +396,10 @@ static DWORD WINAPI DiredThread(LPVOID lpParam) {
     }
     if (foundHwnd) {
       PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+      PostMessageW(hwnd, WM_SET_PROCESS_HANDLE, (WPARAM)appIdx, (LPARAM)pi.hProcess);
+    } else {
+      CloseHandle(pi.hProcess);
     }
-    CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
   }
   return 0;
@@ -430,6 +443,186 @@ void OpenDired(HWND hwnd) {
   params->hwnd = hwnd;
   params->appIdx = appIdx;
   CreateThread(nullptr, 0, DiredThread, params, 0, nullptr);
+}
+
+void KillAppProcessByIndex(HWND hwnd, size_t idx) {
+  if (idx >= g_appTabs.size()) return;
+  if (g_appTabs[idx].hProcess) {
+    TerminateProcess(g_appTabs[idx].hProcess, 0);
+    CloseHandle(g_appTabs[idx].hProcess);
+    g_appTabs[idx].hProcess = nullptr;
+  }
+  if (g_appTabs[idx].hwnd) DestroyWindow(g_appTabs[idx].hwnd);
+  g_appTabs.erase(g_appTabs.begin() + idx);
+  if (g_activeAppTab == static_cast<int>(idx)) g_activeAppTab = -1;
+  else if (g_activeAppTab > static_cast<int>(idx)) g_activeAppTab--;
+  UpdateMenu(hwnd);
+  InvalidateRect(hwnd, NULL, FALSE);
+}
+
+void KillTerminalProcessByIndex(HWND hwnd, size_t idx) {
+  if (idx >= g_terminalTabs.size()) return;
+  if (g_terminalTabs[idx].hProcess) {
+    TerminateProcess(g_terminalTabs[idx].hProcess, 0);
+    CloseHandle(g_terminalTabs[idx].hProcess);
+    g_terminalTabs[idx].hProcess = nullptr;
+  }
+  if (g_terminalTabs[idx].hwnd) DestroyWindow(g_terminalTabs[idx].hwnd);
+  delete g_terminalTabs[idx].view;
+  g_terminalTabs.erase(g_terminalTabs.begin() + idx);
+  if (g_activeTerminalTab == static_cast<int>(idx)) g_activeTerminalTab = -1;
+  else if (g_activeTerminalTab > static_cast<int>(idx)) g_activeTerminalTab--;
+  UpdateMenu(hwnd);
+  InvalidateRect(hwnd, NULL, FALSE);
+}
+
+void KillActiveAppProcess(HWND hwnd) {
+  if (g_activeAppTab >= 0 && static_cast<size_t>(g_activeAppTab) < g_appTabs.size()) {
+    KillAppProcessByIndex(hwnd, static_cast<size_t>(g_activeAppTab));
+  } else if (g_activeTerminalTab >= 0 && static_cast<size_t>(g_activeTerminalTab) < g_terminalTabs.size()) {
+    KillTerminalProcessByIndex(hwnd, static_cast<size_t>(g_activeTerminalTab));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Plugin system
+// ---------------------------------------------------------------------------
+void ScanPlugins() {
+  g_plugins.clear();
+
+  wchar_t modulePath[MAX_PATH];
+  GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+  std::wstring exeDir = modulePath;
+  size_t pos = exeDir.find_last_of(L"\\/");
+  if (pos != std::wstring::npos) exeDir = exeDir.substr(0, pos + 1);
+
+  // 1. Scan default plugins dir alongside exe
+  std::wstring pluginDir = exeDir + L"plugins\\";
+  if (GetFileAttributesW(pluginDir.c_str()) != INVALID_FILE_ATTRIBUTES) {
+    std::wstring search = pluginDir + L"*.exe";
+    WIN32_FIND_DATAW ffd;
+    HANDLE hFind = FindFirstFileW(search.c_str(), &ffd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+      do {
+        std::wstring name = ffd.cFileName;
+        size_t dot = name.rfind(L'.');
+        if (dot != std::wstring::npos) name = name.substr(0, dot);
+        PluginEntry e;
+        e.name = name;
+        e.path = pluginDir + ffd.cFileName;
+        e.isBuiltIn = false;
+        g_plugins.push_back(std::move(e));
+      } while (FindNextFileW(hFind, &ffd));
+      FindClose(hFind);
+    }
+  }
+
+  // 2. Scan user-configured plugins directory (if set)
+  std::wstring userDir = SettingsManager::Instance().GetPluginsDirectory();
+  if (!userDir.empty() && GetFileAttributesW(userDir.c_str()) != INVALID_FILE_ATTRIBUTES) {
+    std::wstring search = userDir + L"\\*.exe";
+    WIN32_FIND_DATAW ffd;
+    HANDLE hFind = FindFirstFileW(search.c_str(), &ffd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+      do {
+        std::wstring name = ffd.cFileName;
+        size_t dot = name.rfind(L'.');
+        if (dot != std::wstring::npos) name = name.substr(0, dot);
+        // Deduplicate: user dir trumps default dir
+        bool dup = false;
+        for (auto &p : g_plugins) {
+          if (p.name == name) { p.path = userDir + L"\\" + ffd.cFileName; dup = true; break; }
+        }
+        if (!dup) {
+          PluginEntry e;
+          e.name = name;
+          e.path = userDir + L"\\" + ffd.cFileName;
+          e.isBuiltIn = false;
+          g_plugins.push_back(std::move(e));
+        }
+      } while (FindNextFileW(hFind, &ffd));
+      FindClose(hFind);
+    }
+  }
+
+  // 3. Named fallback: scan for known built-in names alongside exe
+  const wchar_t *builtIns[] = { L"Dired.exe", L"CSVEditor.exe", L"FastFileSearch.exe", L"JYEditor.exe" };
+  for (auto *b : builtIns) {
+    std::wstring full = exeDir + b;
+    if (GetFileAttributesW(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
+      std::wstring name = b;
+      size_t dot = name.rfind(L'.');
+      if (dot != std::wstring::npos) name = name.substr(0, dot);
+      bool already = false;
+      for (auto &p : g_plugins) {
+        if (p.name == name) { already = true; break; }
+      }
+      if (!already) {
+        PluginEntry e;
+        e.name = name;
+        e.path = full;
+        e.isBuiltIn = true;
+        g_plugins.push_back(std::move(e));
+      }
+    }
+  }
+}
+
+void LaunchPlugin(HWND hwnd, size_t index) {
+  if (index >= g_plugins.size()) return;
+  PluginEntry &plugin = g_plugins[index];
+
+  AppTabInfo tab;
+  tab.label = plugin.name;
+  tab.type = 10; // generic plugin type
+  tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting...",
+                             WS_CHILD | WS_VISIBLE | SS_CENTER,
+                             0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+  tab.data = nullptr;
+  g_appTabs.push_back(std::move(tab));
+  int appIdx = static_cast<int>(g_appTabs.size()) - 1;
+  g_activeAppTab = appIdx;
+  g_activeTerminalTab = -1;
+
+  RECT rc;
+  GetClientRect(hwnd, &rc);
+  SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
+
+  g_suppressTabChange = true;
+  size_t bufCount = g_editor->GetBuffers().size();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  g_suppressTabChange = false;
+
+  for (auto &t : g_appTabs) {
+    if (t.hwnd) ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
+  }
+  for (auto &t : g_terminalTabs) {
+    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+  }
+
+  UpdateMenu(hwnd);
+  InvalidateRect(hwnd, NULL, FALSE);
+
+  // Launch the plugin process
+  STARTUPINFOW si = { sizeof(si) };
+  PROCESS_INFORMATION pi = { 0 };
+  std::wstring cmd = L"\"" + plugin.path + L"\"";
+  if (CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+    HWND foundHwnd = nullptr;
+    for (int i = 0; i < 50; ++i) {
+      Sleep(100);
+      EnumData data = { pi.dwProcessId, nullptr };
+      EnumWindows(EnumWindowsProc, (LPARAM)&data);
+      if (data.hwnd != nullptr) { foundHwnd = data.hwnd; break; }
+    }
+    if (foundHwnd) {
+      PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+      PostMessageW(hwnd, WM_SET_PROCESS_HANDLE, (WPARAM)appIdx, (LPARAM)pi.hProcess);
+    } else {
+      CloseHandle(pi.hProcess);
+    }
+    CloseHandle(pi.hThread);
+  }
 }
 
 static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
@@ -485,12 +678,17 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     if (buf) {
       if (buf->GetPath().empty()) {
         std::wstring path = Dialogs::SaveFileDialog(hwnd);
-        if (!path.empty())
-          buf->SaveFile(path);
+        if (!path.empty()) {
+          if (buf->SaveFile(path)) {
+            buf->SetPath(path);
+            SettingsManager::Instance().AddRecentFile(path);
+          }
+        }
       } else {
         buf->SaveFile(buf->GetPath());
       }
     }
+    UpdateMenu(hwnd);
     break;
   }
   case IDM_FILE_SAVE_AS: {
@@ -498,8 +696,10 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     if (buf) {
       std::wstring path = Dialogs::SaveFileDialog(hwnd);
       if (!path.empty()) {
-        buf->SaveFile(path);
-        SettingsManager::Instance().AddRecentFile(path);
+        if (buf->SaveFile(path)) {
+          buf->SetPath(path);
+          SettingsManager::Instance().AddRecentFile(path);
+        }
         UpdateMenu(hwnd);
       }
     }
@@ -642,6 +842,7 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     break;
   }
   case IDM_EDIT_FIND_IN_FILES:
+  case IDM_EDIT_GREP:
     Dialogs::ShowFindInFilesDialog(hwnd);
     break;
   case IDM_EDIT_FIND_FILE:
@@ -716,7 +917,10 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     break;
   }
   case IDM_TOOLS_DIRED: {
-    OpenDired(hwnd);
+    // Launch Dired via plugin system
+    for (size_t i = 0; i < g_plugins.size(); ++i) {
+      if (g_plugins[i].name == L"Dired") { LaunchPlugin(hwnd, i); break; }
+    }
     break;
   }
   case IDM_TOOLS_TERMINAL: {
@@ -766,16 +970,16 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     }
     break;
   }
-  case IDM_TOOLS_FILE_SEARCH: {
-    OpenFastFileSearch(hwnd);
-    break;
-  }
-  case IDM_TOOLS_CSV_EDITOR: {
-    OpenCSVEditor(hwnd);
-    break;
-  }
+  case IDM_TOOLS_FILE_SEARCH:
+  case IDM_TOOLS_CSV_EDITOR:
   case IDM_TOOLS_JY_EDITOR: {
-    OpenJYEditor(hwnd);
+    // Route through plugin system
+    const wchar_t *names[] = { L"FastFileSearch", L"CSVEditor", L"JYEditor" };
+    int idx = (LOWORD(wParam) == IDM_TOOLS_FILE_SEARCH) ? 0 :
+              (LOWORD(wParam) == IDM_TOOLS_CSV_EDITOR) ? 1 : 2;
+    for (size_t i = 0; i < g_plugins.size(); ++i) {
+      if (g_plugins[i].name == names[idx]) { LaunchPlugin(hwnd, i); break; }
+    }
     break;
   }
 
@@ -786,6 +990,20 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   }
   case IDM_DIRED_CONFIGURE: {
     Dialogs::ShowDiredPairsDialog(hwnd);
+    UpdateMenu(hwnd);
+    break;
+  }
+  case IDM_PROCESS_KILL: {
+    KillActiveAppProcess(hwnd);
+    break;
+  }
+  case IDM_PLUGINS_RESCAN: {
+    ScanPlugins();
+    UpdateMenu(hwnd);
+    break;
+  }
+  case IDM_PLUGINS_CONFIGURE: {
+    Dialogs::ShowSettingsDialog(hwnd);
     UpdateMenu(hwnd);
     break;
   }
@@ -810,26 +1028,6 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
-      }
-    } else
-    if (LOWORD(wParam) >= IDM_TERMINALS_START && LOWORD(wParam) < IDM_TERMINALS_START + 100) {
-      int termIdx = LOWORD(wParam) - IDM_TERMINALS_START;
-      if (termIdx >= 0 && termIdx < static_cast<int>(g_terminalTabs.size())) {
-        size_t bufCount = g_editor->GetBuffers().size();
-        int tabIndex = static_cast<int>(bufCount) + termIdx;
-        g_suppressTabChange = true;
-        TabCtrl_SetCurSel(g_tabHwnd, tabIndex);
-        g_suppressTabChange = false;
-        for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-          if (g_terminalTabs[i].hwnd)
-            ShowWindow(g_terminalTabs[i].hwnd, static_cast<int>(i) == termIdx ? SW_SHOW : SW_HIDE);
-        }
-        ShowScrollBar(hwnd, SB_BOTH, FALSE);
-        g_activeAppTab = -1;
-        g_activeTerminalTab = termIdx;
-        if (g_terminalTabs[termIdx].hwnd) {
-          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_terminalTabs[termIdx].hwnd, 0);
-        }
       }
     } else if (LOWORD(wParam) >= IDM_THEME_START && LOWORD(wParam) < IDM_THEME_START + 100) {
       size_t idx = LOWORD(wParam) - IDM_THEME_START;
@@ -887,6 +1085,51 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       g_editor->SwitchToBuffer(LOWORD(wParam) - IDM_BUFFERS_START);
       SetFocus(hwnd);
       UpdateMenu(hwnd);
+    } else if (LOWORD(wParam) >= IDM_BUFFERS_START + 200 &&
+               LOWORD(wParam) < IDM_BUFFERS_START + 300) {
+      // App tab selected from Buffers menu
+      int appIdx = (LOWORD(wParam) - IDM_BUFFERS_START - 200);
+      if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
+        for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+        for (auto &t : g_terminalTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+        g_activeAppTab = appIdx;
+        g_activeTerminalTab = -1;
+        ShowScrollBar(hwnd, SB_BOTH, FALSE);
+        if (g_appTabs[appIdx].hwnd) {
+          ShowWindow(g_appTabs[appIdx].hwnd, SW_SHOW);
+          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_appTabs[appIdx].hwnd, 0);
+        }
+        UpdateMenu(hwnd);
+      }
+    } else if (LOWORD(wParam) >= IDM_TERMINALS_START &&
+               LOWORD(wParam) < IDM_TERMINALS_START + 100) {
+      // Terminal tab selected from Buffers menu
+      int termIdx = LOWORD(wParam) - IDM_TERMINALS_START;
+      if (termIdx >= 0 && termIdx < static_cast<int>(g_terminalTabs.size())) {
+        for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+        for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
+          if (g_terminalTabs[i].hwnd)
+            ShowWindow(g_terminalTabs[i].hwnd, static_cast<int>(i) == termIdx ? SW_SHOW : SW_HIDE);
+        }
+        g_activeAppTab = -1;
+        g_activeTerminalTab = termIdx;
+        ShowScrollBar(hwnd, SB_BOTH, FALSE);
+        if (g_terminalTabs[termIdx].hwnd)
+          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_terminalTabs[termIdx].hwnd, 0);
+        UpdateMenu(hwnd);
+      }
+    } else if (LOWORD(wParam) >= IDM_PROCESS_KILL_START &&
+               LOWORD(wParam) < IDM_PROCESS_KILL_START + 100) {
+      size_t idx = LOWORD(wParam) - IDM_PROCESS_KILL_START;
+      KillAppProcessByIndex(hwnd, idx);
+    } else if (LOWORD(wParam) >= IDM_PROCESS_KILL_START + 200 &&
+               LOWORD(wParam) < IDM_PROCESS_KILL_START + 300) {
+      size_t idx = LOWORD(wParam) - IDM_PROCESS_KILL_START - 200;
+      KillTerminalProcessByIndex(hwnd, idx);
+    } else if (LOWORD(wParam) >= IDM_PLUGINS_START &&
+               LOWORD(wParam) < IDM_PLUGINS_START + 200) {
+      size_t idx = LOWORD(wParam) - IDM_PLUGINS_START;
+      LaunchPlugin(hwnd, idx);
     } else if (LOWORD(wParam) >= IDM_RECENT_START &&
                LOWORD(wParam) < IDM_RECENT_START + 10) {
       size_t index = LOWORD(wParam) - IDM_RECENT_START;

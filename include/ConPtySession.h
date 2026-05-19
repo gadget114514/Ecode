@@ -59,6 +59,7 @@ public:
 
     bool  IsRunning()  const { return running_; }
     DWORD ProcessId()  const { return processId_; }
+    HANDLE GetProcessHandle() const { return hProcess_; }
 
     // Filled on Start() failure.
     std::wstring LastError() const { return lastError_; }

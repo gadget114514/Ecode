@@ -80,6 +80,7 @@ static LRESULT HandleCreate(HWND hwnd) {
   if (g_compileAllScripts)
     g_scriptEngine->CompileAllScripts();
   g_editor->NewFile();
+  ScanPlugins();
   UpdateMenu(hwnd);
   SetTimer(hwnd, 1, 500, NULL);
   g_renderer->SetCaretBlinking(SettingsManager::Instance().IsCaretBlinking());
