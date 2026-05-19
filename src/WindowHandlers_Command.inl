@@ -546,7 +546,7 @@ void ScanPlugins() {
   }
 
   // 3. Named fallback: scan for known built-in names alongside exe
-  const wchar_t *builtIns[] = { L"Dired.exe", L"CSVEditor.exe", L"FastFileSearch.exe", L"JYEditor.exe" };
+  const wchar_t *builtIns[] = { L"Dired.exe", L"CSVEditor.exe", L"FastFileSearch.exe", L"JYEditor.exe", L"FastDired.exe" };
   for (auto *b : builtIns) {
     std::wstring full = exeDir + b;
     if (GetFileAttributesW(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
