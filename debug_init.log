@@ -2087,3 +2087,97 @@ WM_SHOWWINDOW Received, wParam=1
 [INFO] HandleSize: width=1092 height=946 g_minibufferVisible=0
 [INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
 >>>>>>> feature/terminalchar
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=946 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=946 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1092 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] ScriptEngine::HandleBinding: Shift+F
+[INFO]   No binding found for: Shift+F
+[INFO] ScriptEngine::HandleBinding: Shift+B
+[INFO]   No binding found for: Shift+B
+[INFO] ScriptEngine::HandleBinding: Shift+F
+[INFO]   No binding found for: Shift+F

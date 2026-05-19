@@ -9,6 +9,11 @@
     <CustomBuild Include="D:\ws\Ecode\Application\Dired\CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="D:\ws\Ecode\Application\Dired\src\manifest.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
     <Filter Include="Source Files">
       <UniqueIdentifier>{105C446A-89E1-35B5-BCCA-924807C6C50B}</UniqueIdentifier>
     </Filter>

@@ -50,6 +50,7 @@ public:
 
     bool IsStarted() const { return session_.IsRunning(); }
     HWND Hwnd()      const { return hwnd_; }
+    HANDLE GetProcessHandle() const { return session_.GetProcessHandle(); }
 
     // Called from parent's WM_SIZE handler.
     void MoveAndResize(int x, int y, int w, int h);

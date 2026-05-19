@@ -19,6 +19,7 @@ bool PromptSaveBuffer(HWND hwnd, Buffer *buf) {
     if (path.empty())
       return false;
     if (buf->SaveFile(path)) {
+      buf->SetPath(path);
       SettingsManager::Instance().AddRecentFile(path);
       return true;
     }
@@ -117,6 +118,8 @@ void EnsureCaretVisible(HWND hwnd) {
 void UpdateTabs(HWND hwnd) {
   if (!g_tabHwnd)
     return;
+  // Suppress redraw to avoid flicker during tab rebuild
+  SendMessage(g_tabHwnd, WM_SETREDRAW, FALSE, 0);
   TabCtrl_DeleteAllItems(g_tabHwnd);
 
   const auto &buffers = g_editor->GetBuffers();
@@ -163,6 +166,9 @@ void UpdateTabs(HWND hwnd) {
     curSel = static_cast<int>(g_editor->GetActiveBufferIndex());
   }
   TabCtrl_SetCurSel(g_tabHwnd, curSel);
+  // Re-enable redraw
+  SendMessage(g_tabHwnd, WM_SETREDRAW, TRUE, 0);
+  InvalidateRect(g_tabHwnd, NULL, TRUE);
 }
 
 void UpdateMenu(HWND hwnd) {
@@ -170,7 +176,13 @@ void UpdateMenu(HWND hwnd) {
 
   // File Menu
   HMENU hFile = CreatePopupMenu();
-  AppendMenu(hFile, MF_STRING, IDM_FILE_NEW, L"New\tCtrl+N");
+  {
+    HMENU hNew = CreatePopupMenu();
+    AppendMenu(hNew, MF_STRING, IDM_FILE_NEW, L"New File\tCtrl+N");
+    AppendMenu(hNew, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hNew, MF_STRING, IDM_FILE_SCRATCH, L10N("menu_file_scratch"));
+    AppendMenu(hFile, MF_POPUP, (UINT_PTR)hNew, L10N("menu_file_new"));
+  }
   AppendMenu(hFile, MF_STRING, IDM_FILE_OPEN, L"Open\tC-x C-f");
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE, L"Save\tC-x C-s");
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE_AS, L"Save As\tC-x C-w");
@@ -186,8 +198,6 @@ void UpdateMenu(HWND hwnd) {
     }
   }
   AppendMenu(hFile, MF_POPUP, (UINT_PTR)hRecent, L10N("menu_file_recent"));
-  AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hFile, MF_STRING, IDM_FILE_SCRATCH, L10N("menu_file_scratch"));
   AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
   AppendMenu(hFile, MF_STRING, IDM_FILE_EXIT, L"Exit\tC-x C-c");
 
@@ -207,6 +217,8 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_REPLACE, L"Replace");
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND_IN_FILES,
              L"Find in Files...\tC-S-f");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_GREP,
+             L"Grep...");
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND_FILE,
              L"Find File...\tC-S-F");
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_GOTO, L"Go to Line...\tAlt+G");
@@ -258,26 +270,20 @@ void UpdateMenu(HWND hwnd) {
              IDM_SHELL_ENC_SJIS, L"Shift-JIS");
   AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hEnc, L"Shell Encoding");
 
-  // Tools Menu
+  // Tools Menu (built-in tools only; app launchers moved to Plugins menu)
   HMENU hTools = CreatePopupMenu();
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_RUN_MACRO,
              L10N("menu_tools_run_macro"));
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_CONSOLE, L10N("menu_tools_console"));
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_SHELL_MODE, L"Shell Mode");
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_DIRED, L"Dired\tC-x d");
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL, L"New Terminal (powershell)");
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_CMD, L"New Terminal (cmd)");
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_BASH, L"New Terminal (bash)");
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_FILE_SEARCH, L"Fast File Search");
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_CSV_EDITOR, L"CSV Editor");
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_JY_EDITOR, L"JY Editor");
+  AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
-  AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_AI_ASSISTANT, L"AI Assistant\tAlt+A");
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_AI_CONSOLE, L"AI Console\tAlt+I");
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_AI_SET_KEY, L"Set AI API Key...");
+
 
   // Language Menu
   HMENU hLang = CreatePopupMenu();
@@ -287,7 +293,7 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hLang, MF_STRING, IDM_LANG_FR, L10N("menu_language_fr"));
   AppendMenu(hLang, MF_STRING, IDM_LANG_DE, L10N("menu_language_de"));
 
-  // Buffers Menu
+  // Buffers Menu - integrated buffer/terminal/app tabs with type indicators
   HMENU hBuffers = CreatePopupMenu();
   const auto &buffers = g_editor->GetBuffers();
   for (size_t i = 0; i < buffers.size(); ++i) {
@@ -299,10 +305,26 @@ void UpdateMenu(HWND hwnd) {
       if (pos != std::wstring::npos)
         name = name.substr(pos + 1);
     }
+    name += L"  [Buffer]";
     UINT flags = MF_STRING;
-    if (i == g_editor->GetActiveBufferIndex())
+    if (g_activeTerminalTab < 0 && g_activeAppTab < 0 &&
+        i == g_editor->GetActiveBufferIndex())
       flags |= MF_CHECKED;
     AppendMenu(hBuffers, flags, IDM_BUFFERS_START + i, name.c_str());
+  }
+  // Append terminal tabs
+  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
+    std::wstring name = g_terminalTabs[i].label + L"  [Terminal]";
+    UINT flags = MF_STRING;
+    if (g_activeTerminalTab == static_cast<int>(i)) flags |= MF_CHECKED;
+    AppendMenu(hBuffers, flags, IDM_TERMINALS_START + i, name.c_str());
+  }
+  // Append app tabs
+  for (size_t i = 0; i < g_appTabs.size(); ++i) {
+    std::wstring name = g_appTabs[i].label + L"  [App]";
+    UINT flags = MF_STRING;
+    if (g_activeAppTab == static_cast<int>(i)) flags |= MF_CHECKED;
+    AppendMenu(hBuffers, flags, IDM_BUFFERS_START + 200 + i, name.c_str());
   }
 
   // Help Menu
@@ -313,15 +335,10 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hHelp, MF_STRING, IDM_HELP_ABOUT, L10N("menu_help_about"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_MESSAGES, L"Show Messages");
 
-  // AI Menu (New)
+  // AI Menu (hidden by default, only shown when IsShowAI)
   HMENU hAi = CreatePopupMenu();
   AppendMenu(hAi, MF_STRING, IDM_AI_MANAGER, L"AI Agent Manager");
   AppendMenu(hAi, MF_STRING, IDM_AI_SETUP_WIZARD, L"AI Setup Wizard");
-  AppendMenu(hAi, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hAi, MF_STRING, IDM_TOOLS_AI_ASSISTANT,
-             L"Contextual AI Assistant\tAlt+A");
-  AppendMenu(hAi, MF_STRING, IDM_TOOLS_AI_CONSOLE, L"AI Agents Console\tAlt+I");
-  AppendMenu(hAi, MF_STRING, IDM_TOOLS_AI_SET_KEY, L"Configure Server Keys...");
 
   // CLI Menu
   HMENU hCli = CreatePopupMenu();
@@ -347,13 +364,28 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hView, L10N("menu_view"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hConfig, L10N("menu_config"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hTools, L10N("menu_tools"));
+
+  // Plugins Menu
+  HMENU hPlugins = CreatePopupMenu();
+  if (g_plugins.empty()) {
+    AppendMenu(hPlugins, MF_GRAYED, 0, L"(No plugins found)");
+  } else {
+    for (size_t i = 0; i < g_plugins.size(); ++i) {
+      AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_START + i, g_plugins[i].name.c_str());
+    }
+    AppendMenu(hPlugins, MF_SEPARATOR, 0, NULL);
+  }
+  AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_RESCAN, L"Rescan Plugins");
+  AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_CONFIGURE, L"Configure Plugins...");
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hPlugins, L"Plugins");
+
   if (SettingsManager::Instance().IsShowAI())
     AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hAi, L"AI");
   else
     DestroyMenu(hAi);
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
-  // Dired Menu
+  // Dired Menu (directory pairs only; launch Dired from Plugins menu)
   HMENU hDired = CreatePopupMenu();
   const auto &diredPairs = SettingsManager::Instance().GetDiredPairs();
   for (size_t i = 0; i < diredPairs.size(); ++i) {
@@ -366,16 +398,41 @@ void UpdateMenu(HWND hwnd) {
 
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hDired, L"Dired");
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hTerminals, L"Terminals");
+  // Terminals menu hidden - terminals are accessible via Buffers and Process menus
+  DestroyMenu(hTerminals);
+  // Process Menu - kill process-bound apps and terminals
+  HMENU hProcess = CreatePopupMenu();
+  bool hasProcesses = false;
+  for (size_t i = 0; i < g_appTabs.size(); ++i) {
+    UINT flags = MF_STRING;
+    if (g_activeAppTab == static_cast<int>(i)) flags |= MF_CHECKED;
+    AppendMenu(hProcess, flags, IDM_PROCESS_KILL_START + i, (L"Kill " + g_appTabs[i].label + L" [App]").c_str());
+    hasProcesses = true;
+  }
+  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
+    UINT flags = MF_STRING;
+    if (g_activeTerminalTab == static_cast<int>(i)) flags |= MF_CHECKED;
+    AppendMenu(hProcess, flags, IDM_PROCESS_KILL_START + 200 + i, (L"Kill " + g_terminalTabs[i].label + L" [Terminal]").c_str());
+    hasProcesses = true;
+  }
+  if (hasProcesses) {
+    AppendMenu(hProcess, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hProcess, MF_STRING, IDM_PROCESS_KILL, L"Kill Active Process");
+  } else {
+    AppendMenu(hProcess, MF_GRAYED, 0, L"(No running processes)");
+  }
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hProcess, L"Process");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hHelp, L10N("menu_help"));
 
   SetMenu(hwnd, hMenu);
-  // Set window title: "Ecode - {current file / working directory / tab name}"
+  // Set window title: "Ecode - {full file path / tab name}"
   std::wstring title = L"Ecode";
   if (g_activeTerminalTab >= 0) {
     size_t t = static_cast<size_t>(g_activeTerminalTab);
     if (t < g_terminalTabs.size() && !g_terminalTabs[t].label.empty())
       title = L"Ecode - " + g_terminalTabs[t].label;
+  } else if (g_activeAppTab >= 0 && static_cast<size_t>(g_activeAppTab) < g_appTabs.size()) {
+    title = L"Ecode - " + g_appTabs[g_activeAppTab].label;
   } else {
     Buffer *buf = g_editor->GetActiveBuffer();
     if (buf) {

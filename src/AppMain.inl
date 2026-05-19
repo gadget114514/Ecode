@@ -124,6 +124,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
+  case WM_SET_PROCESS_HANDLE: {
+    int appIdx = (int)wParam;
+    HANDLE hProcess = (HANDLE)lParam;
+    if (appIdx >= 0 && (size_t)appIdx < g_appTabs.size()) {
+      g_appTabs[appIdx].hProcess = hProcess;
+    } else {
+      CloseHandle(hProcess);
+    }
+    return 0;
+  }
   case WM_EMBED_APP: {
     HWND childHwnd = (HWND)wParam;
     int appIdx = (int)lParam;
@@ -156,13 +166,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       }
       UpdateMenu(hwnd);
       InvalidateRect(hwnd, NULL, FALSE);
-    }
-    return 0;
-  }
-  case WM_DEFERRED_FOCUS: {
-    HWND target = (HWND)wParam;
-    if (target && IsWindow(target)) {
-      SetFocus(target);
     }
     return 0;
   }
@@ -318,6 +321,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close Terminal");
         } else if (isAppTab) {
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close");
+          AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL + 1, L"Kill Process");
         } else if (tabIndex >= 0 && tabIndex < static_cast<int>(bufCount)) {
           AppendMenu(hMenu, MF_STRING, IDM_TAB_COPY_PATH, L"Copy Full Path");
         }
@@ -343,13 +347,32 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
               CloseClipboard();
             }
           }
+        } else if (res == IDM_TAB_CLOSE_TERMINAL + 1) {
+          // Kill Process on app tab
+          int appIdx = tabIndex - appStart;
+          if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
+            if (g_appTabs[appIdx].hProcess) {
+              TerminateProcess(g_appTabs[appIdx].hProcess, 0);
+              CloseHandle(g_appTabs[appIdx].hProcess);
+            }
+            if (g_appTabs[appIdx].hwnd) DestroyWindow(g_appTabs[appIdx].hwnd);
+            g_appTabs.erase(g_appTabs.begin() + appIdx);
+            if (g_activeAppTab == appIdx) g_activeAppTab = -1;
+            else if (g_activeAppTab > appIdx) g_activeAppTab--;
+            UpdateMenu(hwnd);
+            InvalidateRect(hwnd, NULL, FALSE);
+          }
         } else if (res == IDM_TAB_CLOSE_TERMINAL) {
           int appStart = static_cast<int>(bufCount);
           int appEnd = appStart + static_cast<int>(g_appTabs.size());
           if (tabIndex >= appStart && tabIndex < appEnd) {
-            // Close app tab
+            // Close app tab (kill process, destroy window)
             int appIdx = tabIndex - appStart;
             if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
+              if (g_appTabs[appIdx].hProcess) {
+                TerminateProcess(g_appTabs[appIdx].hProcess, 0);
+                CloseHandle(g_appTabs[appIdx].hProcess);
+              }
               if (g_appTabs[appIdx].hwnd) DestroyWindow(g_appTabs[appIdx].hwnd);
               g_appTabs.erase(g_appTabs.begin() + appIdx);
               if (g_activeAppTab == appIdx) g_activeAppTab = -1;

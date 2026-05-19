@@ -4,7 +4,11 @@ project(Dired LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(Dired WIN32 src/main.cpp)
+add_executable(Dired WIN32 src/main.cpp src/manifest.rc)
+# Embed app manifest for modern ComCtl32 v6 (disable default manifest to avoid duplicate)
+set_target_properties(Dired PROPERTIES
+    LINK_FLAGS "/MANIFEST:NO"
+)
 
 target_link_libraries(Dired
     comctl32

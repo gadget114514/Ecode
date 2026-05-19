@@ -91,6 +91,12 @@ public:
   std::wstring GetBashPath() const { return m_bashPath; }
   void SetBashPath(const std::wstring &path) { m_bashPath = path; }
 
+  std::wstring GetDefaultExtension() const { return m_defaultExtension; }
+  void SetDefaultExtension(const std::wstring &ext) { m_defaultExtension = ext; }
+
+  std::wstring GetPluginsDirectory() const { return m_pluginsDirectory; }
+  void SetPluginsDirectory(const std::wstring &dir) { m_pluginsDirectory = dir; }
+
   // Returns bash exe path (--cd stripped), sets workingDir to the directory from --cd if present
   std::wstring GetBashCommand(std::wstring *workingDir = nullptr) const;
 
@@ -141,6 +147,8 @@ private:
   std::wstring m_projectDirectory;
   std::wstring m_findStartDir;
   std::wstring m_bashPath;
+  std::wstring m_defaultExtension;
+  std::wstring m_pluginsDirectory;
   bool m_showAI = false;
   std::vector<CliEntry> m_cliEntries;
   std::vector<DiredPair> m_diredPairs;

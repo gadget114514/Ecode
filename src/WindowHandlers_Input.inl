@@ -7,6 +7,11 @@
 static LRESULT HandlePaint(HWND hwnd) {
   PAINTSTRUCT ps;
   BeginPaint(hwnd, &ps);
+  // Skip redraw if nothing invalid (avoid full viewport redraw on cosmetic events)
+  if (ps.rcPaint.left >= ps.rcPaint.right || ps.rcPaint.top >= ps.rcPaint.bottom) {
+    EndPaint(hwnd, &ps);
+    return 0;
+  }
   Buffer *activeBuffer = g_editor->GetActiveBuffer();
   if (activeBuffer) {
     size_t scrollLine = activeBuffer->GetScrollLine();
