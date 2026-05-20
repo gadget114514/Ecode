@@ -32,6 +32,7 @@
 
 #define WM_NEW_ENTRIES (WM_USER + 10)
 #define WM_SCAN_DONE   (WM_USER + 11)
+#define WM_FASTFD_SELECT_PATH (WM_USER + 12)
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -44,6 +45,7 @@ static constexpr float g_fkeyH    = 20.0f;
 static constexpr float g_divSize  = 4.0f;
 static constexpr float g_colSepHit = 3.0f;
 static constexpr int   g_maxPanes = 4;
+static constexpr float g_selectBtnW = 60.0f;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -703,8 +705,23 @@ static void DrawPane(Pane& pane, D2D1_RECT_F rect) {
     g_rt->FillRectangle(D2D1::RectF(x, y, x + w, y + g_pathH), g_brushHeader);
     if (g_tf) {
         std::wstring pathText = pane.currentPath.empty() ? L"(empty)" : pane.currentPath;
+        float pathW = w - g_selectBtnW - 8;
         g_rt->DrawTextW(pathText.c_str(), (UINT32)pathText.size(), g_tf,
-            D2D1::RectF(x + 4, y + 2, x + w - 4, y + g_pathH - 2), g_brushText);
+            D2D1::RectF(x + 4, y + 2, x + pathW, y + g_pathH - 2), g_brushText);
+    }
+
+    // Select button
+    float selBtnX = x + w - g_selectBtnW - 4;
+    float selBtnY = y + 2;
+    float selBtnH = g_pathH - 4;
+    D2D1_RECT_F selBtnRect = D2D1::RectF(selBtnX, selBtnY, selBtnX + g_selectBtnW, selBtnY + selBtnH);
+    bool isActivePane = (&pane == &g_panes[g_activePane]);
+    g_rt->FillRectangle(selBtnRect, isActivePane ? g_brushExe : g_brushHeader);
+    g_rt->DrawRectangle(selBtnRect, g_brushText);
+    if (g_tf) {
+        g_rt->DrawTextW(L"Select", 6, g_tf,
+            D2D1::RectF(selBtnX + 2, selBtnY + 1, selBtnX + g_selectBtnW - 2, selBtnY + selBtnH - 1),
+            isActivePane ? g_brushBg : g_brushText);
     }
 
     float listY = y + g_pathH;
@@ -1019,8 +1036,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (argv && argc > argIdx && wcscmp(argv[argIdx], L"--embedded") == 0)
             ++argIdx;
 
-        InitPane(g_panes[0], (argv && argc > argIdx) ? argv[argIdx] : curDir);
+        std::wstring leftPath = (argv && argc > argIdx) ? argv[argIdx] : curDir;
+        if (leftPath == L"--embedded") leftPath = curDir;
+        InitPane(g_panes[0], leftPath);
         std::wstring rightPath = (argv && argc > argIdx + 1) ? argv[argIdx + 1] : L"";
+        if (rightPath == L"--embedded") rightPath.clear();
         if (argv) LocalFree(argv);
 
         if (!rightPath.empty() && GetFileAttributesW(rightPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
@@ -1108,6 +1128,34 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_LBUTTONDOWN: {
         if (g_editHwnd) { HideEdit(); return 0; }
         int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
+
+        // Check Select button click in any pane's path bar
+        {
+            auto rects = CalculatePaneRects();
+            for (int i = 0; i < g_paneCount && i < (int)rects.size(); ++i) {
+                auto& r = rects[i];
+                float btnX = r.right - g_selectBtnW - 4;
+                float btnY = r.top + 2;
+                if (x >= btnX && x <= btnX + g_selectBtnW &&
+                    y >= btnY && y <= btnY + g_pathH - 2) {
+                    Pane& pane = g_panes[i];
+                    HWND parent = GetParent(hwnd);
+                    if (parent) {
+                        // Send current path to parent window (embedded mode)
+                        size_t pathBytes = (pane.currentPath.size() + 1) * sizeof(wchar_t);
+                        wchar_t* hPath = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, pathBytes);
+                        if (hPath) {
+                            wcscpy_s(hPath, pane.currentPath.size() + 1, pane.currentPath.c_str());
+                            PostMessageW(parent, WM_FASTFD_SELECT_PATH, 0, (LPARAM)hPath);
+                        }
+                    } else {
+                        // Standalone: open selected or navigate into directory
+                        OpenSelected(&pane);
+                    }
+                    return 0;
+                }
+            }
+        }
 
         // Check pane dividers
         if (g_layoutMode == LayoutMode::Horizontal) {
@@ -1450,6 +1498,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
+
+        case VK_LEFT:
+            g_activePane = (g_activePane - 1 + g_paneCount) % g_paneCount;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+
+        case VK_RIGHT:
+            g_activePane = (g_activePane + 1) % g_paneCount;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
 
         case VK_SPACE:
             ToggleMark(pane);
