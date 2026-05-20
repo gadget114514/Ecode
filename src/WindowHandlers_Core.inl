@@ -87,9 +87,6 @@ static LRESULT HandleCreate(HWND hwnd) {
   g_uFindMsgString = RegisterWindowMessageW(FINDMSGSTRINGW);
   DragAcceptFiles(hwnd, TRUE);
 
-  // Register terminal window class (terminals created on-demand)
-  TerminalView::RegisterWindowClass(GetModuleHandle(NULL));
-
   // Subclass tab control for drag-reorder support
   g_oldTabProc = (WNDPROC)SetWindowLongPtr(
       g_tabHwnd, GWLP_WNDPROC, (LONG_PTR)TabSubclassProc);
@@ -225,15 +222,10 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
   g_renderer->SetLeftOffset((float)treeWidth);
   g_renderer->Resize(width, height);
 
-  // Position all app views and terminal views to cover the same content area
+  // Position all app tabs to cover the content area
   for (auto &t : g_appTabs) {
     if (t.hwnd)
       MoveWindow(t.hwnd, treeWidth, contentTop,
-                 contentWidth, contentHeight + safetyMargin, TRUE);
-  }
-  for (auto &tab : g_terminalTabs) {
-    if (tab.hwnd)
-      MoveWindow(tab.hwnd, treeWidth, contentTop,
                  contentWidth, contentHeight + safetyMargin, TRUE);
   }
 
@@ -337,9 +329,6 @@ static bool HasRunningProcesses() {
       if (proc && proc->IsRunning()) return true;
     }
   }
-  for (auto &tab : g_terminalTabs) {
-    if (tab.view && tab.view->IsStarted()) return true;
-  }
   return false;
 }
 
@@ -391,15 +380,6 @@ static void HandleDestroy(HWND hwnd) {
     if (t.hwnd) DestroyWindow(t.hwnd);
   }
   g_appTabs.clear();
-
-  // Cleanup all terminal views
-  for (auto &tab : g_terminalTabs) {
-    if (tab.view) {
-      if (tab.hwnd) DestroyWindow(tab.hwnd);
-      delete tab.view;
-    }
-  }
-  g_terminalTabs.clear();
 
   delete g_scriptEngine;
   g_scriptEngine = nullptr;

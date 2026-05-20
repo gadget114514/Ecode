@@ -97,7 +97,6 @@ static LRESULT HandlePaint(HWND hwnd) {
 }
 
 static LRESULT HandleChar(HWND hwnd, WPARAM wParam) {
-  if (g_activeTerminalTab >= 0) return 0;
   if (g_activeAppTab >= 0) return 0;
   if (g_scriptEngine->IsKeyboardCaptured()) {
     wchar_t wc = static_cast<wchar_t>(wParam);
@@ -172,7 +171,6 @@ std::function<SHORT(int)> g_getKeyState = [](int key) {
 };
 
 static LRESULT HandleKeyDown(HWND hwnd, WPARAM wParam, LPARAM lParam) {
-  if (g_activeTerminalTab >= 0) return -1;
   if (g_activeAppTab >= 0) return -1;
   static bool s_inEscapeSequence = false;
   static bool s_inCtrlX = false; // Add prefix state
@@ -679,11 +677,7 @@ LRESULT HandleMouseDown(HWND hwnd, LPARAM lParam) {
   SetCapture(hwnd);
   int x = LOWORD(lParam), y = HIWORD(lParam);
 
-  // Redirect mouse clicks to terminal or app tab child windows
-  if (g_activeTerminalTab >= 0 && (size_t)g_activeTerminalTab < g_terminalTabs.size()) {
-    SetFocus(g_terminalTabs[g_activeTerminalTab].hwnd);
-    return 0;
-  }
+  // Redirect mouse clicks to the active app tab child window
   if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size()) {
     SetFocus(g_appTabs[g_activeAppTab].hwnd);
     return 0;

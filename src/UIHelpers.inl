@@ -147,24 +147,10 @@ void UpdateTabs(HWND hwnd) {
     TabCtrl_InsertItem(g_tabHwnd, appStart + static_cast<int>(i), &tci);
   }
 
-  // Append all terminal tabs after app tabs
-  int termStart = appStart + static_cast<int>(g_appTabs.size());
-  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-    TCITEMW tci = {0};
-    tci.mask = TCIF_TEXT;
-    tci.pszText = (LPWSTR)g_terminalTabs[i].label.c_str();
-    TabCtrl_InsertItem(g_tabHwnd, termStart + static_cast<int>(i), &tci);
-  }
-
   // Restore selection
-  int curSel;
-  if (g_activeAppTab >= 0) {
-    curSel = appStart + g_activeAppTab;
-  } else if (g_activeTerminalTab >= 0) {
-    curSel = termStart + g_activeTerminalTab;
-  } else {
-    curSel = static_cast<int>(g_editor->GetActiveBufferIndex());
-  }
+  int curSel = (g_activeAppTab >= 0)
+    ? appStart + g_activeAppTab
+    : static_cast<int>(g_editor->GetActiveBufferIndex());
   TabCtrl_SetCurSel(g_tabHwnd, curSel);
   // Re-enable redraw
   SendMessage(g_tabHwnd, WM_SETREDRAW, TRUE, 0);
@@ -291,7 +277,7 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hLang, MF_STRING, IDM_LANG_FR, L10N("menu_language_fr"));
   AppendMenu(hLang, MF_STRING, IDM_LANG_DE, L10N("menu_language_de"));
 
-  // Buffers Menu - integrated buffer/terminal/app tabs with type indicators
+  // Buffers Menu - integrated buffer/app tabs with type indicators
   HMENU hBuffers = CreatePopupMenu();
   const auto &buffers = g_editor->GetBuffers();
   for (size_t i = 0; i < buffers.size(); ++i) {
@@ -305,21 +291,14 @@ void UpdateMenu(HWND hwnd) {
     }
     name += L"  [Buffer]";
     UINT flags = MF_STRING;
-    if (g_activeTerminalTab < 0 && g_activeAppTab < 0 &&
-        i == g_editor->GetActiveBufferIndex())
+    if (g_activeAppTab < 0 && i == g_editor->GetActiveBufferIndex())
       flags |= MF_CHECKED;
     AppendMenu(hBuffers, flags, IDM_BUFFERS_START + i, name.c_str());
   }
-  // Append terminal tabs
-  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-    std::wstring name = g_terminalTabs[i].label + L"  [Terminal]";
-    UINT flags = MF_STRING;
-    if (g_activeTerminalTab == static_cast<int>(i)) flags |= MF_CHECKED;
-    AppendMenu(hBuffers, flags, IDM_TERMINALS_START + i, name.c_str());
-  }
-  // Append app tabs
+  // Append app tabs (terminals show as [Terminal], others as [App])
   for (size_t i = 0; i < g_appTabs.size(); ++i) {
-    std::wstring name = g_appTabs[i].label + L"  [App]";
+    std::wstring tag = (g_appTabs[i].type == TAB_TYPE_TERMINAL) ? L"  [Terminal]" : L"  [App]";
+    std::wstring name = g_appTabs[i].label + tag;
     UINT flags = MF_STRING;
     if (g_activeAppTab == static_cast<int>(i)) flags |= MF_CHECKED;
     AppendMenu(hBuffers, flags, IDM_BUFFERS_START + 200 + i, name.c_str());
@@ -348,14 +327,6 @@ void UpdateMenu(HWND hwnd) {
   if (!cliEntries.empty())
     AppendMenu(hCli, MF_SEPARATOR, 0, NULL);
   AppendMenu(hCli, MF_STRING, IDM_CLI_CONFIGURE, L"Configure CLI Entries...");
-
-  // Terminals Menu
-  HMENU hTerminals = CreatePopupMenu();
-  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-    UINT flags = MF_STRING;
-    if (g_activeTerminalTab == static_cast<int>(i)) flags |= MF_CHECKED;
-    AppendMenu(hTerminals, flags, IDM_TERMINALS_START + i, g_terminalTabs[i].label.c_str());
-  }
 
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hFile, L10N("menu_file"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hEdit, L10N("menu_edit"));
@@ -396,21 +367,14 @@ void UpdateMenu(HWND hwnd) {
 
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hDired, L"Dired");
-  // Terminals menu hidden - terminals are accessible via Buffers and Process menus
-  DestroyMenu(hTerminals);
   // Process Menu - kill process-bound apps and terminals
   HMENU hProcess = CreatePopupMenu();
   bool hasProcesses = false;
   for (size_t i = 0; i < g_appTabs.size(); ++i) {
     UINT flags = MF_STRING;
     if (g_activeAppTab == static_cast<int>(i)) flags |= MF_CHECKED;
-    AppendMenu(hProcess, flags, IDM_PROCESS_KILL_START + i, (L"Kill " + g_appTabs[i].label + L" [App]").c_str());
-    hasProcesses = true;
-  }
-  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-    UINT flags = MF_STRING;
-    if (g_activeTerminalTab == static_cast<int>(i)) flags |= MF_CHECKED;
-    AppendMenu(hProcess, flags, IDM_PROCESS_KILL_START + 200 + i, (L"Kill " + g_terminalTabs[i].label + L" [Terminal]").c_str());
+    std::wstring tag = (g_appTabs[i].type == TAB_TYPE_TERMINAL) ? L" [Terminal]" : L" [App]";
+    AppendMenu(hProcess, flags, IDM_PROCESS_KILL_START + i, (L"Kill " + g_appTabs[i].label + tag).c_str());
     hasProcesses = true;
   }
   if (hasProcesses) {
@@ -425,11 +389,7 @@ void UpdateMenu(HWND hwnd) {
   SetMenu(hwnd, hMenu);
   // Set window title: "Ecode - {full file path / tab name}"
   std::wstring title = L"Ecode";
-  if (g_activeTerminalTab >= 0) {
-    size_t t = static_cast<size_t>(g_activeTerminalTab);
-    if (t < g_terminalTabs.size() && !g_terminalTabs[t].label.empty())
-      title = L"Ecode - " + g_terminalTabs[t].label;
-  } else if (g_activeAppTab >= 0 && static_cast<size_t>(g_activeAppTab) < g_appTabs.size()) {
+  if (g_activeAppTab >= 0 && static_cast<size_t>(g_activeAppTab) < g_appTabs.size()) {
     title = L"Ecode - " + g_appTabs[g_activeAppTab].label;
   } else {
     Buffer *buf = g_editor->GetActiveBuffer();
