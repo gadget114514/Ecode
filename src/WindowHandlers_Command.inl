@@ -478,6 +478,12 @@ void ScanPlugins() {
 
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
                       const std::wstring& label, int type) {
+  if (GetFileAttributesW(exePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+    std::wstring msg = L"Plugin not found:\n" + exePath;
+    MessageBoxW(hwnd, msg.c_str(), L"Plugin Not Found", MB_OK | MB_ICONWARNING);
+    return;
+  }
+
   AppTabInfo tab;
   tab.label = label;
   tab.type  = type;
@@ -588,6 +594,9 @@ void ShowPluginConfigDialog(HWND hwnd) {
 
 static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   switch (LOWORD(wParam)) {
+  case IDM_VIEW_TABSWITCHER:
+    ShowTabSwitcher(hwnd);
+    return 0;
   case IDM_FILE_NEW:
     g_editor->NewFile();
     UpdateMenu(hwnd);

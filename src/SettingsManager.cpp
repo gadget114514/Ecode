@@ -84,6 +84,12 @@ void SettingsManager::Load() {
       GetPrivateProfileIntW(L"Editor", L"ShellEncoding", 0, path.c_str());
   m_showAI =
       GetPrivateProfileIntW(L"Editor", L"ShowAI", 0, path.c_str()) != 0;
+  m_tabGridCellW =
+      GetPrivateProfileIntW(L"TabGrid", L"CellWidth",  240, path.c_str());
+  m_tabGridCellH =
+      GetPrivateProfileIntW(L"TabGrid", L"CellHeight", 170, path.c_str());
+  if (m_tabGridCellW < 80)  m_tabGridCellW = 80;
+  if (m_tabGridCellH < 60)  m_tabGridCellH = 60;
 
   wchar_t bashBuf[MAX_PATH];
   if (GetPrivateProfileStringW(L"Editor", L"BashPath", L"", bashBuf,
@@ -339,6 +345,8 @@ void SettingsManager::Save() {
   WriteInt(L"Editor", L"CaretStyle", m_caretStyle);
   WriteInt(L"Editor", L"ShellEncoding", m_shellEncoding);
   WriteInt(L"Editor", L"ShowAI", m_showAI ? 1 : 0);
+  WriteInt(L"TabGrid", L"CellWidth",  m_tabGridCellW);
+  WriteInt(L"TabGrid", L"CellHeight", m_tabGridCellH);
   if (!m_defaultExtension.empty()) {
     WritePrivateProfileStringW(L"Editor", L"DefaultExtension",
                                m_defaultExtension.c_str(), path.c_str());
