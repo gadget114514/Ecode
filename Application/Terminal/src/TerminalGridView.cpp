@@ -77,8 +77,10 @@ void TerminalGridView::RegisterThumbnails() {
         if (!src || !IsWindow(src)) continue;
 
         thumbnails_[i] = RegisterChildThumb(hwnd_, src);
-        if (!thumbnails_[i])
-            snapshots_[i] = CaptureSnapshot(src);
+        // Always capture a snapshot as fallback:
+        //   - DWM succeeds but shows blank for hidden/GPU-rendered windows
+        //   - DWM fails entirely (WS_CHILD stripping refused, etc.)
+        snapshots_[i] = CaptureSnapshot(src);
     }
     UpdateThumbnailRects();
 }
@@ -120,7 +122,8 @@ HBITMAP TerminalGridView::CaptureSnapshot(HWND src) {
     ReleaseDC(nullptr, hdcScreen);
 
     HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
-    BOOL    ok   = PrintWindow(src, hdcMem, PW_CLIENTONLY);
+    // PW_RENDERFULLCONTENT captures D2D/DirectX content (Windows 8.1+).
+    BOOL ok = PrintWindow(src, hdcMem, PW_CLIENTONLY | PW_RENDERFULLCONTENT);
     SelectObject(hdcMem, hOld);
     DeleteDC(hdcMem);
 
