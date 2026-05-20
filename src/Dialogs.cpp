@@ -806,7 +806,8 @@ static void RefreshCliList(HWND hDlg) {
   SendMessage(hList, LB_RESETCONTENT, 0, 0);
   const auto &entries = SettingsManager::Instance().GetCliEntries();
   for (size_t i = 0; i < entries.size(); ++i) {
-    std::wstring text = entries[i].command + L"  →  " + entries[i].folder;
+    std::wstring enc = entries[i].encoding ? L"SJIS" : L"UTF8";
+    std::wstring text = entries[i].command + L"  [" + enc + L"]  →  " + entries[i].folder;
     SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)text.c_str());
   }
 }
@@ -816,6 +817,10 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
   switch (message) {
   case WM_INITDIALOG: {
     RefreshCliList(hDlg);
+    HWND hEnc = GetDlgItem(hDlg, IDC_CLI_ENCODING);
+    SendMessage(hEnc, CB_ADDSTRING, 0, (LPARAM)L"UTF-8");
+    SendMessage(hEnc, CB_ADDSTRING, 0, (LPARAM)L"Shift-JIS");
+    SendMessage(hEnc, CB_SETCURSEL, 0, 0);
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
@@ -827,6 +832,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         if (sel >= 0 && sel < (int)entries.size()) {
           SetDlgItemTextW(hDlg, IDC_CLI_CMD, entries[sel].command.c_str());
           SetDlgItemTextW(hDlg, IDC_CLI_FOLDER, entries[sel].folder.c_str());
+          SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_SETCURSEL, entries[sel].encoding, 0);
         }
       }
       return (INT_PTR)TRUE;
@@ -840,8 +846,9 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       wchar_t cmd[1024], folder[MAX_PATH];
       GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);
       GetDlgItemTextW(hDlg, IDC_CLI_FOLDER, folder, MAX_PATH);
+      int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
       if (wcslen(cmd) > 0 && wcslen(folder) > 0) {
-        SettingsManager::Instance().AddCliEntry(cmd, folder);
+        SettingsManager::Instance().AddCliEntry(cmd, folder, enc);
         SettingsManager::Instance().Save();
         RefreshCliList(hDlg);
       }
@@ -853,7 +860,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         const auto &entries = SettingsManager::Instance().GetCliEntries();
         if (sel >= 0 && sel < (int)entries.size()) {
           auto &entry = entries[sel];
-          SettingsManager::Instance().AddCliEntry(entry.command, entry.folder);
+          SettingsManager::Instance().AddCliEntry(entry.command, entry.folder, entry.encoding);
           SettingsManager::Instance().Save();
           RefreshCliList(hDlg);
         }
@@ -874,6 +881,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       wchar_t cmd[1024], folder[MAX_PATH];
       GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);
       GetDlgItemTextW(hDlg, IDC_CLI_FOLDER, folder, MAX_PATH);
+      int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
       if (wcslen(cmd) == 0 || wcslen(folder) == 0) {
         HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
         int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
@@ -882,6 +890,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           if (sel >= 0 && sel < (int)entries.size()) {
             wcscpy_s(cmd, 1024, entries[sel].command.c_str());
             wcscpy_s(folder, MAX_PATH, entries[sel].folder.c_str());
+            enc = entries[sel].encoding;
           }
         }
       }
@@ -907,7 +916,8 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       }
       HWND parent = GetParent(hDlg);
       SetCurrentDirectoryW(folder);
-      std::wstring shellArgs = bashCmd + L" -c \"" + cmd + L"; exec bash --login -i\"";
+      std::wstring localePrefix = (enc == 1) ? L"export LANG=ja_JP.UTF-8; " : L"export LANG=en_US.UTF-8; ";
+      std::wstring shellArgs = bashCmd + L" -c \"" + localePrefix + cmd + L"; exec bash --login -i\"";
       std::wstring label = std::wstring(folder);
       size_t pos = label.find_last_of(L"\\/");
       if (pos != std::wstring::npos) label = label.substr(pos + 1);

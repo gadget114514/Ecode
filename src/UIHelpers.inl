@@ -217,6 +217,8 @@ void UpdateMenu(HWND hwnd) {
 
   // View Menu
   HMENU hView = CreatePopupMenu();
+  AppendMenu(hView, MF_STRING, IDM_VIEW_TABSWITCHER, L"Tab Grid View\tCtrl+Shift+T");
+  AppendMenu(hView, MF_SEPARATOR, 0, NULL);
   AppendMenu(hView, MF_STRING, IDM_VIEW_TOGGLE_UI, L"Toggle UI\tF11");
   AppendMenu(hView, MF_SEPARATOR, 0, NULL);
   AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_IN, L"Zoom In\tCtrl++");
@@ -336,13 +338,17 @@ void UpdateMenu(HWND hwnd) {
 
   // Plugins Menu
   HMENU hPlugins = CreatePopupMenu();
-  if (g_plugins.empty()) {
-    AppendMenu(hPlugins, MF_GRAYED, 0, L"(No plugins found)");
-  } else {
+  {
+    bool anyVisible = false;
     for (size_t i = 0; i < g_plugins.size(); ++i) {
+      if (g_plugins[i].hidden) continue;
+      anyVisible = true;
       AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_START + i, g_plugins[i].name.c_str());
     }
-    AppendMenu(hPlugins, MF_SEPARATOR, 0, NULL);
+    if (!anyVisible)
+      AppendMenu(hPlugins, MF_GRAYED, 0, L"(No plugins found)");
+    else
+      AppendMenu(hPlugins, MF_SEPARATOR, 0, NULL);
   }
   AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_RESCAN, L"Rescan Plugins");
   AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_CONFIGURE, L"Configure Plugins...");

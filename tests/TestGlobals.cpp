@@ -32,6 +32,12 @@ LogCallback g_logCallback = nullptr;
 
 std::vector<AppTabInfo> g_appTabs;
 int g_activeAppTab = -1;
+
+struct TerminalTabInfo {
+    HWND hwnd = nullptr;
+    std::wstring label;
+    HANDLE hProcess = nullptr;
+};
 std::vector<TerminalTabInfo> g_terminalTabs;
 int g_activeTerminalTab = -1;
 volatile LONG g_grepCancelFlag = 0;

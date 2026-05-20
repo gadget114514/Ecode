@@ -41,6 +41,7 @@ namespace fs = std::filesystem;
 #include "../include/LspClient.h"
 #include "../include/ScriptEngine.h"
 #include "../include/SettingsManager.h"
+#include "../include/resource.h"
 
 // Forward declarations
 class Buffer;
@@ -55,6 +56,9 @@ void KillAppProcessByIndex(HWND hwnd, size_t idx);
 void KillActiveAppProcess(HWND hwnd);
 void ScanPlugins();
 void LaunchPlugin(HWND hwnd, size_t index);
+void ShowPluginConfigDialog(HWND hwnd);
+void ShowTabSwitcher(HWND parentHwnd);
+void HideTabSwitcher();
 
 enum LogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
 extern int g_currentLogLevel;
@@ -105,6 +109,9 @@ void HandleDestroy(HWND hwnd);
 #define IDM_VIEW_ZOOM_IN 302
 #define IDM_VIEW_ZOOM_OUT 303
 #define IDM_VIEW_ZOOM_RESET 304
+#define IDM_VIEW_TABSWITCHER 305
+
+#define HOTKEY_ID_TABSWITCHER 1001
 
 #define IDM_CONFIG_SETTINGS 401
 #define IDM_CONFIG_THEME 402
@@ -205,6 +212,7 @@ struct PluginEntry {
     std::wstring name;
     std::wstring path;
     bool isBuiltIn;
+    bool hidden;
 };
 extern std::vector<PluginEntry> g_plugins;
 
