@@ -1,7 +1,0 @@
-== TODO
-1. New menu duplication in FILE enu
-2. Grep tool from Edit menu
-3. In tools menu, hide AI assistant, AI console, Set API key
-4. Add "Open dired" in dired menu
-5. when one of terminals selected from terminal, in buffers menu mark does not updated.
-   tab should be integrated? integrate them and add "buffer or terminal or app" after label in Buffers menu.
