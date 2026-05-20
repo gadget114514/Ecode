@@ -3,79 +3,6 @@ struct EnumData {
   HWND hwnd;
 };
 
-void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring &label) {
-  auto *view = new TerminalView();
-  HWND childHwnd = view->Create(hwnd);
-  if (!childHwnd) {
-    delete view;
-    return;
-  }
-
-  TerminalTabInfo tab;
-  tab.view = view;
-  tab.hwnd = childHwnd;
-  tab.shell = shell;
-  if (label.empty()) {
-    int count = static_cast<int>(g_terminalTabs.size());
-    tab.label = (count == 0) ? L"Terminal" : (L"Terminal " + std::to_wstring(count + 1));
-  } else {
-    tab.label = label;
-  }
-  g_terminalTabs.push_back(std::move(tab));
-  UpdateMenu(hwnd);
-
-  int termIdx = static_cast<int>(g_terminalTabs.size()) - 1;
-  size_t bufCount = g_editor->GetBuffers().size();
-  int tabIndex = static_cast<int>(bufCount) + termIdx;
-  g_suppressTabChange = true;
-  TabCtrl_SetCurSel(g_tabHwnd, tabIndex);
-  g_suppressTabChange = false;
-
-  // Position the terminal to fill content area
-  RECT rc;
-  GetClientRect(hwnd, &rc);
-  int treeWidth = g_treeVisible ? 200 : 0;
-  int tabHeight = 25;
-  int statusHeight = 0;
-  if (IsWindowVisible(g_statusHwnd)) {
-    RECT rcStatus;
-    GetWindowRect(g_statusHwnd, &rcStatus);
-    statusHeight = rcStatus.bottom - rcStatus.top;
-  }
-  int minibufferHeight = g_minibufferVisible ? 24 : 0;
-  int safetyMargin = 50;
-  int contentTop = tabHeight;
-  int contentHeight = rc.bottom - tabHeight - statusHeight - minibufferHeight - safetyMargin;
-  int contentWidth = rc.right - treeWidth;
-  view->MoveAndResize(treeWidth, contentTop, contentWidth, contentHeight + safetyMargin);
-
-  for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-    if (g_terminalTabs[i].hwnd)
-      ShowWindow(g_terminalTabs[i].hwnd, static_cast<int>(i) == termIdx ? SW_SHOW : SW_HIDE);
-  }
-  ShowScrollBar(hwnd, SB_BOTH, FALSE);
-  g_activeAppTab = -1;
-  g_activeTerminalTab = termIdx;
-  PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)childHwnd, 0);
-  InvalidateRect(hwnd, NULL, FALSE);
-
-  // Route VT debug logs to *Messages* buffer
-  view->SetLogCallback([hwnd](const std::wstring& msg) {
-      if (g_editor) {
-          std::string utf8;
-          int len = WideCharToMultiByte(CP_UTF8, 0, msg.c_str(), -1, NULL, 0, NULL, NULL);
-          if (len > 1) { utf8.resize(len - 1); WideCharToMultiByte(CP_UTF8, 0, msg.c_str(), -1, &utf8[0], len, NULL, NULL); }
-          g_editor->LogMessage(utf8);
-      }
-  });
-
-  // Start ConPTY session (lazy, no background thread needed)
-  view->StartSession(shell);
-  g_terminalTabs[termIdx].hProcess = view->GetProcessHandle();
-}
-
-
-
 static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
   EnumData *data = (EnumData *)lParam;
   DWORD processId = 0;
@@ -152,7 +79,7 @@ void OpenFastFileSearch(HWND hwnd) {
   g_appTabs.push_back(std::move(tab));
   int appIdx = static_cast<int>(g_appTabs.size()) - 1;
   g_activeAppTab = appIdx;
-  g_activeTerminalTab = -1;
+
 
   RECT rc;
   GetClientRect(hwnd, &rc);
@@ -168,9 +95,7 @@ void OpenFastFileSearch(HWND hwnd) {
       ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
     }
   }
-  for (auto &t : g_terminalTabs) {
-    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-  }
+
 
   UpdateMenu(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
@@ -239,7 +164,7 @@ void OpenCSVEditor(HWND hwnd) {
   g_appTabs.push_back(std::move(tab));
   int appIdx = static_cast<int>(g_appTabs.size()) - 1;
   g_activeAppTab = appIdx;
-  g_activeTerminalTab = -1;
+
 
   RECT rc;
   GetClientRect(hwnd, &rc);
@@ -255,9 +180,7 @@ void OpenCSVEditor(HWND hwnd) {
       ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
     }
   }
-  for (auto &t : g_terminalTabs) {
-    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-  }
+
 
   UpdateMenu(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
@@ -324,7 +247,7 @@ void OpenJYEditor(HWND hwnd) {
   g_appTabs.push_back(std::move(tab));
   int appIdx = static_cast<int>(g_appTabs.size()) - 1;
   g_activeAppTab = appIdx;
-  g_activeTerminalTab = -1;
+
 
   RECT rc;
   GetClientRect(hwnd, &rc);
@@ -340,9 +263,7 @@ void OpenJYEditor(HWND hwnd) {
       ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
     }
   }
-  for (auto &t : g_terminalTabs) {
-    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-  }
+
 
   UpdateMenu(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
@@ -416,7 +337,7 @@ void OpenDired(HWND hwnd) {
   g_appTabs.push_back(std::move(tab));
   int appIdx = static_cast<int>(g_appTabs.size()) - 1;
   g_activeAppTab = appIdx;
-  g_activeTerminalTab = -1;
+
 
   RECT rc;
   GetClientRect(hwnd, &rc);
@@ -432,9 +353,7 @@ void OpenDired(HWND hwnd) {
       ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
     }
   }
-  for (auto &t : g_terminalTabs) {
-    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-  }
+
 
   UpdateMenu(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
@@ -460,28 +379,9 @@ void KillAppProcessByIndex(HWND hwnd, size_t idx) {
   InvalidateRect(hwnd, NULL, FALSE);
 }
 
-void KillTerminalProcessByIndex(HWND hwnd, size_t idx) {
-  if (idx >= g_terminalTabs.size()) return;
-  if (g_terminalTabs[idx].hProcess) {
-    TerminateProcess(g_terminalTabs[idx].hProcess, 0);
-    CloseHandle(g_terminalTabs[idx].hProcess);
-    g_terminalTabs[idx].hProcess = nullptr;
-  }
-  if (g_terminalTabs[idx].hwnd) DestroyWindow(g_terminalTabs[idx].hwnd);
-  delete g_terminalTabs[idx].view;
-  g_terminalTabs.erase(g_terminalTabs.begin() + idx);
-  if (g_activeTerminalTab == static_cast<int>(idx)) g_activeTerminalTab = -1;
-  else if (g_activeTerminalTab > static_cast<int>(idx)) g_activeTerminalTab--;
-  UpdateMenu(hwnd);
-  InvalidateRect(hwnd, NULL, FALSE);
-}
-
 void KillActiveAppProcess(HWND hwnd) {
-  if (g_activeAppTab >= 0 && static_cast<size_t>(g_activeAppTab) < g_appTabs.size()) {
+  if (g_activeAppTab >= 0 && static_cast<size_t>(g_activeAppTab) < g_appTabs.size())
     KillAppProcessByIndex(hwnd, static_cast<size_t>(g_activeAppTab));
-  } else if (g_activeTerminalTab >= 0 && static_cast<size_t>(g_activeTerminalTab) < g_terminalTabs.size()) {
-    KillTerminalProcessByIndex(hwnd, static_cast<size_t>(g_activeTerminalTab));
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -568,21 +468,18 @@ void ScanPlugins() {
   }
 }
 
-void LaunchPlugin(HWND hwnd, size_t index) {
-  if (index >= g_plugins.size()) return;
-  PluginEntry &plugin = g_plugins[index];
-
+static void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
+                      const std::wstring& label, int type) {
   AppTabInfo tab;
-  tab.label = plugin.name;
-  tab.type = 10; // generic plugin type
-  tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting...",
-                             WS_CHILD | WS_VISIBLE | SS_CENTER,
-                             0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
-  tab.data = nullptr;
+  tab.label = label;
+  tab.type  = type;
+  tab.hwnd  = CreateWindowExW(0, L"STATIC", L"Starting...",
+                               WS_CHILD | WS_VISIBLE | SS_CENTER,
+                               0, 0, 100, 100, hwnd, nullptr,
+                               GetModuleHandleW(nullptr), nullptr);
   g_appTabs.push_back(std::move(tab));
   int appIdx = static_cast<int>(g_appTabs.size()) - 1;
   g_activeAppTab = appIdx;
-  g_activeTerminalTab = -1;
 
   RECT rc;
   GetClientRect(hwnd, &rc);
@@ -593,36 +490,42 @@ void LaunchPlugin(HWND hwnd, size_t index) {
   TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
   g_suppressTabChange = false;
 
-  for (auto &t : g_appTabs) {
-    if (t.hwnd) ShowWindow(t.hwnd, (t.hwnd == g_appTabs[appIdx].hwnd) ? SW_SHOW : SW_HIDE);
-  }
-  for (auto &t : g_terminalTabs) {
-    if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-  }
+  for (auto& t : g_appTabs)
+    if (t.hwnd) ShowWindow(t.hwnd, t.hwnd == g_appTabs[appIdx].hwnd ? SW_SHOW : SW_HIDE);
+  ShowScrollBar(hwnd, SB_BOTH, FALSE);
 
   UpdateMenu(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
 
-  // Launch the plugin process
+  std::wstring cmdLine = args.empty()
+    ? L"\"" + exePath + L"\""
+    : L"\"" + exePath + L"\" " + args;
   STARTUPINFOW si = { sizeof(si) };
-  PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"" + plugin.path + L"\"";
-  if (CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-    HWND foundHwnd = nullptr;
-    for (int i = 0; i < 50; ++i) {
-      Sleep(100);
-      EnumData data = { pi.dwProcessId, nullptr };
-      EnumWindows(EnumWindowsProc, (LPARAM)&data);
-      if (data.hwnd != nullptr) { foundHwnd = data.hwnd; break; }
-    }
-    if (foundHwnd) {
-      PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
-      PostMessageW(hwnd, WM_SET_PROCESS_HANDLE, (WPARAM)appIdx, (LPARAM)pi.hProcess);
-    } else {
-      CloseHandle(pi.hProcess);
-    }
-    CloseHandle(pi.hThread);
+  PROCESS_INFORMATION pi = {};
+  if (!CreateProcessW(nullptr, &cmdLine[0], nullptr, nullptr, FALSE,
+                      0, nullptr, nullptr, &si, &pi))
+    return;
+
+  HWND foundHwnd = nullptr;
+  for (int i = 0; i < 50 && !foundHwnd; ++i) {
+    Sleep(100);
+    EnumData data = { pi.dwProcessId, nullptr };
+    EnumWindows(EnumWindowsProc, (LPARAM)&data);
+    foundHwnd = data.hwnd;
   }
+  if (foundHwnd) {
+    PostMessageW(hwnd, WM_EMBED_APP, (WPARAM)foundHwnd, (LPARAM)appIdx);
+    PostMessageW(hwnd, WM_SET_PROCESS_HANDLE, (WPARAM)appIdx, (LPARAM)pi.hProcess);
+  } else {
+    TerminateProcess(pi.hProcess, 1);
+    CloseHandle(pi.hProcess);
+  }
+  CloseHandle(pi.hThread);
+}
+
+void LaunchPlugin(HWND hwnd, size_t index) {
+  if (index >= g_plugins.size()) return;
+  LaunchApp(hwnd, g_plugins[index].path, L"", g_plugins[index].name, 10);
 }
 
 static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
@@ -923,20 +826,25 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     }
     break;
   }
-  case IDM_TOOLS_TERMINAL: {
-    CreateNewTerminal(hwnd, L"powershell.exe");
-    break;
-  }
-  case IDM_TOOLS_TERMINAL_CMD: {
-    CreateNewTerminal(hwnd, L"cmd.exe");
-    break;
-  }
+  case IDM_TOOLS_TERMINAL:
+  case IDM_TOOLS_TERMINAL_CMD:
   case IDM_TOOLS_TERMINAL_BASH: {
-    std::wstring bashDir;
-    std::wstring cmd = SettingsManager::Instance().GetBashCommand(&bashDir);
-    if (!cmd.empty()) {
-      if (!bashDir.empty()) SetCurrentDirectoryW(bashDir.c_str());
-      CreateNewTerminal(hwnd, cmd);
+    wchar_t modPath[MAX_PATH];
+    GetModuleFileNameW(nullptr, modPath, MAX_PATH);
+    std::wstring exeDir = modPath;
+    exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
+    std::wstring termExe = exeDir + L"\\Terminal.exe";
+    if (LOWORD(wParam) == IDM_TOOLS_TERMINAL) {
+      LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL);
+    } else if (LOWORD(wParam) == IDM_TOOLS_TERMINAL_CMD) {
+      LaunchApp(hwnd, termExe, L"cmd.exe", L"cmd", TAB_TYPE_TERMINAL);
+    } else {
+      std::wstring bashDir;
+      std::wstring cmd = SettingsManager::Instance().GetBashCommand(&bashDir);
+      if (!cmd.empty()) {
+        if (!bashDir.empty()) SetCurrentDirectoryW(bashDir.c_str());
+        LaunchApp(hwnd, termExe, cmd, L"bash", TAB_TYPE_TERMINAL);
+      }
     }
     break;
   }
@@ -1070,30 +978,29 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         if (!bashCmd.empty()) {
           std::wstring cliDir = entries[idx].folder;
           if (!cliDir.empty()) SetCurrentDirectoryW(cliDir.c_str());
-          std::wstring cmdLine = bashCmd + L" -c \"" + entries[idx].command + L"; exec bash --login -i\"";
+          std::wstring shellArgs = bashCmd + L" -c \"" + entries[idx].command + L"; exec bash --login -i\"";
           std::wstring label = cliDir.substr(cliDir.find_last_of(L"\\/") + 1);
           if (label.empty()) label = L"CLI";
-          CreateNewTerminal(hwnd, cmdLine, label);
+          wchar_t modPath[MAX_PATH];
+          GetModuleFileNameW(nullptr, modPath, MAX_PATH);
+          std::wstring exeDir = modPath;
+          exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
+          LaunchApp(hwnd, exeDir + L"\\Terminal.exe", shellArgs, label, TAB_TYPE_TERMINAL);
         }
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&
                LOWORD(wParam) < IDM_BUFFERS_START + 100) {
       for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-      for (auto &t : g_terminalTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
       g_activeAppTab = -1;
-      g_activeTerminalTab = -1;
       g_editor->SwitchToBuffer(LOWORD(wParam) - IDM_BUFFERS_START);
       SetFocus(hwnd);
       UpdateMenu(hwnd);
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START + 200 &&
                LOWORD(wParam) < IDM_BUFFERS_START + 300) {
-      // App tab selected from Buffers menu
       int appIdx = (LOWORD(wParam) - IDM_BUFFERS_START - 200);
       if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
         for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-        for (auto &t : g_terminalTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
         g_activeAppTab = appIdx;
-        g_activeTerminalTab = -1;
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
         if (g_appTabs[appIdx].hwnd) {
           ShowWindow(g_appTabs[appIdx].hwnd, SW_SHOW);
@@ -1101,31 +1008,10 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         }
         UpdateMenu(hwnd);
       }
-    } else if (LOWORD(wParam) >= IDM_TERMINALS_START &&
-               LOWORD(wParam) < IDM_TERMINALS_START + 100) {
-      // Terminal tab selected from Buffers menu
-      int termIdx = LOWORD(wParam) - IDM_TERMINALS_START;
-      if (termIdx >= 0 && termIdx < static_cast<int>(g_terminalTabs.size())) {
-        for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-        for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-          if (g_terminalTabs[i].hwnd)
-            ShowWindow(g_terminalTabs[i].hwnd, static_cast<int>(i) == termIdx ? SW_SHOW : SW_HIDE);
-        }
-        g_activeAppTab = -1;
-        g_activeTerminalTab = termIdx;
-        ShowScrollBar(hwnd, SB_BOTH, FALSE);
-        if (g_terminalTabs[termIdx].hwnd)
-          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_terminalTabs[termIdx].hwnd, 0);
-        UpdateMenu(hwnd);
-      }
     } else if (LOWORD(wParam) >= IDM_PROCESS_KILL_START &&
                LOWORD(wParam) < IDM_PROCESS_KILL_START + 100) {
       size_t idx = LOWORD(wParam) - IDM_PROCESS_KILL_START;
       KillAppProcessByIndex(hwnd, idx);
-    } else if (LOWORD(wParam) >= IDM_PROCESS_KILL_START + 200 &&
-               LOWORD(wParam) < IDM_PROCESS_KILL_START + 300) {
-      size_t idx = LOWORD(wParam) - IDM_PROCESS_KILL_START - 200;
-      KillTerminalProcessByIndex(hwnd, idx);
     } else if (LOWORD(wParam) >= IDM_PLUGINS_START &&
                LOWORD(wParam) < IDM_PLUGINS_START + 200) {
       size_t idx = LOWORD(wParam) - IDM_PLUGINS_START;
