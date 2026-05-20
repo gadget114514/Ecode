@@ -156,7 +156,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
       if (g_activeAppTab == appIdx) {
         ShowWindow(childHwnd, SW_SHOW);
-        SetFocus(childHwnd);
+        PostMessageW(hwnd, WM_DEFERRED_FOCUS, (WPARAM)childHwnd, 0);
       } else {
         ShowWindow(childHwnd, SW_HIDE);
       }
