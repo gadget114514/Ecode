@@ -202,6 +202,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
+  case WM_HOTKEY:
+    if ((int)wParam == HOTKEY_ID_TABSWITCHER)
+      ShowTabSwitcher(hwnd);
+    return 0;
   case WM_DROPFILES: {
     HDROP hDrop = (HDROP)wParam;
     UINT count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
