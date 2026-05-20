@@ -8,7 +8,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
   DWORD processId = 0;
   GetWindowThreadProcessId(hwnd, &processId);
   if (processId == data->processId) {
-    if (IsWindowVisible(hwnd) && GetWindow(hwnd, GW_OWNER) == NULL) {
+    if (GetWindow(hwnd, GW_OWNER) == NULL) {
       data->hwnd = hwnd;
       return FALSE; // Stop enumerating
     }
@@ -38,7 +38,7 @@ static DWORD WINAPI FastFileSearchThread(LPVOID lpParam) {
 
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"" + exePath + L"\"";
+  std::wstring cmd = L"\"" + exePath + L"\" --embedded";
   if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
@@ -130,7 +130,7 @@ static DWORD WINAPI CSVEditorThread(LPVOID lpParam) {
 
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"" + exePath + L"\"";
+  std::wstring cmd = L"\"" + exePath + L"\" --embedded";
   if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
@@ -213,7 +213,7 @@ static DWORD WINAPI JYEditorThread(LPVOID lpParam) {
 
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"" + exePath + L"\"";
+  std::wstring cmd = L"\"" + exePath + L"\" --embedded";
   if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
@@ -302,7 +302,7 @@ static DWORD WINAPI DiredThread(LPVOID lpParam) {
   else
     diredPath = L"Dired.exe";
 
-  std::wstring cmd = L"\"" + diredPath + L"\" \"" + curDir + L"\"";
+  std::wstring cmd = L"\"" + diredPath + L"\" --embedded \"" + curDir + L"\"";
   if (CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0,
                      nullptr, nullptr, &si, &pi)) {
     HWND foundHwnd = nullptr;
@@ -511,9 +511,8 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   UpdateMenu(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);
 
-  std::wstring cmdLine = args.empty()
-    ? L"\"" + exePath + L"\""
-    : L"\"" + exePath + L"\" " + args;
+  std::wstring cmdLine = L"\"" + exePath + L"\" --embedded";
+  if (!args.empty()) cmdLine += L" " + args;
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = {};
   if (!CreateProcessW(nullptr, &cmdLine[0], nullptr, nullptr, FALSE,
