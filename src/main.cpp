@@ -33,8 +33,6 @@ Editor *g_editor = nullptr;
 EditorBufferRenderer *g_renderer = nullptr;
 ScriptEngine *g_scriptEngine = nullptr;
 LspClient *g_lspClient = nullptr;
-std::vector<TerminalTabInfo> g_terminalTabs;
-int g_activeTerminalTab = -1;
 std::vector<AppTabInfo> g_appTabs;
 std::vector<PluginEntry> g_plugins;
 int g_activeAppTab = -1;

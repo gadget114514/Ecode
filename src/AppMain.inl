@@ -13,12 +13,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   case WM_CREATE:
     return HandleCreate(hwnd);
   case WM_SETFOCUS:
-    // Route focus to the active child based on current tab
-    if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size()) {
+    if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size())
       SetFocus(g_appTabs[g_activeAppTab].hwnd);
-    } else if (g_activeTerminalTab >= 0 && (size_t)g_activeTerminalTab < g_terminalTabs.size()) {
-      SetFocus(g_terminalTabs[g_activeTerminalTab].hwnd);
-    }
     return 0;
   case WM_DEFERRED_FOCUS:
     if (IsWindow((HWND)wParam))
@@ -227,43 +223,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       size_t bufCount = g_editor->GetBuffers().size();
       int appStart = static_cast<int>(bufCount);
       int appEnd = appStart + static_cast<int>(g_appTabs.size());
-      int termStart = appEnd;
-      int termEnd = termStart + static_cast<int>(g_terminalTabs.size());
 
       if (sel >= appStart && sel < appEnd) {
-        // Switch to an app tab
         int appIdx = sel - appStart;
         for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-        for (auto &t : g_terminalTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
         g_activeAppTab = appIdx;
-        g_activeTerminalTab = -1;
         ShowScrollBar(hwnd, SB_BOTH, FALSE);
         if (g_appTabs[appIdx].hwnd) {
           ShowWindow(g_appTabs[appIdx].hwnd, SW_SHOW);
           PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_appTabs[appIdx].hwnd, 0);
         }
         UpdateMenu(hwnd);
-      } else if (sel >= termStart && sel < termEnd) {
-        // Switch to a terminal tab
-        int termIdx = sel - termStart;
-        for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-        for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-          if (g_terminalTabs[i].hwnd)
-            ShowWindow(g_terminalTabs[i].hwnd, static_cast<int>(i) == termIdx ? SW_SHOW : SW_HIDE);
-        }
-        g_activeAppTab = -1;
-        g_activeTerminalTab = termIdx;
-        ShowScrollBar(hwnd, SB_BOTH, FALSE);
-        // Defer focus so the tab control's click processing finishes first
-        if (g_terminalTabs[termIdx].hwnd) {
-          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_terminalTabs[termIdx].hwnd, 0);
-        }
       } else if (sel >= 0 && sel < static_cast<int>(bufCount)) {
-        // Switch to an editor buffer tab
         for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-        for (auto &t : g_terminalTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
         g_activeAppTab = -1;
-        g_activeTerminalTab = -1;
         ShowScrollBar(hwnd, SB_BOTH, TRUE);
         g_editor->SwitchToBuffer(static_cast<size_t>(sel));
         SetFocus(hwnd);
@@ -312,14 +285,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         size_t bufCount = g_editor->GetBuffers().size();
         int appStart = static_cast<int>(bufCount);
         int appEnd = appStart + static_cast<int>(g_appTabs.size());
-        int termStart = appEnd;
-        int termEnd = termStart + static_cast<int>(g_terminalTabs.size());
         bool isAppTab = (tabIndex >= appStart && tabIndex < appEnd);
-        bool isTerminalTab = (tabIndex >= termStart && tabIndex < termEnd);
         HMENU hMenu = CreatePopupMenu();
-        if (isTerminalTab) {
-          AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close Terminal");
-        } else if (isAppTab) {
+        if (isAppTab) {
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close");
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL + 1, L"Kill Process");
         } else if (tabIndex >= 0 && tabIndex < static_cast<int>(bufCount)) {
@@ -364,37 +332,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           }
         } else if (res == IDM_TAB_CLOSE_TERMINAL) {
           int appStart = static_cast<int>(bufCount);
-          int appEnd = appStart + static_cast<int>(g_appTabs.size());
-          if (tabIndex >= appStart && tabIndex < appEnd) {
-            // Close app tab (kill process, destroy window)
-            int appIdx = tabIndex - appStart;
-            if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
-              if (g_appTabs[appIdx].hProcess) {
-                TerminateProcess(g_appTabs[appIdx].hProcess, 0);
-                CloseHandle(g_appTabs[appIdx].hProcess);
-              }
-              if (g_appTabs[appIdx].hwnd) DestroyWindow(g_appTabs[appIdx].hwnd);
-              g_appTabs.erase(g_appTabs.begin() + appIdx);
-              if (g_activeAppTab == appIdx) g_activeAppTab = -1;
-              else if (g_activeAppTab > appIdx) g_activeAppTab--;
-              UpdateMenu(hwnd);
-              InvalidateRect(hwnd, NULL, FALSE);
+          int appIdx = tabIndex - appStart;
+          if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
+            if (g_appTabs[appIdx].hProcess) {
+              TerminateProcess(g_appTabs[appIdx].hProcess, 0);
+              CloseHandle(g_appTabs[appIdx].hProcess);
             }
-          } else {
-            int termIdx = tabIndex - (appEnd);
-            if (termIdx >= 0 && termIdx < static_cast<int>(g_terminalTabs.size())) {
-              if (g_terminalTabs[termIdx].hwnd)
-                DestroyWindow(g_terminalTabs[termIdx].hwnd);
-              delete g_terminalTabs[termIdx].view;
-              g_terminalTabs.erase(g_terminalTabs.begin() + termIdx);
-              if (g_activeTerminalTab == termIdx) {
-                g_activeTerminalTab = -1;
-              } else if (g_activeTerminalTab > termIdx) {
-                g_activeTerminalTab--;
-              }
-              UpdateMenu(hwnd);
-              InvalidateRect(hwnd, NULL, FALSE);
-            }
+            if (g_appTabs[appIdx].hwnd) DestroyWindow(g_appTabs[appIdx].hwnd);
+            g_appTabs.erase(g_appTabs.begin() + appIdx);
+            if (g_activeAppTab == appIdx) g_activeAppTab = -1;
+            else if (g_activeAppTab > appIdx) g_activeAppTab--;
+            UpdateMenu(hwnd);
+            InvalidateRect(hwnd, NULL, FALSE);
           }
         }
       }
