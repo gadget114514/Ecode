@@ -457,9 +457,11 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
     // --- window operations ---
     case L't': sendWindowReport(P(0,0)); break;
 
-    // --- cursor style (DECSCUSR) ---
+    // --- cursor style (DECSCUSR: CSI Ps SP q) ---
     case L'q':
-        if (!params.empty() && (params.back() == L' ' || params.front() == L' '))
+        // Intermediate byte SP (0x20) is stripped from `params` during filtering,
+        // so check the original `raw` string for the space instead.
+        if (raw.find(L' ') != std::wstring::npos)
             handleCursorStyle(P(0,0));
         break;
 
