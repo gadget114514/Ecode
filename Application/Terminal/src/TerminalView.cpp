@@ -71,7 +71,7 @@ TerminalView::~TerminalView() {
 HWND TerminalView::Create(HWND parent) {
     hwnd_ = CreateWindowExW(
         0, kClassName, L"",
-        WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
+        WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
         0, 0, 100, 100,
         parent, nullptr,
         (HINSTANCE)GetWindowLongPtr(parent, GWLP_HINSTANCE),

@@ -1,14 +1,30 @@
-get_filename_component(dst_dir "${dst}" DIRECTORY)
-get_filename_component(dst_name "${dst}" NAME)
-file(MAKE_DIRECTORY "${dst_dir}")
-file(MAKE_DIRECTORY "${plugindir}")
+# copy_plugin.cmake
+# Copies a plugin executable from its build output to output directories.
+# Handles two output conventions:
+#   1. ${src_dir}/bin/${config}/${name}.exe  (explicit RUNTIME_OUTPUT_DIRECTORY)
+#   2. ${build_dir}/${config}/${name}.exe     (CMake default build-tree)
+# Each plugin is built independently via its own CMakeLists.txt.
 
-if(EXISTS "${src1}")
-  configure_file("${src1}" "${dst}" COPYONLY)
-elseif(EXISTS "${src2}")
-  configure_file("${src2}" "${dst}" COPYONLY)
+set(src_exe  "${src_dir}/bin/${config}/${name}.exe")
+set(bld_exe  "${build_dir}/${config}/${name}.exe")
+set(out_exe  "${out_dir}/${name}.exe")
+set(plug_exe "${out_dir}/plugins/${name}.exe")
+
+if(EXISTS "${src_exe}")
+  set(exe "${src_exe}")
+elseif(EXISTS "${bld_exe}")
+  set(exe "${bld_exe}")
+else()
+  message(WARNING "${name}.exe not found:\n  ${src_exe}\n  ${bld_exe}")
+  return()
 endif()
 
-if(EXISTS "${dst}")
-  configure_file("${dst}" "${plugindir}/${dst_name}" COPYONLY)
-endif()
+# Use cmd.exe to copy (handles locked destination files gracefully)
+file(TO_NATIVE_PATH "${exe}"     _exe)
+file(TO_NATIVE_PATH "${out_exe}" _out)
+file(TO_NATIVE_PATH "${plug_exe}" _plug)
+execute_process(
+  COMMAND cmd.exe /c "copy /Y \"${_exe}\" \"${_out}\" > nul & copy /Y \"${_exe}\" \"${_plug}\" > nul & exit 0"
+  OUTPUT_QUIET ERROR_QUIET
+)
+message(STATUS "Copied ${name}.exe")
