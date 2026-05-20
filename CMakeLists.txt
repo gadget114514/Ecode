@@ -226,6 +226,27 @@ add_executable(test_localization
     src/Localization.cpp
 )
 
+add_executable(test_buffer_stress
+    tests/test_buffer_stress.cpp
+    ${TEST_BASE_SOURCES}
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src-duktape/duktape.c
+)
+target_link_libraries(test_buffer_stress
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+    d2d1
+    dwrite
+)
+
 # Libraries to link
 target_link_libraries(ecode 
     user32 
@@ -267,6 +288,7 @@ set_target_properties(test_shortcuts PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTP
 set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_string_helpers PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(test_localization PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set_target_properties(test_buffer_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 
 # Copy scripts directory to output
 add_custom_command(TARGET ecode POST_BUILD
