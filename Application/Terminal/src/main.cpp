@@ -37,14 +37,28 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProc(hwnd, msg, wp, lp);
 }
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (argv && argc >= 2) {
-        g_shell = argv[1];
-        for (int i = 2; i < argc; ++i) {
+
+    // Check for --embedded flag (host requests hidden window for embedding)
+    bool embedded = false;
+    int argIdx = 1;
+    if (argv && argc >= 2 && wcscmp(argv[1], L"--embedded") == 0) {
+        embedded = true;
+        argIdx = 2;
+    }
+
+    if (argv && argc > argIdx) {
+        g_shell = argv[argIdx];
+        if (g_shell.find(L' ') != std::wstring::npos)
+            g_shell = L"\"" + g_shell + L"\"";
+        for (int i = argIdx + 1; i < argc; ++i) {
             g_shell += L" ";
-            g_shell += argv[i];
+            std::wstring arg = argv[i];
+            if (arg.find(L' ') != std::wstring::npos)
+                arg = L"\"" + arg + L"\"";
+            g_shell += arg;
         }
     }
     if (argv) LocalFree(argv);
@@ -75,8 +89,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
         NULL, NULL, hInstance, NULL);
     if (!hwnd) return 1;
 
-    ShowWindow(hwnd, SW_SHOWNORMAL);
-    UpdateWindow(hwnd);
+    // When embedded, stay hidden until host sends WM_EMBED_APP
+    ShowWindow(hwnd, embedded ? SW_HIDE : nCmdShow);
 
     if (g_view && !g_view->StartSession(g_shell)) {
         std::wstring msg = L"Failed to start shell: " + g_shell + L"\n\n" + g_view->LastError();

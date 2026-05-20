@@ -19,6 +19,7 @@
 #include <regex>
 #include <set>
 #include <shlobj.h>
+#include <shellapi.h>
 #include <string>
 #include <vector>
 #include <windows.h>
@@ -49,6 +50,9 @@ bool sortAscending = true;
 WNDPROC oldEditProc = NULL;
 WNDPROC oldListProc = NULL;
 bool isStartupGuarded = true;
+
+// Embedded mode: host requests hidden window for embedding
+bool g_embedded = false;
 
 // Guarded Procedures to ignore disruptive messages during startup
 LRESULT CALLBACK GuardedEditProc(HWND hWnd, UINT uMsg, WPARAM wParam,
@@ -980,6 +984,10 @@ INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam,
     ResizeLayout(hDlg, LOWORD(lParam), HIWORD(lParam));
     break;
   case WM_INITDIALOG: {
+    // Embedded: stay hidden until host embeds via WM_EMBED_APP
+    if (g_embedded)
+      ShowWindow(hDlg, SW_HIDE);
+
     // Stage 1 Fix: Ensure no capture immediately and LOCKDOWN the list view
     ReleaseCapture();
 
@@ -1300,6 +1308,15 @@ INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam,
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPSTR lpCmdLine,
                    int nShowCmd) {
+  // Check for --embedded flag (host requests hidden window for embedding)
+  {
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv && argc >= 2 && wcscmp(argv[1], L"--embedded") == 0)
+      g_embedded = true;
+    if (argv) LocalFree(argv);
+  }
+
   INITCOMMONCONTROLSEX icex;
   icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
   icex.dwICC = ICC_WIN95_CLASSES | ICC_DATE_CLASSES;
