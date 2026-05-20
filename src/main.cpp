@@ -65,3 +65,4 @@ bool g_grepSearchActive = false;
 #include "TabDragHandler.inl"
 #include "WindowHandlers_Core.inl"
 #include "WindowHandlers_Input.inl"
+#include "TabSwitcherView.inl"
