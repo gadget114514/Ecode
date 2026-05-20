@@ -1,7 +1,17 @@
 #include <windows.h>
+#include <shellapi.h>
 #include "EditorWindow.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+    // Check for --embedded flag (host requests hidden window for embedding)
+    {
+        int argc;
+        LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+        if (argv && argc >= 2 && wcscmp(argv[1], L"--embedded") == 0)
+            nCmdShow = SW_HIDE;
+        if (argv) LocalFree(argv);
+    }
+
     // Initialize COM
     if (FAILED(CoInitialize(NULL))) {
         return 0;
