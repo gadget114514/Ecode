@@ -275,7 +275,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                         LPARAM lParam);
 INT_PTR CALLBACK AiSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                    LPARAM lParam);
-void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring &label);
+void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
+               const std::wstring& label, int type);
 
 INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                  LPARAM lParam) {
@@ -906,12 +907,16 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       }
       HWND parent = GetParent(hDlg);
       SetCurrentDirectoryW(folder);
-      std::wstring cmdLine = bashCmd + L" -c \"" + cmd + L"; exec bash --login -i\"";
+      std::wstring shellArgs = bashCmd + L" -c \"" + cmd + L"; exec bash --login -i\"";
       std::wstring label = std::wstring(folder);
       size_t pos = label.find_last_of(L"\\/");
       if (pos != std::wstring::npos) label = label.substr(pos + 1);
       if (label.empty()) label = L"CLI";
-      CreateNewTerminal(parent, cmdLine, label);
+      wchar_t modPath[MAX_PATH];
+      GetModuleFileNameW(nullptr, modPath, MAX_PATH);
+      std::wstring exeDir = modPath;
+      exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
+      LaunchApp(parent, exeDir + L"\\Terminal.exe", shellArgs, label, 10);
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDCANCEL) {

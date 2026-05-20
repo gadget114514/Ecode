@@ -1,6 +1,6 @@
 // =============================================================================
 // TabDragHandler.inl
-// Tab control subclass for drag-reordering of terminal tabs
+// Tab control subclass for drag-reordering of app tabs
 // Included by main.cpp
 // =============================================================================
 
@@ -11,8 +11,8 @@ static LRESULT CALLBACK TabSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
     TCHITTESTINFO hti = {{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, 0};
     int tabIndex = TabCtrl_HitTest(hwnd, &hti);
     size_t bufCount = g_editor->GetBuffers().size();
-    if (tabIndex >= static_cast<int>(bufCount) &&
-        tabIndex < static_cast<int>(bufCount + g_terminalTabs.size())) {
+    int appEnd = static_cast<int>(bufCount + g_appTabs.size());
+    if (tabIndex >= static_cast<int>(bufCount) && tabIndex < appEnd) {
       g_isDraggingTab = true;
       g_dragTabFrom = tabIndex;
       SetCapture(hwnd);
@@ -25,9 +25,9 @@ static LRESULT CALLBACK TabSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
       TCHITTESTINFO hti = {{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, 0};
       int hoverTab = TabCtrl_HitTest(hwnd, &hti);
       size_t bufCount = g_editor->GetBuffers().size();
+      int appEnd = static_cast<int>(bufCount + g_appTabs.size());
       if (hoverTab >= static_cast<int>(bufCount) &&
-          hoverTab < static_cast<int>(bufCount + g_terminalTabs.size()) &&
-          hoverTab != g_dragTabFrom) {
+          hoverTab < appEnd && hoverTab != g_dragTabFrom) {
         g_suppressTabChange = true;
         TabCtrl_SetCurSel(hwnd, hoverTab);
         g_suppressTabChange = false;
@@ -43,19 +43,19 @@ static LRESULT CALLBACK TabSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
       TCHITTESTINFO hti = {{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, 0};
       int dropTab = TabCtrl_HitTest(hwnd, &hti);
       size_t bufCount = g_editor->GetBuffers().size();
+      int appEnd = static_cast<int>(bufCount + g_appTabs.size());
 
       if (dropTab >= static_cast<int>(bufCount) &&
-          dropTab < static_cast<int>(bufCount + g_terminalTabs.size()) &&
-          dropTab != g_dragTabFrom) {
+          dropTab < appEnd && dropTab != g_dragTabFrom) {
         int fromIdx = g_dragTabFrom - static_cast<int>(bufCount);
         int toIdx = dropTab - static_cast<int>(bufCount);
-        if (fromIdx >= 0 && fromIdx < static_cast<int>(g_terminalTabs.size()) &&
-            toIdx >= 0 && toIdx < static_cast<int>(g_terminalTabs.size())) {
-          std::swap(g_terminalTabs[fromIdx], g_terminalTabs[toIdx]);
-          if (g_activeTerminalTab == fromIdx)
-            g_activeTerminalTab = toIdx;
-          else if (g_activeTerminalTab == toIdx)
-            g_activeTerminalTab = fromIdx;
+        if (fromIdx >= 0 && fromIdx < static_cast<int>(g_appTabs.size()) &&
+            toIdx >= 0 && toIdx < static_cast<int>(g_appTabs.size())) {
+          std::swap(g_appTabs[fromIdx], g_appTabs[toIdx]);
+          if (g_activeAppTab == fromIdx)
+            g_activeAppTab = toIdx;
+          else if (g_activeAppTab == toIdx)
+            g_activeAppTab = fromIdx;
           HWND parent = GetParent(hwnd);
           if (parent) UpdateMenu(parent);
         }

@@ -41,7 +41,6 @@ namespace fs = std::filesystem;
 #include "../include/LspClient.h"
 #include "../include/ScriptEngine.h"
 #include "../include/SettingsManager.h"
-#include "../include/TerminalView.h"
 
 // Forward declarations
 class Buffer;
@@ -51,10 +50,8 @@ void UpdateTabs(HWND hwnd);
 void EnsureCaretVisible(HWND hwnd);
 bool PromptSaveBuffer(HWND hwnd, Buffer *buf);
 void HideMinibuffer();
-void CreateNewTerminal(HWND hwnd, const std::wstring &shell, const std::wstring &label = L"");
 void ShowCliDialog(HWND hwnd);
 void KillAppProcessByIndex(HWND hwnd, size_t idx);
-void KillTerminalProcessByIndex(HWND hwnd, size_t idx);
 void KillActiveAppProcess(HWND hwnd);
 void ScanPlugins();
 void LaunchPlugin(HWND hwnd, size_t index);
@@ -202,15 +199,7 @@ extern Editor *g_editor;
 extern EditorBufferRenderer *g_renderer;
 extern ScriptEngine *g_scriptEngine;
 extern LspClient *g_lspClient;
-struct TerminalTabInfo {
-    TerminalView* view = nullptr;
-    HWND hwnd = nullptr;
-    std::wstring shell;
-    std::wstring label;
-    HANDLE hProcess = nullptr;
-};
-extern std::vector<TerminalTabInfo> g_terminalTabs;
-extern int g_activeTerminalTab; // -1 = no terminal active, 0+ = index in g_terminalTabs
+constexpr int TAB_TYPE_TERMINAL = 10;
 
 struct PluginEntry {
     std::wstring name;
