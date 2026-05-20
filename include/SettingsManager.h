@@ -71,6 +71,10 @@ public:
   void SetTabGridCellW(int w) { m_tabGridCellW = w; }
   int GetTabGridCellH() const { return m_tabGridCellH; }
   void SetTabGridCellH(int h) { m_tabGridCellH = h; }
+  bool IsTabGridRefreshEnabled() const { return m_tabGridRefreshEnabled; }
+  void SetTabGridRefreshEnabled(bool enabled) { m_tabGridRefreshEnabled = enabled; }
+  int GetTabGridRefreshIntervalMs() const { return m_tabGridRefreshIntervalMs; }
+  void SetTabGridRefreshIntervalMs(int ms) { m_tabGridRefreshIntervalMs = ms; }
 
   // AI Settings
   std::wstring GetAIVendor() const { return m_aiVendor; }
@@ -164,6 +168,8 @@ private:
   std::wstring m_pluginsDirectory;
   int m_tabGridCellW = 240;
   int m_tabGridCellH = 170;
+  bool m_tabGridRefreshEnabled = false;
+  int m_tabGridRefreshIntervalMs = 1000;
   bool m_showAI = false;
   std::vector<CliEntry> m_cliEntries;
   std::vector<DiredPair> m_diredPairs;

@@ -365,8 +365,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         GetCurrentDirectoryW(MAX_PATH, curDir);
         int argc = 0;
         LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-        NavigateTo(&g_panes[0], (argv && argc > 1) ? argv[1] : curDir);
-        std::wstring rightPath = (argv && argc > 2) ? argv[2] : L"";
+        int argIdx = 1;
+        if (argv && argc > argIdx && wcscmp(argv[argIdx], L"--embedded") == 0)
+            ++argIdx;
+        NavigateTo(&g_panes[0], (argv && argc > argIdx) ? argv[argIdx] : curDir);
+        std::wstring rightPath = (argv && argc > argIdx + 1) ? argv[argIdx + 1] : L"";
         if (argv) LocalFree(argv);
 
         if (!rightPath.empty() && GetFileAttributesW(rightPath.c_str()) != INVALID_FILE_ATTRIBUTES)
@@ -557,6 +560,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ---------------------------------------------------------------------------
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nCmdShow) {
     g_hInst = hInst;
+
+    // Check for --embedded flag (host requests hidden window for embedding)
+    {
+        int argc;
+        LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+        if (argv && argc >= 2 && wcscmp(argv[1], L"--embedded") == 0)
+            nCmdShow = SW_HIDE;
+        if (argv) LocalFree(argv);
+    }
 
     // Initialize D2D
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2d);

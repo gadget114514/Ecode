@@ -3,47 +3,60 @@
 #include <cmath>
 #include <windowsx.h>
 #include <commctrl.h>
+#include "Editor.h"
+#include "SettingsManager.h"
 
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "dwmapi.lib")
 
 // ---------------------------------------------------------------------------
-// TerminalTabInfo (mirrors Globals.inl)
+// Terminal entry synced from g_appTabs (filtered by TAB_TYPE_TERMINAL)
 // ---------------------------------------------------------------------------
-struct TerminalTabInfo {
-    TerminalView* view = nullptr;
+struct TerminalEntry {
     HWND hwnd = nullptr;
-    std::wstring shell;
     std::wstring label;
-    HANDLE hProcess = nullptr;
+    int appTabIndex = -1;
 };
+static std::vector<TerminalEntry> s_terminals;
 
 // ---------------------------------------------------------------------------
-// Global externs (provided by main.cpp)
+// Global externs from main app
 // ---------------------------------------------------------------------------
-extern std::vector<TerminalTabInfo> g_terminalTabs;
-extern int g_activeTerminalTab;
-extern int g_activeAppTab;
-extern HWND g_mainHwnd;
-extern HWND g_tabHwnd;
-extern bool g_suppressTabChange;
-#include "../include/Editor.h"
-extern Editor* g_editor;
-
-extern void UpdateMenu(HWND hwnd);
-extern void UpdateTabs(HWND hwnd);
-
 struct AppTabInfo {
     HWND hwnd = nullptr;
     std::wstring label;
-    int type = 0;
+    int type;
     void* data = nullptr;
     HANDLE hProcess = nullptr;
 };
 extern std::vector<AppTabInfo> g_appTabs;
+extern int g_activeAppTab;
+extern HWND g_mainHwnd;
+extern HWND g_tabHwnd;
+extern bool g_suppressTabChange;
+extern Editor* g_editor;
+extern void UpdateMenu(HWND hwnd);
+extern void UpdateTabs(HWND hwnd);
 
+#define TAB_TYPE_TERMINAL 10
 #define WM_DEFERRED_FOCUS (WM_USER + 205)
+
+// ---------------------------------------------------------------------------
+// Sync terminal list from g_appTabs
+// ---------------------------------------------------------------------------
+static void SyncTerminalTabs() {
+    s_terminals.clear();
+    for (int i = 0; i < (int)g_appTabs.size(); ++i) {
+        if (g_appTabs[i].type == TAB_TYPE_TERMINAL) {
+            TerminalEntry e;
+            e.hwnd = g_appTabs[i].hwnd;
+            e.label = g_appTabs[i].label;
+            e.appTabIndex = i;
+            s_terminals.push_back(std::move(e));
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // DWM thumbnail + snapshot helpers
@@ -66,20 +79,18 @@ HTHUMBNAIL TerminalGridView::RegisterChildThumb(HWND dest, HWND src) {
 void TerminalGridView::RegisterThumbnails() {
     UnregisterThumbnails();
     ReleaseSnapshots();
+    SyncTerminalTabs();
 
-    int count = (int)g_terminalTabs.size();
+    int count = (int)s_terminals.size();
     thumbnails_.resize(count, nullptr);
     snapshots_.resize(count, nullptr);
     snapshotD2D_.resize(count, nullptr);
 
     for (int i = 0; i < count; ++i) {
-        HWND src = g_terminalTabs[i].hwnd;
+        HWND src = s_terminals[i].hwnd;
         if (!src || !IsWindow(src)) continue;
 
         thumbnails_[i] = RegisterChildThumb(hwnd_, src);
-        // Always capture a snapshot as fallback:
-        //   - DWM succeeds but shows blank for hidden/GPU-rendered windows
-        //   - DWM fails entirely (WS_CHILD stripping refused, etc.)
         snapshots_[i] = CaptureSnapshot(src);
     }
     UpdateThumbnailRects();
@@ -110,11 +121,29 @@ void TerminalGridView::UpdateThumbnailRects() {
 }
 
 HBITMAP TerminalGridView::CaptureSnapshot(HWND src) {
+    bool wasVisible = IsWindowVisible(src);
+    if (!wasVisible) {
+        ShowWindow(src, SW_SHOW);
+        RedrawWindow(src, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        DwmFlush();
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_PAINT) {
+                DispatchMessageW(&msg);
+            }
+        }
+        Sleep(30);
+    }
+
     RECT rc;
     GetClientRect(src, &rc);
     int w = rc.right - rc.left;
     int h = rc.bottom - rc.top;
-    if (w <= 0 || h <= 0) return nullptr;
+    if (w <= 0 || h <= 0) {
+        if (!wasVisible) ShowWindow(src, SW_HIDE);
+        return nullptr;
+    }
 
     HDC     hdcScreen = GetDC(nullptr);
     HDC     hdcMem    = CreateCompatibleDC(hdcScreen);
@@ -122,10 +151,22 @@ HBITMAP TerminalGridView::CaptureSnapshot(HWND src) {
     ReleaseDC(nullptr, hdcScreen);
 
     HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
-    // PW_RENDERFULLCONTENT captures D2D/DirectX content (Windows 8.1+).
     BOOL ok = PrintWindow(src, hdcMem, PW_CLIENTONLY | PW_RENDERFULLCONTENT);
+    if (!ok)
+        ok = PrintWindow(src, hdcMem, PW_CLIENTONLY);
+    if (!ok) {
+        if (IsWindowVisible(src)) {
+            HDC hdcScreen2 = GetDC(nullptr);
+            BitBlt(hdcMem, 0, 0, w, h, hdcScreen2,
+                   rc.left, rc.top, SRCCOPY);
+            ReleaseDC(nullptr, hdcScreen2);
+            ok = TRUE;
+        }
+    }
     SelectObject(hdcMem, hOld);
     DeleteDC(hdcMem);
+
+    if (!wasVisible) ShowWindow(src, SW_HIDE);
 
     if (!ok) { DeleteObject(hBmp); return nullptr; }
     return hBmp;
@@ -223,7 +264,7 @@ bool TerminalGridView::Create(HWND parent) {
 
     hwnd_ = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_NOACTIVATE,
-        kClassName, L"Terminal Grid View",
+        kClassName, L"Terminal Grid View (0 tabs)",
         WS_POPUP | WS_CLIPCHILDREN,
         0, 0, 100, 100,
         parent, nullptr,
@@ -238,7 +279,8 @@ bool TerminalGridView::Create(HWND parent) {
 // ---------------------------------------------------------------------------
 void TerminalGridView::Show() {
     if (!hwnd_ || visible_) return;
-    if (g_terminalTabs.empty()) return;
+    SyncTerminalTabs();
+    if (s_terminals.empty()) return;
 
     visible_ = true;
     selectedIndex_ = 0;
@@ -254,14 +296,20 @@ void TerminalGridView::Show() {
     int winX = parentRc.left + (parentRc.right - parentRc.left - winW) / 2;
     int winY = parentRc.top + (parentRc.bottom - parentRc.top - winH) / 3;
 
+    {
+        std::wstring title = L"Terminal Grid View ("
+                           + std::to_wstring(s_terminals.size()) + L" tabs)";
+        SetWindowTextW(hwnd_, title.c_str());
+    }
     SetWindowPos(hwnd_, HWND_TOPMOST, winX, winY, winW, winH,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     SetFocus(hwnd_);
     RegisterThumbnails();
 
-    // Start refresh timer
-    if (!refreshTimer_)
-        refreshTimer_ = SetTimer(hwnd_, kTimerId, kTimerIntervalMs, nullptr);
+    // Start refresh timer (only if enabled in settings)
+    if (!refreshTimer_ && SettingsManager::Instance().IsTabGridRefreshEnabled())
+        refreshTimer_ = SetTimer(hwnd_, kTimerId,
+            (UINT)SettingsManager::Instance().GetTabGridRefreshIntervalMs(), nullptr);
 
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -288,7 +336,7 @@ void TerminalGridView::Refresh() {
 // Compute grid layout
 // ---------------------------------------------------------------------------
 void TerminalGridView::ComputeGridLayout() {
-    cellCount_ = (int)g_terminalTabs.size();
+    cellCount_ = (int)s_terminals.size();
     if (cellCount_ <= 0) { columns_ = 1; rows_ = 1; return; }
     columns_ = std::max(1, (int)ceil(sqrt((double)cellCount_)));
     rows_ = (cellCount_ + columns_ - 1) / columns_;
@@ -372,7 +420,6 @@ LRESULT TerminalGridView::OnCreate(HWND hwnd) {
             labelFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         }
 
-        // Cell character text format (tiny chars for thumbnail content)
         dwFactory_->CreateTextFormat(
             L"Consolas", nullptr,
             DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL,
@@ -422,7 +469,6 @@ bool TerminalGridView::EnsureRenderTarget() {
 }
 
 void TerminalGridView::ReleaseRenderTarget() {
-    // snapshotD2D_ bitmaps are tied to renderTarget_ — invalidate them on recreation
     for (auto& b : snapshotD2D_)
         if (b) { b->Release(); b = nullptr; }
     if (brush_)        { brush_->Release();        brush_        = nullptr; }
@@ -459,6 +505,7 @@ void TerminalGridView::OnPaint() {
     if (!cellTextFormat_ || !labelFormat_) { rt->EndDraw(); EndPaint(hwnd_, &ps); return; }
 
     // Recompute grid in case terminals changed
+    SyncTerminalTabs();
     ComputeGridLayout();
 
     for (int i = 0; i < cellCount_; ++i) {
@@ -478,7 +525,7 @@ void TerminalGridView::OnPaint() {
 // ---------------------------------------------------------------------------
 void TerminalGridView::RenderThumbnail(ID2D1RenderTarget* rt, int termIndex,
                                         const D2D1_RECT_F& cellRect, bool selected) {
-    if (termIndex >= (int)g_terminalTabs.size()) return;
+    if (termIndex >= (int)s_terminals.size()) return;
 
     // Cell background
     if (auto* b = GetBrush(cellBgColor_))
@@ -492,11 +539,9 @@ void TerminalGridView::RenderThumbnail(ID2D1RenderTarget* rt, int termIndex,
     bool hasSnap = termIndex < (int)snapshots_.size()  && snapshots_[termIndex];
 
     if (hasDwm) {
-        // DWM composites the live thumbnail on top — paint a dark base it will cover
         if (auto* b = GetBrush(D2D1::ColorF(0.04f, 0.04f, 0.04f)))
             rt->FillRectangle(thumbRect, b);
     } else if (hasSnap) {
-        // Lazy-create ID2D1Bitmap from the captured HBITMAP
         if (termIndex >= (int)snapshotD2D_.size())
             snapshotD2D_.resize(termIndex + 1, nullptr);
         if (!snapshotD2D_[termIndex])
@@ -508,7 +553,6 @@ void TerminalGridView::RenderThumbnail(ID2D1RenderTarget* rt, int termIndex,
         else if (auto* b = GetBrush(cellBgColor_))
             rt->FillRectangle(thumbRect, b);
     } else {
-        // No thumbnail, no snapshot — dark placeholder
         if (auto* b = GetBrush(D2D1::ColorF(0.04f, 0.04f, 0.04f)))
             rt->FillRectangle(thumbRect, b);
     }
@@ -522,7 +566,7 @@ void TerminalGridView::RenderThumbnail(ID2D1RenderTarget* rt, int termIndex,
     if (auto* b = GetBrush(labelBgColor_))
         rt->FillRectangle(labelRect, b);
 
-    std::wstring label = g_terminalTabs[termIndex].label;
+    std::wstring label = s_terminals[termIndex].label;
     if (auto* b = GetBrush(textColor_)) {
         rt->DrawText(label.c_str(), (UINT32)label.size(),
                      labelFormat_, labelRect, b,
@@ -621,8 +665,9 @@ void TerminalGridView::OnLButtonDown(int px, int py) {
 // ---------------------------------------------------------------------------
 void TerminalGridView::OnTimer() {
     if (visible_ && hwnd_) {
-        // Update cell count in case terminals were added/removed
-        if ((int)g_terminalTabs.size() != cellCount_) {
+        SyncTerminalTabs();
+        int newCount = (int)s_terminals.size();
+        if (newCount != cellCount_) {
             ComputeGridLayout();
             RECT parentRc;
             GetClientRect(parent_, &parentRc);
@@ -633,6 +678,9 @@ void TerminalGridView::OnTimer() {
             int winY = parentRc.top + (parentRc.bottom - parentRc.top - winH) / 3;
             SetWindowPos(hwnd_, HWND_TOPMOST, winX, winY, winW, winH, SWP_NOACTIVATE);
             RegisterThumbnails();
+            std::wstring title = L"Terminal Grid View ("
+                               + std::to_wstring(newCount) + L" tabs)";
+            SetWindowTextW(hwnd_, title.c_str());
         } else {
             UpdateThumbnailRects();
         }
@@ -644,29 +692,25 @@ void TerminalGridView::OnTimer() {
 // Selection / Dismissal
 // ---------------------------------------------------------------------------
 void TerminalGridView::SelectTerminal(int index) {
-    if (index < 0 || index >= (int)g_terminalTabs.size()) return;
+    if (index < 0 || index >= (int)s_terminals.size()) return;
 
-    // Hide all terminal windows, show selected one
-    for (size_t i = 0; i < g_terminalTabs.size(); ++i) {
-        if (g_terminalTabs[i].hwnd)
-            ShowWindow(g_terminalTabs[i].hwnd, (int)i == index ? SW_SHOW : SW_HIDE);
-    }
-    // Hide any app tabs
+    int appIdx = s_terminals[index].appTabIndex;
+    if (appIdx < 0 || appIdx >= (int)g_appTabs.size()) return;
+
+    // Use main app's tab switching mechanism
     for (auto& t : g_appTabs) {
         if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
     }
-
-    g_activeAppTab = -1;
-    g_activeTerminalTab = index;
+    g_activeAppTab = appIdx;
+    if (g_appTabs[appIdx].hwnd) {
+        ShowWindow(g_appTabs[appIdx].hwnd, SW_SHOW);
+    }
     ShowScrollBar(g_mainHwnd, SB_BOTH, FALSE);
-
-    // Update tab selection
-    size_t bufCount = g_editor ? g_editor->GetBuffers().size() : 0;
 
     g_suppressTabChange = true;
     if (g_tabHwnd) {
-        int termStart = (int)bufCount + (int)g_appTabs.size();
-        TabCtrl_SetCurSel(g_tabHwnd, termStart + index);
+        size_t bufCount = g_editor ? g_editor->GetBuffers().size() : 0;
+        TabCtrl_SetCurSel(g_tabHwnd, (int)bufCount + appIdx);
     }
     g_suppressTabChange = false;
 
@@ -674,10 +718,9 @@ void TerminalGridView::SelectTerminal(int index) {
     UpdateTabs(g_mainHwnd);
     InvalidateRect(g_mainHwnd, nullptr, FALSE);
 
-    // Focus the terminal
-    if (g_terminalTabs[index].hwnd)
-        PostMessage(g_mainHwnd, WM_DEFERRED_FOCUS,
-                    (WPARAM)g_terminalTabs[index].hwnd, 0);
+    if (g_appTabs[appIdx].hwnd) {
+        PostMessage(g_mainHwnd, WM_DEFERRED_FOCUS, (WPARAM)g_appTabs[appIdx].hwnd, 0);
+    }
 }
 
 void TerminalGridView::Dismiss(bool select) {

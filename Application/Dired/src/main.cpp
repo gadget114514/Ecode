@@ -36,6 +36,7 @@
 #define IDC_STATUS       105
 #define IDC_BROWSE_LEFT  106
 #define IDC_BROWSE_RIGHT 107
+#define IDC_BUTTON_CONFIG 108
 #define ID_OPEN          2001
 #define ID_DELETE        2002
 #define ID_RENAME        2003
@@ -574,6 +575,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                       0, 0, 22, 22, hwnd, (HMENU)(LONG_PTR)IDC_BROWSE_LEFT, g_hInst, nullptr);
         CreateWindowW(L"BUTTON", L"...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                       0, 0, 22, 22, hwnd, (HMENU)(LONG_PTR)IDC_BROWSE_RIGHT, g_hInst, nullptr);
+        // Configuration button
+        CreateWindowW(L"BUTTON", L"Config", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                      0, 0, 55, 22, hwnd, (HMENU)(LONG_PTR)IDC_BUTTON_CONFIG, g_hInst, nullptr);
 
         g_hStatus = CreateWindowW(STATUSCLASSNAME, L"",
             WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 0, 0, hwnd, (HMENU)IDC_STATUS, g_hInst, nullptr);
@@ -586,8 +590,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         GetCurrentDirectoryW(MAX_PATH, curDir);
         int argc = 0;
         LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-        std::wstring leftPath = (argv && argc > 1) ? argv[1] : curDir;
-        std::wstring rightPath = (argv && argc > 2) ? argv[2] : L"";
+        int argIdx = 1;
+        if (argv && argc > argIdx && wcscmp(argv[argIdx], L"--embedded") == 0)
+            ++argIdx;
+        std::wstring leftPath = (argv && argc > argIdx) ? argv[argIdx] : curDir;
+        std::wstring rightPath = (argv && argc > argIdx + 1) ? argv[argIdx + 1] : L"";
         if (argv) LocalFree(argv);
 
         NavigateTo(&g_panes[0], leftPath);
@@ -643,10 +650,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         int rw = w - g_dividerPos - divW - btnW;
         int listH = h - pathH - statusH;
 
+        int configW = 55;
         MoveWindow(g_panes[0].hwndPath, 0, 0, lw, pathH, TRUE);
         MoveWindow(GetDlgItem(hwnd, IDC_BROWSE_LEFT), lw, 1, btnW, pathH - 2, TRUE);
         MoveWindow(g_panes[1].hwndPath, g_dividerPos + divW, 0, rw, pathH, TRUE);
         MoveWindow(GetDlgItem(hwnd, IDC_BROWSE_RIGHT), g_dividerPos + divW + rw, 1, btnW, pathH - 2, TRUE);
+        MoveWindow(GetDlgItem(hwnd, IDC_BUTTON_CONFIG), w - configW, 1, configW, pathH - 2, TRUE);
         MoveWindow(g_panes[0].hwndList, 0, pathH, lw + btnW, listH, TRUE);
         MoveWindow(g_panes[1].hwndList, g_dividerPos + divW, pathH, rw + btnW, listH, TRUE);
         SendMessage(g_hStatus, WM_SIZE, 0, 0);
@@ -802,6 +811,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_COMMAND:
         if (HIWORD(wp) == BN_CLICKED) {
+            if (LOWORD(wp) == IDC_BUTTON_CONFIG) {
+                // Notify parent (ecode main window) to open the configure dialog
+                PostMessageW(GetParent(hwnd), WM_COMMAND, 705, 0);
+                return 0;
+            }
             if (LOWORD(wp) == IDC_BROWSE_LEFT || LOWORD(wp) == IDC_BROWSE_RIGHT) {
                 int idx = (LOWORD(wp) == IDC_BROWSE_LEFT) ? 0 : 1;
                 wchar_t path[MAX_PATH];

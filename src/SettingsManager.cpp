@@ -90,6 +90,11 @@ void SettingsManager::Load() {
       GetPrivateProfileIntW(L"TabGrid", L"CellHeight", 170, path.c_str());
   if (m_tabGridCellW < 80)  m_tabGridCellW = 80;
   if (m_tabGridCellH < 60)  m_tabGridCellH = 60;
+  m_tabGridRefreshEnabled =
+      GetPrivateProfileIntW(L"TabGrid", L"RefreshEnabled", 0, path.c_str()) != 0;
+  m_tabGridRefreshIntervalMs =
+      GetPrivateProfileIntW(L"TabGrid", L"RefreshIntervalMs", 1000, path.c_str());
+  if (m_tabGridRefreshIntervalMs < 200) m_tabGridRefreshIntervalMs = 200;
 
   wchar_t bashBuf[MAX_PATH];
   if (GetPrivateProfileStringW(L"Editor", L"BashPath", L"", bashBuf,
@@ -347,6 +352,8 @@ void SettingsManager::Save() {
   WriteInt(L"Editor", L"ShowAI", m_showAI ? 1 : 0);
   WriteInt(L"TabGrid", L"CellWidth",  m_tabGridCellW);
   WriteInt(L"TabGrid", L"CellHeight", m_tabGridCellH);
+  WriteInt(L"TabGrid", L"RefreshEnabled",    m_tabGridRefreshEnabled ? 1 : 0);
+  WriteInt(L"TabGrid", L"RefreshIntervalMs", m_tabGridRefreshIntervalMs);
   if (!m_defaultExtension.empty()) {
     WritePrivateProfileStringW(L"Editor", L"DefaultExtension",
                                m_defaultExtension.c_str(), path.c_str());

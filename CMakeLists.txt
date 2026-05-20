@@ -18,6 +18,7 @@ include_directories(FastFileSearch/src)
 
 # Source files
 file(GLOB SOURCES "src/*.cpp")
+list(APPEND SOURCES "Application/Terminal/src/TerminalGridView.cpp")
 file(GLOB FASTFS_SOURCES "FastFileSearch/src/MFTReader.cpp" "FastFileSearch/src/FatReader.cpp" "FastFileSearch/src/exFatReader.cpp")
 list(APPEND SOURCES ${FASTFS_SOURCES})
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/test_piecetable.cpp")
@@ -271,25 +272,27 @@ target_link_libraries(ecode_console
     d2d1 
     dwrite
     imm32
+    dwmapi
 )
 
 # Output directory
 set(OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 set_target_properties(ecode PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(ecode_console PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_piecetable PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_piecetable_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_editor_core PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_undoredo_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_search_replace PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_file_io PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_visual_wrap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_find_in_files PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_shortcuts PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_string_helpers PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_localization PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
-set_target_properties(test_buffer_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+set(TEST_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin/tests")
+set_target_properties(test_piecetable PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_piecetable_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_editor_core PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_undoredo_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_search_replace PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_file_io PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_visual_wrap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_find_in_files PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_shortcuts PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_string_helpers PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_localization PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_buffer_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 
 # Copy scripts directory to output
 add_custom_command(TARGET ecode POST_BUILD
@@ -346,6 +349,13 @@ add_plugin(Terminal  Application/Terminal)
 find_package(nlohmann_json QUIET)
 if(nlohmann_json_FOUND)
     add_plugin(JYEditor Application/JYEditor)
+    # Copy yaml-cpp.dll alongside JYEditor.exe
+    add_custom_command(TARGET ecode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/Application/JYEditor/vcpkg_installed/vcpkg/blds/yaml-cpp/x64-windows-rel/yaml-cpp.dll"
+        "$<TARGET_FILE_DIR:ecode>/yaml-cpp.dll"
+        COMMENT "Copying yaml-cpp.dll..."
+    )
 else()
     message(STATUS "JYEditor skipped (nlohmann_json not found)")
 endif()

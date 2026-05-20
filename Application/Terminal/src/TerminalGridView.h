@@ -11,8 +11,6 @@
 #include <d2d1.h>
 #include <dwrite.h>
 
-#include "TerminalView.h"
-
 #include <string>
 #include <vector>
 
@@ -113,10 +111,9 @@ private:
     D2D1_COLOR_F textColor_;
     D2D1_COLOR_F labelBgColor_;
 
-    // Timer
+    // Timer (interval read from settings at Show() time)
     UINT_PTR refreshTimer_ = 0;
     static constexpr UINT_PTR kTimerId = 2;
-    static constexpr int     kTimerIntervalMs = 300;
 
     // DWM thumbnails + snapshot fallback (parallel to g_terminalTabs)
     std::vector<HTHUMBNAIL>   thumbnails_;

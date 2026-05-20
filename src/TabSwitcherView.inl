@@ -22,6 +22,7 @@ struct SwitcherItem {
 };
 
 static std::vector<HTHUMBNAIL>   g_switcherThumbs;
+static std::vector<HBITMAP>      g_switcherSnapshots; // per-item; fallback when DWM fails
 static std::vector<HBITMAP>      g_switcherBitmaps; // per-item; non-null for Buffer cells
 static HWND                      g_switcherHwnd     = nullptr;
 static std::vector<SwitcherItem> g_switcherItems;
@@ -29,6 +30,9 @@ static int                       g_switcherSel      = 0;
 static bool                      g_switcherTermOnly = false;
 static int                       g_switcherCols     = 4;   // updated on WM_SIZE
 static int                       g_switcherScrollY  = 0;   // vertical scroll in px
+static int                       g_switcherLastCount = 0;  // last known item count for timer refresh
+static UINT_PTR                  g_switcherTimer    = 0;   // refresh timer
+static constexpr UINT_PTR        kSwRefreshTimerId  = 101;
 
 // ---------------------------------------------------------------------------
 // Fixed layout constants
@@ -243,6 +247,9 @@ static void SwUnregisterAllThumbs() {
     for (HTHUMBNAIL h : g_switcherThumbs)
         if (h) DwmUnregisterThumbnail(h);
     g_switcherThumbs.clear();
+    for (HBITMAP h : g_switcherSnapshots)
+        if (h) DeleteObject(h);
+    g_switcherSnapshots.clear();
 }
 
 // DwmRegisterThumbnail requires a top-level (non-WS_CHILD) source window.
@@ -264,12 +271,74 @@ static HTHUMBNAIL SwRegisterChildThumb(HWND dest, HWND src) {
     return SUCCEEDED(hr) ? h : nullptr;
 }
 
+// Capture a bitmap snapshot of a window via PrintWindow as fallback
+// when DWM thumbnail registration fails.
+static HBITMAP SwCaptureSnapshot(HWND src) {
+    bool wasVisible = IsWindowVisible(src);
+    if (!wasVisible) {
+        ShowWindow(src, SW_SHOW);
+        RedrawWindow(src, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        // Flush DWM composition so D2D content is ready for PrintWindow
+        DwmFlush();
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_PAINT) {
+                DispatchMessageW(&msg);
+            }
+        }
+        Sleep(30);
+    }
+
+    RECT rc;
+    GetClientRect(src, &rc);
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0) {
+        if (!wasVisible) ShowWindow(src, SW_HIDE);
+        return nullptr;
+    }
+
+    HDC     hdcScreen = GetDC(nullptr);
+    HDC     hdcMem    = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBmp      = CreateCompatibleBitmap(hdcScreen, w, h);
+    ReleaseDC(nullptr, hdcScreen);
+
+    HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
+    // Try multiple capture approaches in order of reliability
+    BOOL ok = PrintWindow(src, hdcMem, PW_CLIENTONLY | PW_RENDERFULLCONTENT);
+    if (!ok)
+        ok = PrintWindow(src, hdcMem, PW_CLIENTONLY);
+    if (!ok) {
+        // Last-resort: BitBlt from screen (requires visible, unoccluded window)
+        if (IsWindowVisible(src)) {
+            HDC hdcScreen2 = GetDC(nullptr);
+            BitBlt(hdcMem, 0, 0, w, h, hdcScreen2,
+                   rc.left, rc.top, SRCCOPY);
+            ReleaseDC(nullptr, hdcScreen2);
+            ok = TRUE;
+        }
+    }
+    SelectObject(hdcMem, hOld);
+    DeleteDC(hdcMem);
+
+    if (!wasVisible) ShowWindow(src, SW_HIDE);
+
+    if (!ok) { DeleteObject(hBmp); return nullptr; }
+    return hBmp;
+}
+
 // Register thumbnails only for AppTab items with their own HWND.
 // Editor buffers have no separate HWND so they get no thumbnail.
 // Items where registration fails (or would duplicate g_mainHwnd) are left null.
 static void SwRegisterThumbs(HWND switcherHwnd) {
     SwUnregisterAllThumbs();
     g_switcherThumbs.resize(g_switcherItems.size(), nullptr);
+    // Destroy old snapshots
+    for (HBITMAP h : g_switcherSnapshots)
+        if (h) DeleteObject(h);
+    g_switcherSnapshots.clear();
+    g_switcherSnapshots.resize(g_switcherItems.size(), nullptr);
 
     for (int i = 0; i < (int)g_switcherItems.size(); ++i) {
         const auto &it = g_switcherItems[i];
@@ -284,6 +353,9 @@ static void SwRegisterThumbs(HWND switcherHwnd) {
         if (src == g_mainHwnd) continue;
 
         g_switcherThumbs[i] = SwRegisterChildThumb(switcherHwnd, src);
+        // Always capture a snapshot as fallback (may be blank for hidden windows,
+        // but we try anyway — see SwCaptureSnapshot which shows hidden windows).
+        g_switcherSnapshots[i] = SwCaptureSnapshot(src);
     }
 }
 
@@ -316,6 +388,16 @@ static void SwUpdateAllThumbs(HWND switcherHwnd) {
         props.opacity               = 255;
         DwmUpdateThumbnailProperties(h, &props);
     }
+}
+
+// Rebuild items and re-register thumbs when the tab count changes.
+static void SwRefresh(HWND hwnd) {
+    SwRebuildItems();
+    SwResetBitmaps();
+    SwRegisterThumbs(hwnd);
+    SwUpdateScrollbar(hwnd);
+    SwUpdateAllThumbs(hwnd);
+    InvalidateRect(hwnd, NULL, FALSE);
 }
 
 // ---------------------------------------------------------------------------
@@ -417,8 +499,9 @@ static void SwPaint(HWND hwnd) {
         HFONT old = (HFONT)SelectObject(hdc, hBold);
         SetTextColor(hdc, RGB(210, 220, 255));
         std::wstring title = g_switcherTermOnly
-            ? L"Tab Grid View  [Terminal Only]"
-            : L"Tab Grid View  [All]";
+            ? L"Tab Grid View  [Terminal Only]  ("
+            : L"Tab Grid View  [All]  (";
+        title += std::to_wstring(g_switcherItems.size()) + L" tabs)";
         TextOutW(hdc, kSW_PAD, 8, title.c_str(), (int)title.size());
 
         SelectObject(hdc, hSmall);
@@ -489,6 +572,17 @@ static void SwPaint(HWND hwnd) {
                 FillRect(hdc, &thumb, br);
                 DeleteObject(br);
             }
+        } else if (i < (int)g_switcherSnapshots.size() && g_switcherSnapshots[i]) {
+            HDC hdcMem = CreateCompatibleDC(hdc);
+            HBITMAP hOld2 = (HBITMAP)SelectObject(hdcMem, g_switcherSnapshots[i]);
+            StretchBlt(hdc,
+                       thumb.left, thumb.top,
+                       thumb.right - thumb.left, thumb.bottom - thumb.top,
+                       hdcMem, 0, 0,
+                       thumb.right - thumb.left, thumb.bottom - thumb.top,
+                       SRCCOPY);
+            SelectObject(hdcMem, hOld2);
+            DeleteDC(hdcMem);
         } else {
             HBRUSH br = CreateSolidBrush(RGB(10, 10, 18));
             FillRect(hdc, &thumb, br);
@@ -587,9 +681,13 @@ static LRESULT CALLBACK TabSwitcherWndProc(HWND hwnd, UINT msg,
     case WM_CREATE: {
         RECT rc; GetClientRect(hwnd, &rc);
         SwRecalcCols(rc.right);
+        g_switcherLastCount = (int)g_switcherItems.size();
         SwRegisterThumbs(hwnd);
         SwUpdateAllThumbs(hwnd);
         SwUpdateScrollbar(hwnd);
+        if (SettingsManager::Instance().IsTabGridRefreshEnabled())
+            g_switcherTimer = SetTimer(hwnd, kSwRefreshTimerId,
+                (UINT)SettingsManager::Instance().GetTabGridRefreshIntervalMs(), nullptr);
         return 0;
     }
 
@@ -624,6 +722,30 @@ static LRESULT CALLBACK TabSwitcherWndProc(HWND hwnd, UINT msg,
     case WM_MOUSEWHEEL: {
         int delta = GET_WHEEL_DELTA_WPARAM(wParam);
         SwScrollBy(hwnd, -delta / WHEEL_DELTA * (SwCellH() + kSW_PAD));
+        return 0;
+    }
+
+    case WM_TIMER: {
+        if (wParam == kSwRefreshTimerId) {
+            // Rebuild items list to pick up any newly added/removed tabs
+            SwRebuildItems();
+            int newCount = (int)g_switcherItems.size();
+            if (newCount != g_switcherLastCount) {
+                g_switcherLastCount = newCount;
+                // Clamp selection
+                if (g_switcherSel >= newCount)
+                    g_switcherSel = (std::max)(0, newCount - 1);
+                SwResetBitmaps();
+                SwRegisterThumbs(hwnd);
+                SwUpdateScrollbar(hwnd);
+                SwUpdateAllThumbs(hwnd);
+                InvalidateRect(hwnd, NULL, FALSE);
+                // Update title with count
+                std::wstring title = L"Tab Grid View ("
+                                   + std::to_wstring(newCount) + L" tabs)";
+                SetWindowTextW(hwnd, title.c_str());
+            }
+        }
         return 0;
     }
 
@@ -666,12 +788,18 @@ static LRESULT CALLBACK TabSwitcherWndProc(HWND hwnd, UINT msg,
             g_switcherTermOnly = !g_switcherTermOnly;
             g_switcherSel = 0;
             g_switcherScrollY = 0;
+            g_switcherLastCount = (int)g_switcherItems.size();
             SwRebuildItems();
             SwResetBitmaps();
             SwRegisterThumbs(hwnd);
             SwUpdateScrollbar(hwnd);
             SwUpdateAllThumbs(hwnd);
             InvalidateRect(hwnd, NULL, FALSE);
+            {
+                std::wstring title = L"Tab Grid View ("
+                                   + std::to_wstring(g_switcherItems.size()) + L" tabs)";
+                SetWindowTextW(hwnd, title.c_str());
+            }
             return 0;
         }
         if (moved) {
@@ -715,6 +843,7 @@ static LRESULT CALLBACK TabSwitcherWndProc(HWND hwnd, UINT msg,
     }
 
     case WM_DESTROY:
+        if (g_switcherTimer) { KillTimer(hwnd, g_switcherTimer); g_switcherTimer = 0; }
         SwUnregisterAllThumbs();
         SwDestroyBitmaps();
         g_switcherHwnd = nullptr;
@@ -758,7 +887,8 @@ void ShowTabSwitcher(HWND parentHwnd) {
         (int)((g_switcherItems.size() + initCols - 1) / initCols));
     initRows = (std::max)(initRows, 1);
 
-    int clientW = kSW_PAD + initCols * (SwCellW() + kSW_PAD) + kSW_PAD;
+    int scrollbarW = GetSystemMetrics(SM_CXVSCROLL);
+    int clientW = kSW_PAD + initCols * (SwCellW() + kSW_PAD) + kSW_PAD + scrollbarW;
     int clientH = kSW_HEADER_H
                 + kSW_PAD + initRows * (SwCellH() + kSW_PAD)
                 + kSW_FOOTER_H;
@@ -779,14 +909,17 @@ void ShowTabSwitcher(HWND parentHwnd) {
         classReady = true;
     }
 
-    g_switcherHwnd = CreateWindowExW(
-        0,
-        kTabSwitcherClass,
-        L"Tab Grid View",
-        WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_VISIBLE,
-        px, py, winW, winH,
-        parentHwnd, nullptr,
-        GetModuleHandleW(nullptr), nullptr);
+    {
+        std::wstring title = L"Tab Grid View (" + std::to_wstring(g_switcherItems.size()) + L" tabs)";
+        g_switcherHwnd = CreateWindowExW(
+            0,
+            kTabSwitcherClass,
+            title.c_str(),
+            WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_VISIBLE,
+            px, py, winW, winH,
+            parentHwnd, nullptr,
+            GetModuleHandleW(nullptr), nullptr);
+    }
 
     if (g_switcherHwnd)
         SetFocus(g_switcherHwnd);
