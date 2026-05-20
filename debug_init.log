@@ -2237,3 +2237,109 @@ WM_SHOWWINDOW Received, wParam=1
 [INFO]   Minibuffer Layout: mbTop=677 mbHeight=0 promptWidth=0
 [INFO] HandleSize: width=1424 height=694 g_minibufferVisible=0
 [INFO]   Minibuffer Layout: mbTop=694 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=0 height=0 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=-22 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=929 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=907 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=946 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1109 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1110 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1111 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1113 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1120 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1129 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1154 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1171 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1189 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1222 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1241 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1269 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1291 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1301 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1312 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1317 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1321 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1322 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1325 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1326 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1328 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1329 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1330 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1332 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1334 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1344 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1353 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1359 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1362 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1362 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1362 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1345 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1362 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=946 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1362 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1362 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0
+[INFO] HandleSize: width=1362 height=946 g_minibufferVisible=0
+[INFO]   Minibuffer Layout: mbTop=924 mbHeight=0 promptWidth=0

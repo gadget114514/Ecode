@@ -317,27 +317,21 @@ add_custom_command(TARGET ecode_console POST_BUILD
     COMMENT "Copying doc to output directory..."
 )
 
-# Build and copy each plugin app from its standalone build directory
+# Copy each pre-built plugin EXE into the output directory.
+# Each plugin is built independently via its own CMakeLists.txt.
 macro(add_plugin name dir)
     set(plugin_src "${CMAKE_CURRENT_SOURCE_DIR}/${dir}")
     set(plugin_build "${plugin_src}/build")
-    if(NOT EXISTS "${plugin_build}")
-        file(MAKE_DIRECTORY "${plugin_build}")
-    endif()
-    add_custom_target(build_${name}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_build}"
-        COMMAND ${CMAKE_COMMAND} -S "${plugin_src}" -B "${plugin_build}"
-        COMMAND ${CMAKE_COMMAND} --build "${plugin_build}" --config $<CONFIG> --target ${name}
-        COMMENT "Building ${name}..."
-    )
-    add_dependencies(ecode build_${name})
     set(plugin_out "$<TARGET_FILE_DIR:ecode>")
-    # Copy plugin exe using cmd.exe (suppress errors: use "call;" to reset errorlevel)
     add_custom_command(TARGET ecode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_out}/plugins"
-        COMMAND cmd.exe /c "if exist \"${plugin_build}/Release/${name}.exe\" copy /Y \"${plugin_build}/Release/${name}.exe\" \"${plugin_out}/${name}.exe\" > nul & exit 0"
-        COMMAND cmd.exe /c "if exist \"${plugin_src}/bin/Release/${name}.exe\" copy /Y \"${plugin_src}/bin/Release/${name}.exe\" \"${plugin_out}/${name}.exe\" > nul & exit 0"
-        COMMAND cmd.exe /c "if exist \"${plugin_out}/${name}.exe\" copy /Y \"${plugin_out}/${name}.exe\" \"${plugin_out}/plugins/${name}.exe\" > nul & exit 0"
+        COMMAND ${CMAKE_COMMAND}
+            -D src_dir="${plugin_src}"
+            -D build_dir="${plugin_build}"
+            -D out_dir="${plugin_out}"
+            -D name="${name}"
+            -D config=$<CONFIG>
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/copy_plugin.cmake"
         COMMENT "Copying ${name}.exe..."
     )
 endmacro()

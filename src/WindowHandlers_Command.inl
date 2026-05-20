@@ -468,7 +468,7 @@ void ScanPlugins() {
   }
 }
 
-static void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
+void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
                       const std::wstring& label, int type) {
   AppTabInfo tab;
   tab.label = label;

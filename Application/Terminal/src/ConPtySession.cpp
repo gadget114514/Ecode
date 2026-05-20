@@ -169,14 +169,17 @@ HRESULT ConPtySession::LoadApi() {
 // does (the PTY now owns them internally).
 // ---------------------------------------------------------------------------
 HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
+    // Pipe handles must be non-inheritable to prevent leaking to the child process
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, FALSE };
+
     // Input pipe: we write to inputWriteSide_; PTY reads from inputReadSide_
-    if (!CreatePipe(&inputReadSide_, &inputWriteSide_, nullptr, 0)) {
+    if (!CreatePipe(&inputReadSide_, &inputWriteSide_, &sa, 0)) {
         lastError_ = L"CreatePipe(input) failed: " + Win32Error();
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
     // Output pipe: PTY writes to outputWriteSide_; we read from outputReadSide_
-    if (!CreatePipe(&outputReadSide_, &outputWriteSide_, nullptr, 0)) {
+    if (!CreatePipe(&outputReadSide_, &outputWriteSide_, &sa, 0)) {
         lastError_ = L"CreatePipe(output) failed: " + Win32Error();
         return HRESULT_FROM_WIN32(GetLastError());
     }
@@ -195,6 +198,9 @@ HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
         lastError_ = buf;
         return hr;
     }
+
+    // Make the HPCON handle inheritable so CreateProcessW can attach it to the child
+    SetHandleInformation(hPC_, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
 
     // Close PTY-side pipe handles — ConPTY now owns them.
     // (PTYCON sample closes these immediately after CreatePseudoConsole.)
@@ -258,7 +264,7 @@ HRESULT ConPtySession::LaunchProcess(
         nullptr,
         cmdLine.data(),
         nullptr, nullptr,
-        FALSE,                                              // bInheritHandles
+        TRUE,                                               // bInheritHandles (needed for PTY attachment)
         EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
         envBlock.data(),
         nullptr,                                            // current directory
