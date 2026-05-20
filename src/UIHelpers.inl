@@ -217,6 +217,8 @@ void UpdateMenu(HWND hwnd) {
 
   // View Menu
   HMENU hView = CreatePopupMenu();
+  AppendMenu(hView, MF_STRING, IDM_VIEW_TABSWITCHER, L"Tab Grid View\tCtrl+Shift+T");
+  AppendMenu(hView, MF_SEPARATOR, 0, NULL);
   AppendMenu(hView, MF_STRING, IDM_VIEW_TOGGLE_UI, L"Toggle UI\tF11");
   AppendMenu(hView, MF_SEPARATOR, 0, NULL);
   AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_IN, L"Zoom In\tCtrl++");
