@@ -41,25 +41,8 @@ Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\doc\*"; DestDir: "{app}\doc"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Plugins (root level for backward compatibility)
-Source: "..\bin\Release\Dired.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\bin\Release\CSVEditor.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\bin\Release\FastFileSearch.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\bin\Release\FastFD.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\bin\Release\Terminal.exe"; DestDir: "{app}"; Flags: ignoreversion
-#ifexist "..\bin\Release\JYEditor.exe"
-Source: "..\bin\Release\JYEditor.exe"; DestDir: "{app}"; Flags: ignoreversion
-#endif
-
 ; Plugins (plugins subdirectory)
-Source: "..\bin\Release\Dired.exe"; DestDir: "{app}\plugins"; DestName: "Dired.exe"; Flags: ignoreversion
-Source: "..\bin\Release\CSVEditor.exe"; DestDir: "{app}\plugins"; DestName: "CSVEditor.exe"; Flags: ignoreversion
-Source: "..\bin\Release\FastFileSearch.exe"; DestDir: "{app}\plugins"; DestName: "FastFileSearch.exe"; Flags: ignoreversion
-Source: "..\bin\Release\FastFD.exe"; DestDir: "{app}\plugins"; DestName: "FastFD.exe"; Flags: ignoreversion
-Source: "..\bin\Release\Terminal.exe"; DestDir: "{app}\plugins"; DestName: "Terminal.exe"; Flags: ignoreversion
-#ifexist "..\bin\Release\JYEditor.exe"
-Source: "..\bin\Release\JYEditor.exe"; DestDir: "{app}\plugins"; DestName: "JYEditor.exe"; Flags: ignoreversion
-#endif
+Source: "..\bin\Release\plugins\*.exe"; DestDir: "{app}\plugins"; Flags: ignoreversion recursesubdirs
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

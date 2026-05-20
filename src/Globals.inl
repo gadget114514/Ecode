@@ -211,7 +211,6 @@ constexpr int TAB_TYPE_TERMINAL = 10;
 struct PluginEntry {
     std::wstring name;
     std::wstring path;
-    bool isBuiltIn;
     bool hidden;
 };
 extern std::vector<PluginEntry> g_plugins;
