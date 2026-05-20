@@ -365,6 +365,15 @@ if(ISCC_EXECUTABLE)
         VERBATIM
     )
     add_dependencies(installer ecode)
+
+    # All-plugins installer
+    add_custom_target(installer_allplugins
+        COMMAND ${ISCC_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/installer/ecode_allplugins.iss"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Building Inno Setup installer with all plugins..."
+        VERBATIM
+    )
+    add_dependencies(installer_allplugins ecode)
 else()
     message(WARNING "Inno Setup compiler (ISCC.exe) not found. Installer target will not be available.")
 endif()
@@ -374,3 +383,4 @@ endif()
 # cd build
 # cmake ..
 # cmake --build . --target installer
+# cmake --build . --target installer_allplugins
