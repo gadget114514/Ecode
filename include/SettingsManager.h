@@ -67,6 +67,11 @@ public:
   bool IsShowAI() const { return m_showAI; }
   void SetShowAI(bool show) { m_showAI = show; }
 
+  int GetTabGridCellW() const { return m_tabGridCellW; }
+  void SetTabGridCellW(int w) { m_tabGridCellW = w; }
+  int GetTabGridCellH() const { return m_tabGridCellH; }
+  void SetTabGridCellH(int h) { m_tabGridCellH = h; }
+
   // AI Settings
   std::wstring GetAIVendor() const { return m_aiVendor; }
   void SetAIVendor(const std::wstring &vendor) { m_aiVendor = vendor; }
@@ -157,6 +162,8 @@ private:
   std::wstring m_bashPath;
   std::wstring m_defaultExtension;
   std::wstring m_pluginsDirectory;
+  int m_tabGridCellW = 240;
+  int m_tabGridCellH = 170;
   bool m_showAI = false;
   std::vector<CliEntry> m_cliEntries;
   std::vector<DiredPair> m_diredPairs;
