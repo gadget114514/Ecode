@@ -29,7 +29,7 @@ set(RESOURCES "src/Ecode.rc")
 add_executable(ecode WIN32 ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
 
 # Executable (Console for testing)
-add_executable(ecode_console ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
+add_executable(ecode_console EXCLUDE_FROM_ALL ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
 target_compile_definitions(ecode_console PRIVATE ECODE_CONSOLE_BUILD)
 
 # Test executables base
@@ -38,17 +38,17 @@ set(TEST_BASE_SOURCES
     src/FileUtils.cpp
 )
 
-add_executable(test_piecetable 
+add_executable(test_piecetable EXCLUDE_FROM_ALL
     tests/test_piecetable.cpp 
     src/PieceTable.cpp
 )
 
-add_executable(test_piecetable_stress
+add_executable(test_piecetable_stress EXCLUDE_FROM_ALL
     tests/test_piecetable_stress.cpp
     src/PieceTable.cpp
 )
 
-add_executable(test_editor_core
+add_executable(test_editor_core EXCLUDE_FROM_ALL
     tests/test_editor_core.cpp
     ${TEST_BASE_SOURCES}
     src/Buffer.cpp
@@ -71,7 +71,7 @@ target_link_libraries(test_editor_core
     dwrite
 )
 
-add_executable(test_undoredo_stress
+add_executable(test_undoredo_stress EXCLUDE_FROM_ALL
     tests/test_undoredo_stress.cpp
     src/PieceTable.cpp
 )
@@ -86,7 +86,7 @@ target_link_libraries(test_undoredo_stress
     dwrite
 )
 
-add_executable(test_search_replace
+add_executable(test_search_replace EXCLUDE_FROM_ALL
     tests/test_search_replace.cpp
     ${TEST_BASE_SOURCES}
     src/Buffer.cpp
@@ -108,7 +108,7 @@ target_link_libraries(test_search_replace
     dwrite
 )
 
-add_executable(test_file_io
+add_executable(test_file_io EXCLUDE_FROM_ALL
     tests/test_file_io.cpp
     ${TEST_BASE_SOURCES}
     src/Buffer.cpp
@@ -128,7 +128,7 @@ target_link_libraries(test_file_io
     dwrite
 )
 
-add_executable(performance_benchmark
+add_executable(performance_benchmark EXCLUDE_FROM_ALL
     tests/performance_benchmark.cpp
     ${TEST_BASE_SOURCES}
     src/PieceTable.cpp
@@ -148,7 +148,7 @@ target_link_libraries(performance_benchmark
     dwrite
 )
 
-add_executable(test_visual_wrap
+add_executable(test_visual_wrap EXCLUDE_FROM_ALL
     tests/test_visual_wrap.cpp
     ${TEST_BASE_SOURCES}
     src/EditorBufferRenderer.cpp
@@ -172,7 +172,7 @@ target_link_libraries(test_visual_wrap
     dwrite
 )
 
-add_executable(test_find_in_files
+add_executable(test_find_in_files EXCLUDE_FROM_ALL
     tests/test_find_in_files.cpp
     ${TEST_BASE_SOURCES}
     src/Editor.cpp
@@ -194,7 +194,7 @@ target_link_libraries(test_find_in_files
     dwrite
 )
 
-add_executable(test_shortcuts
+add_executable(test_shortcuts EXCLUDE_FROM_ALL
     tests/test_shortcuts.cpp
     ${TEST_BASE_SOURCES}
     src/Editor.cpp
@@ -218,16 +218,16 @@ target_link_libraries(test_shortcuts
     dwrite
 )
 
-add_executable(test_string_helpers
+add_executable(test_string_helpers EXCLUDE_FROM_ALL
     tests/test_string_helpers.cpp
 )
 
-add_executable(test_localization
+add_executable(test_localization EXCLUDE_FROM_ALL
     tests/test_localization.cpp
     src/Localization.cpp
 )
 
-add_executable(test_buffer_stress
+add_executable(test_buffer_stress EXCLUDE_FROM_ALL
     tests/test_buffer_stress.cpp
     ${TEST_BASE_SOURCES}
     src/Buffer.cpp
@@ -345,6 +345,20 @@ add_plugin(CSVEditor Application/CSVEditor)
 add_plugin(FastFileSearch Application/FastFileSearch)
 add_plugin(FastFD Application/FastFD)
 add_plugin(Terminal  Application/Terminal)
+
+# Custom/unknown plugins: copy any .exe from plugins_custom/ to output
+set(CUSTOM_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/plugins_custom")
+set(PLUGIN_OUT_DIR "$<TARGET_FILE_DIR:ecode>/plugins")
+file(GLOB CUSTOM_PLUGINS "${CUSTOM_PLUGIN_DIR}/*.exe")
+foreach(PLUGIN ${CUSTOM_PLUGINS})
+    get_filename_component(PLUGIN_NAME ${PLUGIN} NAME)
+    add_custom_command(TARGET ecode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PLUGIN}"
+        "${PLUGIN_OUT_DIR}/${PLUGIN_NAME}"
+        COMMENT "Copying custom plugin ${PLUGIN_NAME}..."
+    )
+endforeach()
 
 find_package(nlohmann_json QUIET)
 if(nlohmann_json_FOUND)

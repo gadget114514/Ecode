@@ -297,10 +297,14 @@ static DWORD WINAPI DiredThread(LPVOID lpParam) {
   GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
   diredPath = std::wstring(modulePath);
   size_t pos = diredPath.find_last_of(L"\\/");
-  if (pos != std::wstring::npos)
-    diredPath = diredPath.substr(0, pos + 1) + L"Dired.exe";
-  else
-    diredPath = L"Dired.exe";
+  if (pos != std::wstring::npos) {
+    std::wstring exeDir = diredPath.substr(0, pos + 1);
+    diredPath = exeDir + L"plugins\\Dired.exe";
+    if (GetFileAttributesW(diredPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+      diredPath = exeDir + L"Dired.exe";
+  } else {
+    diredPath = L"plugins\\Dired.exe";
+  }
 
   std::wstring cmd = L"\"" + diredPath + L"\" --embedded \"" + curDir + L"\"";
   if (CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0,
@@ -410,7 +414,6 @@ void ScanPlugins() {
         PluginEntry e;
         e.name = name;
         e.path = pluginDir + ffd.cFileName;
-        e.isBuiltIn = false;
         e.hidden = false;
         g_plugins.push_back(std::move(e));
       } while (FindNextFileW(hFind, &ffd));
@@ -438,35 +441,11 @@ void ScanPlugins() {
           PluginEntry e;
           e.name = name;
           e.path = userDir + L"\\" + ffd.cFileName;
-          e.isBuiltIn = false;
           e.hidden = false;
           g_plugins.push_back(std::move(e));
         }
       } while (FindNextFileW(hFind, &ffd));
       FindClose(hFind);
-    }
-  }
-
-  // 3. Named fallback: scan for known built-in names alongside exe
-  const wchar_t *builtIns[] = { L"Dired.exe", L"CSVEditor.exe", L"FastFileSearch.exe", L"JYEditor.exe", L"FastDired.exe" };
-  for (auto *b : builtIns) {
-    std::wstring full = exeDir + b;
-    if (GetFileAttributesW(full.c_str()) != INVALID_FILE_ATTRIBUTES) {
-      std::wstring name = b;
-      size_t dot = name.rfind(L'.');
-      if (dot != std::wstring::npos) name = name.substr(0, dot);
-      bool already = false;
-      for (auto &p : g_plugins) {
-        if (p.name == name) { already = true; break; }
-      }
-      if (!already) {
-        PluginEntry e;
-        e.name = name;
-        e.path = full;
-        e.isBuiltIn = true;
-        e.hidden = false;
-        g_plugins.push_back(std::move(e));
-      }
     }
   }
 
@@ -899,7 +878,9 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     GetModuleFileNameW(nullptr, modPath, MAX_PATH);
     std::wstring exeDir = modPath;
     exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
-    std::wstring termExe = exeDir + L"\\Terminal.exe";
+    std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
+    if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
+      termExe = exeDir + L"\\Terminal.exe";
     if (LOWORD(wParam) == IDM_TOOLS_TERMINAL) {
       LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL);
     } else if (LOWORD(wParam) == IDM_TOOLS_TERMINAL_CMD) {
@@ -991,8 +972,14 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
         diredPath = std::wstring(modulePath);
         size_t pos = diredPath.find_last_of(L"\\/");
-        if (pos != std::wstring::npos) diredPath = diredPath.substr(0, pos + 1);
-        diredPath += L"Dired.exe";
+        if (pos != std::wstring::npos) {
+          std::wstring exeDir = diredPath.substr(0, pos + 1);
+          diredPath = exeDir + L"plugins\\Dired.exe";
+          if (GetFileAttributesW(diredPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+            diredPath = exeDir + L"Dired.exe";
+        } else {
+          diredPath = L"plugins\\Dired.exe";
+        }
 
         std::wstring cmd = L"\"" + diredPath + L"\" \"" + pairs[idx].leftDir + L"\"";
         if (!pairs[idx].rightDir.empty()) cmd += L" \"" + pairs[idx].rightDir + L"\"";
@@ -1052,7 +1039,10 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           GetModuleFileNameW(nullptr, modPath, MAX_PATH);
           std::wstring exeDir = modPath;
           exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
-          LaunchApp(hwnd, exeDir + L"\\Terminal.exe", shellArgs, label, TAB_TYPE_TERMINAL);
+          std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
+          if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
+            termExe = exeDir + L"\\Terminal.exe";
+          LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL);
         }
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&

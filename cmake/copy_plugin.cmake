@@ -19,12 +19,12 @@ else()
   return()
 endif()
 
-# Use cmd.exe to copy (handles locked destination files gracefully)
+# Copy plugin executable to plugins subdirectory only
 file(TO_NATIVE_PATH "${exe}"     _exe)
-file(TO_NATIVE_PATH "${out_exe}" _out)
 file(TO_NATIVE_PATH "${plug_exe}" _plug)
 execute_process(
-  COMMAND cmd.exe /c "copy /Y \"${_exe}\" \"${_out}\" > nul & copy /Y \"${_exe}\" \"${_plug}\" > nul & exit 0"
+  COMMAND cmd.exe /c "copy /Y \"${_exe}\" \"${_plug}\" > nul & exit 0"
   OUTPUT_QUIET ERROR_QUIET
 )
-message(STATUS "Copied ${name}.exe")
+get_filename_component(_full "${exe}" ABSOLUTE)
+message(STATUS "Copied ${_full} -> ${plug_exe}")
