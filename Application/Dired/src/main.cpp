@@ -632,6 +632,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         std::wstring rightPath = (argv && argc > argIdx + 1) ? argv[argIdx + 1] : L"";
         if (argv) LocalFree(argv);
 
+        // Safety: never use --embedded as a path
+        if (leftPath == L"--embedded") leftPath = curDir;
+        if (rightPath == L"--embedded") rightPath.clear();
+
         NavigateTo(&g_panes[0], leftPath);
         if (!rightPath.empty() && GetFileAttributesW(rightPath.c_str()) != INVALID_FILE_ATTRIBUTES)
             NavigateTo(&g_panes[1], rightPath);

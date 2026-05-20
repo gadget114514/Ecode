@@ -20,11 +20,13 @@ else()
 endif()
 
 # Copy plugin executable to plugins subdirectory only
-file(TO_NATIVE_PATH "${exe}"     _exe)
-file(TO_NATIVE_PATH "${plug_exe}" _plug)
-execute_process(
-  COMMAND cmd.exe /c "copy /Y \"${_exe}\" \"${_plug}\" > nul & exit 0"
-  OUTPUT_QUIET ERROR_QUIET
-)
 get_filename_component(_full "${exe}" ABSOLUTE)
-message(STATUS "Copied ${_full} -> ${plug_exe}")
+execute_process(
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${exe}" "${plug_exe}"
+  RESULT_VARIABLE _copy_ret
+)
+if(_copy_ret EQUAL 0)
+  message(STATUS "Copied ${_full} -> ${plug_exe}")
+else()
+  message(WARNING "Failed to copy ${_full} -> ${plug_exe} (error ${_copy_ret})")
+endif()
