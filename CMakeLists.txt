@@ -345,7 +345,7 @@ endmacro()
 add_plugin(Dired     Application/Dired)
 add_plugin(CSVEditor Application/CSVEditor)
 add_plugin(FastFileSearch Application/FastFileSearch)
-add_plugin(FastDired Application/FastDired)
+add_plugin(FastFD Application/FastFD)
 add_plugin(Terminal  Application/Terminal)
 
 find_package(nlohmann_json QUIET)
