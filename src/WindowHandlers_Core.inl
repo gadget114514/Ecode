@@ -87,6 +87,9 @@ static LRESULT HandleCreate(HWND hwnd) {
   g_uFindMsgString = RegisterWindowMessageW(FINDMSGSTRINGW);
   DragAcceptFiles(hwnd, TRUE);
 
+  // Global hotkey: Ctrl+Shift+T → Tab Switcher
+  RegisterHotKey(hwnd, HOTKEY_ID_TABSWITCHER, MOD_CONTROL | MOD_SHIFT, 'T');
+
   // Subclass tab control for drag-reorder support
   g_oldTabProc = (WNDPROC)SetWindowLongPtr(
       g_tabHwnd, GWLP_WNDPROC, (LONG_PTR)TabSubclassProc);
@@ -374,6 +377,9 @@ static void HandleDestroy(HWND hwnd) {
   }
 
   settings.Save();
+
+  UnregisterHotKey(hwnd, HOTKEY_ID_TABSWITCHER);
+  HideTabSwitcher();
 
   // Cleanup all app views
   for (auto &t : g_appTabs) {

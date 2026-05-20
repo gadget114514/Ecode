@@ -7,6 +7,7 @@
 struct CliEntry {
   std::wstring command;
   std::wstring folder;
+  int encoding; // 0=UTF8, 1=ShiftJIS
 };
 
 struct DiredPair {
@@ -66,6 +67,11 @@ public:
   bool IsShowAI() const { return m_showAI; }
   void SetShowAI(bool show) { m_showAI = show; }
 
+  int GetTabGridCellW() const { return m_tabGridCellW; }
+  void SetTabGridCellW(int w) { m_tabGridCellW = w; }
+  int GetTabGridCellH() const { return m_tabGridCellH; }
+  void SetTabGridCellH(int h) { m_tabGridCellH = h; }
+
   // AI Settings
   std::wstring GetAIVendor() const { return m_aiVendor; }
   void SetAIVendor(const std::wstring &vendor) { m_aiVendor = vendor; }
@@ -107,7 +113,7 @@ public:
   // CLI entries
   const std::vector<CliEntry> &GetCliEntries() const { return m_cliEntries; }
   void SetCliEntries(const std::vector<CliEntry> &entries) { m_cliEntries = entries; }
-  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder);
+  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding = 0);
   void RemoveCliEntry(size_t index);
   void SaveCliEntries();
 
@@ -116,6 +122,13 @@ public:
   void AddDiredPair(const std::wstring &label, const std::wstring &leftDir, const std::wstring &rightDir);
   void RemoveDiredPair(size_t index);
   void SaveDiredPairs();
+
+  // Hidden plugins
+  const std::vector<std::wstring> &GetHiddenPlugins() const { return m_hiddenPlugins; }
+  void SetHiddenPlugins(const std::vector<std::wstring> &list) { m_hiddenPlugins = list; }
+  bool IsPluginHidden(const std::wstring &name) const;
+  void ToggleHiddenPlugin(const std::wstring &name);
+  void SaveHiddenPlugins();
 
   // Theme management
   const std::vector<ThemeEntry> &GetThemes() const { return m_themes; }
@@ -149,6 +162,8 @@ private:
   std::wstring m_bashPath;
   std::wstring m_defaultExtension;
   std::wstring m_pluginsDirectory;
+  int m_tabGridCellW = 240;
+  int m_tabGridCellH = 170;
   bool m_showAI = false;
   std::vector<CliEntry> m_cliEntries;
   std::vector<DiredPair> m_diredPairs;
@@ -159,4 +174,5 @@ private:
 
   std::vector<ThemeEntry> m_themes;
   std::wstring m_activeTheme;
+  std::vector<std::wstring> m_hiddenPlugins;
 };

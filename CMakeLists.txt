@@ -248,16 +248,17 @@ target_link_libraries(test_buffer_stress
 )
 
 # Libraries to link
-target_link_libraries(ecode 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32 
-    comctl32 
-    d2d1 
+target_link_libraries(ecode
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+    d2d1
     dwrite
     imm32
+    dwmapi
 )
 
 target_link_libraries(ecode_console 
