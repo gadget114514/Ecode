@@ -1,12 +1,17 @@
 #include "../include/TerminalView.h"
 #include <algorithm>
 #include <cstring>
+#include <cstdio>
 #include <shellapi.h>   // ShellExecuteW for hyperlink open
 #include <windowsx.h>  // GET_X_LPARAM / GET_Y_LPARAM
+#include <shlobj.h>    // SHGetFolderPathW
 #include <string>
 
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
+#pragma comment(lib, "imm32.lib")
+
+#include <imm.h>
 #pragma comment(lib, "shell32.lib")
 
 // ---------------------------------------------------------------------------
@@ -150,9 +155,100 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_ERASEBKGND:   return 1; // handled in OnPaint
     case WM_KEYDOWN:      OnKeyDown(wp, lp); return 0;
     case WM_CHAR:         OnChar((wchar_t)wp); return 0;
-    case WM_MOUSEWHEEL:
-        ScrollBy(-(GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA) * 3);
+
+    // ---- IME インライン入力 ----
+    case WM_IME_SETCONTEXT:
+        // システムのデフォルト変換ウィンドウを非表示にして自前で描画する
+        lp &= ~ISC_SHOWUICOMPOSITIONWINDOW;
+        return DefWindowProcW(hwnd, msg, wp, lp);
+
+    case WM_IME_STARTCOMPOSITION: {
+        imeComposition_.clear();
+        imeActive_ = true;
+        // IME 変換ウィンドウをカーソル位置に移動
+        if (HIMC hImc = ImmGetContext(hwnd)) {
+            COMPOSITIONFORM cf{};
+            cf.dwStyle        = CFS_POINT;
+            cf.ptCurrentPos.x = (LONG)(buffer_.cursorColumn() * cellWidth_);
+            cf.ptCurrentPos.y = (LONG)(buffer_.cursorRow()    * cellHeight_);
+            ImmSetCompositionWindow(hImc, &cf);
+
+            LOGFONTW lf{};
+            lf.lfHeight  = (LONG)cellHeight_;
+            lf.lfCharSet = DEFAULT_CHARSET;
+            if (textFormat_) {
+                // フォント名を DirectWrite から取得して IME に渡す
+                wchar_t fname[LF_FACESIZE] = L"Cascadia Mono";
+                textFormat_->GetFontFamilyName(fname, LF_FACESIZE);
+                wcsncpy_s(lf.lfFaceName, fname, LF_FACESIZE);
+            }
+            ImmSetCompositionFontW(hImc, &lf);
+            ImmReleaseContext(hwnd, hImc);
+        }
+        InvalidateRect(hwnd_, nullptr, FALSE);
         return 0;
+    }
+
+    case WM_IME_COMPOSITION: {
+        if (HIMC hImc = ImmGetContext(hwnd)) {
+            // 変換中文字列（下線表示用）
+            if (lp & GCS_COMPSTR) {
+                int bytes = ImmGetCompositionStringW(hImc, GCS_COMPSTR, nullptr, 0);
+                if (bytes > 0) {
+                    imeComposition_.resize(bytes / sizeof(wchar_t));
+                    ImmGetCompositionStringW(hImc, GCS_COMPSTR,
+                                             imeComposition_.data(), bytes);
+                } else {
+                    imeComposition_.clear();
+                }
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            }
+            // 確定文字列を PTY へ送信（WM_CHAR には頼らない）
+            if (lp & GCS_RESULTSTR) {
+                int bytes = ImmGetCompositionStringW(hImc, GCS_RESULTSTR, nullptr, 0);
+                if (bytes > 0) {
+                    std::wstring result(bytes / sizeof(wchar_t), L'\0');
+                    ImmGetCompositionStringW(hImc, GCS_RESULTSTR,
+                                             result.data(), bytes);
+                    int need = WideCharToMultiByte(CP_UTF8, 0,
+                        result.c_str(), (int)result.size(),
+                        nullptr, 0, nullptr, nullptr);
+                    if (need > 0) {
+                        std::string utf8(need, '\0');
+                        WideCharToMultiByte(CP_UTF8, 0,
+                            result.c_str(), (int)result.size(),
+                            utf8.data(), need, nullptr, nullptr);
+                        if (scrollOffset_ > 0) ScrollToBottom();
+                        session_.Write(utf8.data(), utf8.size());
+                    }
+                }
+            }
+            ImmReleaseContext(hwnd, hImc);
+        }
+        return 0;   // DefWindowProc を呼ばないことで WM_CHAR が二重送信されるのを防ぐ
+    }
+
+    case WM_IME_ENDCOMPOSITION:
+        imeComposition_.clear();
+        imeActive_ = false;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        return DefWindowProcW(hwnd, msg, wp, lp);
+
+    case WM_MOUSEWHEEL: {
+        const int delta = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
+        if (buffer_.mouseTrackingMode() > 0) {
+            // マウストラッキング有効: PTY にスクロールイベントを送る
+            POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+            ScreenToClient(hwnd, &pt);
+            const int steps = std::abs(delta);
+            const int dir   = (delta > 0) ? 1 : -1;
+            for (int i = 0; i < steps; ++i)
+                SendMouseWheelToPty(dir, pt.x, pt.y);
+        } else {
+            ScrollBy(-delta);
+        }
+        return 0;
+    }
     case WM_LBUTTONDOWN:
         OnLButtonDown(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         return 0;
@@ -235,6 +331,18 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
         }
     }
 
+    // ---------------------------------------------------------------------------
+    // %APPDATA%\Ecode\settings.ini の [Terminal] セクションからスクロールバック行数を読む
+    {
+        wchar_t appdata[MAX_PATH] = {};
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
+            std::wstring iniPath = std::wstring(appdata) + L"\\Ecode\\settings.ini";
+            int lines = (int)GetPrivateProfileIntW(
+                L"Terminal", L"ScrollbackLines", 10000, iniPath.c_str());
+            buffer_.setMaxHistoryLines(lines);
+        }
+    }
+
     UpdateMetrics();
     return 0;
 }
@@ -288,7 +396,10 @@ void TerminalView::OnSize(int w, int h) {
         if (session_.IsRunning())
             session_.Resize(cols, rows);
     }
-    scrollOffset_ = 0;
+    // Clamp scroll offset to new history size after resize
+    const int maxScroll = std::max(0, buffer_.historyLineCount());
+    scrollOffset_ = std::min(scrollOffset_, maxScroll);
+    scrolledBack_ = (scrollOffset_ > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +413,12 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
     MultiByteToWideChar(CP_UTF8, 0, data, (int)len, ws.data(), needed);
 
     emulator_.process(ws);
-    scrollOffset_ = 0; // snap to bottom on new output
+    // スクロールバック中は位置をクランプ（履歴が減った場合）、底にいれば維持
+    if (scrollOffset_ > 0) {
+        const int maxScroll = std::max(0, buffer_.historyLineCount());
+        scrollOffset_ = std::min(scrollOffset_, maxScroll);
+        scrolledBack_ = (scrollOffset_ > 0);
+    }
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -361,6 +477,7 @@ void TerminalView::OnPaint() {
     const int visRows  = (int)((clientRc.bottom - clientRc.top) / cellHeight_);
     const int totalLog = buffer_.totalLineCount();
     const int histLines= buffer_.historyLineCount();
+    maxScrollOffset_ = histLines;
 
     // Determine first logical row to display
     // scrollOffset_ == 0 means bottom (newest)
@@ -368,9 +485,26 @@ void TerminalView::OnPaint() {
 
     const int curRow = buffer_.cursorRow() + histLines;  // logical row of cursor
 
+    // Clip rendering to exclude scroll bar area
+    const float clipRight = (float)(clientRc.right - clientRc.left) - kScrollBarWidth;
+    rt->PushAxisAlignedClip(D2D1::RectF(0, 0, clipRight, (float)(clientRc.bottom - clientRc.top)),
+                            D2D1_ANTIALIAS_MODE_ALIASED);
+
     for (int screenRow = 0; screenRow < visRows; ++screenRow) {
         int logRow = firstRow + screenRow;
-        if (logRow >= totalLog) break;
+
+        // VT420 スクロール領域対応:
+        // スクロールバック中かつ部分スクロール領域が有効なとき、
+        // 領域外の行は常に現在の画面内容（ピン固定）を表示する。
+        if (scrollOffset_ > 0 && buffer_.hasScrollRegion()) {
+            const bool outsideRegion = screenRow < buffer_.scrollTop() ||
+                                       screenRow > buffer_.scrollBottom();
+            if (outsideRegion) {
+                logRow = histLines + screenRow;  // 現在の画面行をピン固定
+            }
+        }
+
+        if (logRow < 0 || logRow >= totalLog) continue;
         const auto& line = buffer_.lineAt(logRow);
 
         for (int col = 0; col < buffer_.columns(); ++col) {
@@ -383,6 +517,45 @@ void TerminalView::OnPaint() {
             bool isSelected = IsSelected(logRow, col);
             DrawCell(rt, screenRow, col, cell, isCursor, cursorBlink_, isSelected);
         }
+    }
+
+    // IME 変換中文字列をカーソル位置にインライン描画
+    if (imeActive_ && !imeComposition_.empty() && scrollOffset_ == 0) {
+        const float cx = buffer_.cursorColumn() * cellWidth_;
+        const float cy = buffer_.cursorRow()    * cellHeight_;
+        const float compW = imeComposition_.size() * cellWidth_;
+
+        // 背景（薄いハイライト）
+        TermColor imeBg;
+        imeBg.r = 60; imeBg.g = 60; imeBg.b = 100; imeBg.isDefault = false;
+        if (auto* b = GetBrush(imeBg, 0.85f))
+            rt->FillRectangle(D2D1::RectF(cx, cy, cx + compW, cy + cellHeight_), b);
+
+        // テキスト
+        TermColor imeFg;
+        imeFg.r = 255; imeFg.g = 255; imeFg.b = 255; imeFg.isDefault = false;
+        if (auto* b = GetBrush(imeFg)) {
+            D2D1_RECT_F tr = D2D1::RectF(cx, cy, cx + compW + cellWidth_, cy + cellHeight_);
+            rt->DrawText(imeComposition_.c_str(), (UINT32)imeComposition_.size(),
+                         textFormat_, tr, b,
+                         D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+        }
+
+        // 下線
+        TermColor lineCol;
+        lineCol.r = 180; lineCol.g = 180; lineCol.b = 255; lineCol.isDefault = false;
+        if (auto* b = GetBrush(lineCol))
+            rt->DrawLine(D2D1::Point2F(cx, cy + cellHeight_ - 1.5f),
+                         D2D1::Point2F(cx + compW, cy + cellHeight_ - 1.5f),
+                         b, 1.5f);
+    }
+
+    rt->PopAxisAlignedClip();
+
+    // Scroll bar
+    if (histLines > 0) {
+        DrawScrollBar(rt);
+        DrawScrollIndicator(rt, clientRc);
     }
 
     HRESULT hr = rt->EndDraw();
@@ -482,6 +655,16 @@ void TerminalView::BufferCoordFromPoint(int px, int py, int& outRow, int& outCol
     int screenRow = (int)(py / cellHeight_);
     screenRow = std::max(0, std::min(screenRow, visRows - 1));
     outRow = firstRow + screenRow;
+
+    // VT420 スクロール領域対応: OnPaint と同じピン固定ロジックを適用する
+    if (scrollOffset_ > 0 && buffer_.hasScrollRegion()) {
+        const bool outsideRegion = screenRow < buffer_.scrollTop() ||
+                                   screenRow > buffer_.scrollBottom();
+        if (outsideRegion) {
+            outRow = histLines + screenRow;  // 現在の画面行をピン固定
+        }
+    }
+
     if (outRow >= totalLog) outRow = totalLog - 1;
 }
 
@@ -555,6 +738,35 @@ void TerminalView::CopySelectionToClipboard() const {
 }
 
 // ---------------------------------------------------------------------------
+// Mouse tracking
+// ---------------------------------------------------------------------------
+void TerminalView::SendMouseWheelToPty(int direction, int px, int py) {
+    // ターミナル座標に変換（1 オリジン）
+    int col = std::max(1, std::min((int)(px / cellWidth_)  + 1, buffer_.columns()));
+    int row = std::max(1, std::min((int)(py / cellHeight_) + 1, buffer_.rows()));
+
+    // button: 64 = scroll up, 65 = scroll down
+    const int button = (direction > 0) ? 64 : 65;
+
+    char seq[32];
+    if (buffer_.sgrMouseEnabled()) {
+        // SGR エンコード: ESC [ < btn ; col ; row M
+        snprintf(seq, sizeof(seq), "\x1b[<%d;%d;%dM", button, col, row);
+        session_.Write(seq, strlen(seq));
+    } else {
+        // X10 エンコード: ESC [ M btn+32 col+32 row+32
+        // 座標が 223 を超えると範囲外になるため上限チェック
+        if (col + 32 <= 255 && row + 32 <= 255) {
+            seq[0] = '\x1b'; seq[1] = '['; seq[2] = 'M';
+            seq[3] = (char)(button + 32);
+            seq[4] = (char)(col    + 32);
+            seq[5] = (char)(row    + 32);
+            session_.Write(seq, 6);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Scrollback
 // ---------------------------------------------------------------------------
 int TerminalView::VisibleRows() const {
@@ -564,9 +776,93 @@ int TerminalView::VisibleRows() const {
 }
 
 void TerminalView::ScrollBy(int lines) {
-    const int maxScroll = std::max(0, buffer_.historyLineCount());
-    scrollOffset_ = std::max(0, std::min(scrollOffset_ + lines, maxScroll));
+    maxScrollOffset_ = std::max(0, buffer_.historyLineCount());
+    scrollOffset_ = std::max(0, std::min(scrollOffset_ + lines, maxScrollOffset_));
+    scrolledBack_ = (scrollOffset_ > 0);
     InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void TerminalView::ScrollToBottom() {
+    scrollOffset_ = 0;
+    scrolledBack_ = false;
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void TerminalView::DrawScrollBar(ID2D1RenderTarget* rt) {
+    RECT rc; GetClientRect(hwnd_, &rc);
+    const float viewW = (float)(rc.right - rc.left);
+    const float viewH = (float)(rc.bottom - rc.top);
+    const float barX = viewW - kScrollBarWidth;
+    const float barYStart = buffer_.hasScrollRegion()
+        ? buffer_.scrollTop()    * cellHeight_
+        : 0.0f;
+    const float barYEnd   = buffer_.hasScrollRegion()
+        ? (buffer_.scrollBottom() + 1) * cellHeight_
+        : viewH;
+    const float barH = barYEnd - barYStart;
+
+    // Background track
+    TermColor trackColor;
+    trackColor.r = 40; trackColor.g = 40; trackColor.b = 40; trackColor.isDefault = false;
+    if (auto* b = GetBrush(trackColor, 0.5f))
+        rt->FillRectangle(D2D1::RectF(barX, barYStart, viewW, barYEnd), b);
+
+    // Thumb (position proportional to scroll offset)
+    const int histLines = buffer_.historyLineCount();
+    if (histLines <= 0) return;
+    // スクロール領域が有効なときは領域行数を窓サイズとして使う
+    const int regionRows = buffer_.hasScrollRegion()
+        ? buffer_.scrollBottom() - buffer_.scrollTop() + 1
+        : std::max(1, (int)(viewH / cellHeight_));
+    const float thumbMinH = 16.0f;
+    const float thumbRatio = (float)regionRows / (float)(histLines + regionRows);
+    float thumbH = std::max(thumbMinH, std::min(barH, barH * thumbRatio));
+    // Thumb top position: 0 = top of history, (barH - thumbH) = bottom
+    const float scrollRatio = (float)scrollOffset_ / (float)maxScrollOffset_;
+    float thumbY = barYStart + (barH - thumbH) * (1.0f - scrollRatio);
+
+    TermColor thumbColor;
+    thumbColor.r = 180; thumbColor.g = 180; thumbColor.b = 180; thumbColor.isDefault = false;
+    if (auto* b = GetBrush(thumbColor, 0.7f))
+        rt->FillRectangle(D2D1::RectF(barX + 1, thumbY, viewW - 1, thumbY + thumbH), b);
+}
+
+void TerminalView::DrawScrollIndicator(ID2D1RenderTarget* rt, const RECT& clientRc) {
+    if (scrollOffset_ == 0) return;
+
+    const int histLines = buffer_.historyLineCount();
+    // スクロール領域が有効なときはその高さを窓サイズとして使う
+    const int regionRows = buffer_.hasScrollRegion()
+        ? buffer_.scrollBottom() - buffer_.scrollTop() + 1
+        : std::max(1, (int)((clientRc.bottom - clientRc.top) / cellHeight_));
+    const int showingTo   = histLines - scrollOffset_;
+    const int showingFrom = std::max(0, showingTo - regionRows + 1);
+    wchar_t buf[64];
+    swprintf_s(buf, L"\u2191 HISTORY (%d\u2013%d of %d)", showingFrom, showingTo, histLines);
+
+    // Draw semi-transparent background bar at the top
+    TermColor bgCol;
+    bgCol.r = 30; bgCol.g = 30; bgCol.b = 30; bgCol.isDefault = false;
+    TermColor fgCol;
+    fgCol.r = 200; fgCol.g = 200; fgCol.b = 200; fgCol.isDefault = false;
+
+    float textW = (float)wcslen(buf) * cellWidth_ * 0.6f;
+    float textH = cellHeight_;
+    float padX = 6.0f;
+    float padY = 2.0f;
+    float x = (float)(clientRc.right - clientRc.left) - kScrollBarWidth - textW - padX * 2 - 4;
+    float y = buffer_.hasScrollRegion()
+        ? buffer_.scrollTop() * cellHeight_ + 2.0f
+        : 2.0f;
+
+    if (auto* b = GetBrush(bgCol, 0.75f))
+        rt->FillRectangle(D2D1::RectF(x, y, x + textW + padX * 2, y + textH + padY * 2), b);
+
+    if (auto* b = GetBrush(fgCol)) {
+        D2D1_RECT_F textRect = D2D1::RectF(x + padX, y + padY, x + padX + textW, y + padY + textH);
+        rt->DrawText(buf, (UINT32)wcslen(buf), textFormat_, textRect, b,
+                     D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -654,6 +950,12 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
         }
     }
 
+    // Scroll-back keys (intercepted before PTY)
+    if (shift && vk == VK_PRIOR) { ScrollBy(-VisibleRows()); return; }  // Shift+PageUp
+    if (shift && vk == VK_NEXT)  { ScrollBy(VisibleRows());  return; }  // Shift+PageDown
+    if (ctrl  && vk == VK_HOME)  { scrollOffset_ = maxScrollOffset_; InvalidateRect(hwnd_, nullptr, FALSE); return; } // Ctrl+Home = top of history
+    if (ctrl  && vk == VK_END)   { ScrollToBottom(); return; }           // Ctrl+End = bottom
+
     // Clear selection on any typing
     bool clearSel = false;
     if (vk >= 0x20 && vk <= 0xFE) clearSel = true;
@@ -667,7 +969,8 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
             selEndRow_ = -1; selEndCol_ = -1;
             InvalidateRect(hwnd_, nullptr, FALSE);
         }
-        scrollOffset_ = 0; // snap to bottom on any keystroke
+        // Snap to bottom on keystroke if user was scrolling back
+        if (scrollOffset_ > 0) ScrollToBottom();
         session_.Write(seq.data(), seq.size());
     }
 }
@@ -675,6 +978,8 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
 void TerminalView::OnChar(wchar_t ch) {
     // Ignore control characters already handled by OnKeyDown
     if (ch < 0x20 || ch == 0x7f) return;
+    // IME 確定文字は WM_IME_COMPOSITION (GCS_RESULTSTR) で処理済み——二重送信を防ぐ
+    if (imeActive_) return;
 
     // Clear selection on character input
     if (selAnchorRow_ >= 0) {
@@ -683,7 +988,7 @@ void TerminalView::OnChar(wchar_t ch) {
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
 
-    scrollOffset_ = 0;
+    if (scrollOffset_ > 0) ScrollToBottom();
 
     // UTF-16 → UTF-8
     wchar_t ws[3] = { ch, 0, 0 };

@@ -109,10 +109,19 @@ private:
     bool IsSelected(int logRow, int col) const;
     void CopySelectionToClipboard() const;
 
+    // Mouse
+    void SendMouseWheelToPty(int direction, int px, int py); // direction: +1=up -1=down
+
     // Scrollback
+    static constexpr int kScrollBarWidth = 8;
     int  scrollOffset_ = 0;  // lines scrolled back (0 = bottom)
+    int  maxScrollOffset_ = 0; // cached historyLineCount at last paint
+    bool scrolledBack_ = false; // true when scrollOffset_ > 0
     void ScrollBy(int lines);
+    void ScrollToBottom();
     int  VisibleRows() const;
+    void DrawScrollBar(ID2D1RenderTarget* rt);
+    void DrawScrollIndicator(ID2D1RenderTarget* rt, const RECT& clientRc);
 
     // Cursor blink
     void StartCursorTimer();
@@ -156,4 +165,8 @@ private:
     int  selAnchorCol_ = -1;
     int  selEndRow_    = -1;
     int  selEndCol_    = -1;
+
+    // IME インライン入力
+    std::wstring imeComposition_;   // 変換中の文字列（空 = 非アクティブ）
+    bool         imeActive_ = false;
 };

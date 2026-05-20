@@ -310,20 +310,24 @@ void TerminalBuffer::insertLines(int count) {
     pendingWrap_ = false;
     if (cursorRow_ < scrollTop_ || cursorRow_ > scrollBottom_) return;
     const int amount = std::min(std::max(1, count), scrollBottom_ - cursorRow_ + 1);
-    for (int i = 0; i < amount; ++i) {
-        screen_.insert(screen_.begin() + cursorRow_, blankLine());
-        screen_.erase(screen_.begin() + scrollBottom_ + 1);
-    }
+    // rotate で末尾 amount 行をカーソル行に持ち上げ、そこを blank に（O(n) 1回）
+    std::rotate(screen_.begin() + cursorRow_,
+                screen_.begin() + scrollBottom_ + 1 - amount,
+                screen_.begin() + scrollBottom_ + 1);
+    for (int r = cursorRow_; r < cursorRow_ + amount; ++r)
+        screen_[r] = blankLine();
 }
 
 void TerminalBuffer::deleteLines(int count) {
     pendingWrap_ = false;
     if (cursorRow_ < scrollTop_ || cursorRow_ > scrollBottom_) return;
     const int amount = std::min(std::max(1, count), scrollBottom_ - cursorRow_ + 1);
-    for (int i = 0; i < amount; ++i) {
-        screen_.erase(screen_.begin() + cursorRow_);
-        screen_.insert(screen_.begin() + scrollBottom_, blankLine());
-    }
+    // rotate でカーソル行から amount 行上へ詰め、末尾を blank に（O(n) 1回）
+    std::rotate(screen_.begin() + cursorRow_,
+                screen_.begin() + cursorRow_ + amount,
+                screen_.begin() + scrollBottom_ + 1);
+    for (int r = scrollBottom_ - amount + 1; r <= scrollBottom_; ++r)
+        screen_[r] = blankLine();
 }
 
 void TerminalBuffer::scrollUpLines(int count) {
@@ -396,6 +400,12 @@ int TerminalBuffer::totalLineCount()   const { return (int)(history_.size() + sc
 const TerminalBuffer::Line& TerminalBuffer::lineAt(int logicalRow) const {
     if (logicalRow < (int)history_.size()) return history_[logicalRow];
     return screen_[logicalRow - (int)history_.size()];
+}
+
+int  TerminalBuffer::scrollTop()    const { return scrollTop_; }
+int  TerminalBuffer::scrollBottom() const { return scrollBottom_; }
+bool TerminalBuffer::hasScrollRegion() const {
+    return scrollTop_ > 0 || scrollBottom_ < rows_ - 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -760,6 +770,16 @@ void TerminalBuffer::clampCursor() {
 }
 
 void TerminalBuffer::trimHistory() {
+    // 通常は 1 行だけ溢れるので if で十分（while は O(n²) になるため使わない）
+    if ((int)history_.size() > maxHistoryLines_)
+        history_.erase(history_.begin());
+}
+
+void TerminalBuffer::setMaxHistoryLines(int n) {
+    maxHistoryLines_ = std::max(100, n);   // 最低 100 行は保証
+    // 新しい上限を超えている分を即時トリム
     while ((int)history_.size() > maxHistoryLines_)
         history_.erase(history_.begin());
 }
+
+int TerminalBuffer::maxHistoryLines() const { return maxHistoryLines_; }
