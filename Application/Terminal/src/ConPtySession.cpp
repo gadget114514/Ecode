@@ -169,8 +169,8 @@ HRESULT ConPtySession::LoadApi() {
 // does (the PTY now owns them internally).
 // ---------------------------------------------------------------------------
 HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
-    // Pipe handles must be non-inheritable to prevent leaking to the child process
-    SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, FALSE };
+    // PTYCON sample: pipes must be inheritable for CreatePseudoConsole to duplicate them
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, TRUE };
 
     // Input pipe: we write to inputWriteSide_; PTY reads from inputReadSide_
     if (!CreatePipe(&inputReadSide_, &inputWriteSide_, &sa, 0)) {
@@ -199,13 +199,17 @@ HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
         return hr;
     }
 
-    // Make the HPCON handle inheritable so CreateProcessW can attach it to the child
-    SetHandleInformation(hPC_, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-
     // Close PTY-side pipe handles — ConPTY now owns them.
     // (PTYCON sample closes these immediately after CreatePseudoConsole.)
     CloseHandle(inputReadSide_);   inputReadSide_   = INVALID_HANDLE_VALUE;
     CloseHandle(outputWriteSide_); outputWriteSide_ = INVALID_HANDLE_VALUE;
+
+    // Prevent our pipe ends from leaking to the child process
+    SetHandleInformation(inputWriteSide_, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(outputReadSide_, HANDLE_FLAG_INHERIT, 0);
+
+    // Make the HPCON handle inheritable so CreateProcessW can attach it to the child
+    SetHandleInformation(hPC_, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
 
     return S_OK;
 }
