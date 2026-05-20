@@ -877,6 +877,27 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         SetDlgItemTextW(hDlg, IDC_CLI_FOLDER, L"");
       }
       return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CLI_UPDATE) {
+      HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        auto entries = SettingsManager::Instance().GetCliEntries();
+        if (sel >= 0 && sel < (int)entries.size()) {
+          wchar_t cmd[1024], folder[MAX_PATH];
+          GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);
+          GetDlgItemTextW(hDlg, IDC_CLI_FOLDER, folder, MAX_PATH);
+          int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
+          if (enc < 0) enc = 0;
+          entries[sel].command  = cmd;
+          entries[sel].folder   = folder;
+          entries[sel].encoding = enc;
+          SettingsManager::Instance().SetCliEntries(entries);
+          SettingsManager::Instance().Save();
+          RefreshCliList(hDlg);
+          SendMessage(hList, LB_SETCURSEL, sel, 0);
+        }
+      }
+      return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDC_CLI_RUN) {
       wchar_t cmd[1024], folder[MAX_PATH];
       GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);

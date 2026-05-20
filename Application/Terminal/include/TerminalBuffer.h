@@ -90,6 +90,13 @@ public:
     int historyLineCount()const;
     int totalLineCount()  const;
     const Line& lineAt(int logicalRow) const;
+    int  scrollTop()       const;
+    int  scrollBottom()    const;
+    bool hasScrollRegion() const;
+
+    // --- scrollback limit ---
+    void setMaxHistoryLines(int n);   // 設定変更（即時トリム）
+    int  maxHistoryLines()  const;    // 現在の上限を返す
 
     // --- feature flags (read by TerminalView / TerminalEmulator) ---
     void setBracketedPasteEnabled(bool v);

@@ -48,6 +48,7 @@
 #define ID_REFRESH       2009
 #define ID_PARENT        2010
 #define ID_OPEN_WITH     2011
+#define ID_EXEC          2012
 #define WM_SCAN_DONE     (WM_USER + 10)
 
 enum SortColumn { SORT_NAME, SORT_SIZE, SORT_TYPE, SORT_DATE };
@@ -278,6 +279,30 @@ static void GoToParent(Pane *pane) {
     NavigateTo(pane, parent);
 }
 
+// Execute a non-directory file via ShellExecuteExW with proper working directory.
+static void ExecItem(Pane *pane, HWND hwnd) {
+    int sel = ListView_GetNextItem(pane->hwndList, -1, LVNI_SELECTED);
+    if (sel < 0 || (size_t)sel >= pane->entries.size()) return;
+    FileEntry &e = pane->entries[sel];
+    if (e.IsDir()) return;
+    std::wstring full = pane->currentPath + L"\\" + e.name;
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask      = SEE_MASK_NOCLOSEPROCESS;
+    sei.hwnd       = hwnd;
+    sei.lpVerb     = L"open";
+    sei.lpFile     = full.c_str();
+    sei.lpDirectory = pane->currentPath.c_str();
+    sei.nShow      = SW_SHOW;
+    if (!ShellExecuteExW(&sei)) {
+        DWORD err = GetLastError();
+        wchar_t msg[256];
+        swprintf_s(msg, L"Failed to execute:\n%s\n\nError: %lu", e.name.c_str(), err);
+        MessageBoxW(hwnd, msg, L"Error", MB_ICONERROR | MB_OK);
+    } else if (sei.hProcess) {
+        CloseHandle(sei.hProcess);
+    }
+}
+
 static void OpenItem(Pane *pane) {
     int sel = ListView_GetNextItem(pane->hwndList, -1, LVNI_SELECTED);
     if (sel < 0 || (size_t)sel >= pane->entries.size()) return;
@@ -286,7 +311,7 @@ static void OpenItem(Pane *pane) {
     if (e.IsDir()) {
         NavigateTo(pane, full);
     } else {
-        ShellExecuteW(pane->hwndList, L"open", full.c_str(), nullptr, nullptr, SW_SHOW);
+        ExecItem(pane, pane->hwndList);
     }
 }
 
@@ -309,6 +334,13 @@ static void ShowContextMenu(HWND hwnd, Pane *pane, int x, int y) {
     AppendMenuW(hMenu, MF_STRING, ID_COPY_PATH,  L"Copy Path");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, ID_OPEN_WITH,  L"Open with...");
+    {
+        int execSel = ListView_GetNextItem(pane->hwndList, -1, LVNI_SELECTED);
+        bool isExec = (execSel >= 0 && (size_t)execSel < pane->entries.size()
+                       && !pane->entries[execSel].IsDir());
+        AppendMenuW(hMenu, MF_STRING | (isExec ? 0 : MF_GRAYED),
+                    ID_EXEC, L"Execute\tCtrl+Enter");
+    }
     AppendMenuW(hMenu, MF_STRING, ID_PROPERTIES, L"Properties\tAlt+Enter");
 
     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
@@ -385,6 +417,9 @@ static void ShowContextMenu(HWND hwnd, Pane *pane, int x, int y) {
         StartScan(pane);
         break;
     }
+    case ID_EXEC:
+        ExecItem(pane, hwnd);
+        break;
     case ID_OPEN_WITH: {
         std::wstring full = pane->currentPath + L"\\" + pane->entries[sel].name;
         SHELLEXECUTEINFOW sei = { sizeof(sei) };
@@ -750,7 +785,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case LVN_KEYDOWN: {
             int vk = ((NMLVKEYDOWN*)lp)->wVKey;
-            if (vk == VK_RETURN) OpenItem(pane);
+            if (vk == VK_RETURN) {
+                if (GetKeyState(VK_CONTROL) & 0x8000)
+                    ExecItem(pane, hwnd);
+                else
+                    OpenItem(pane);
+            }
             else if (vk == VK_LEFT && pane == &g_panes[1]) {
                 SetFocus(g_panes[0].hwndList);
                 return 0;

@@ -312,9 +312,11 @@ static HBITMAP SwCaptureSnapshot(HWND src) {
     if (!ok) {
         // Last-resort: BitBlt from screen (requires visible, unoccluded window)
         if (IsWindowVisible(src)) {
+            POINT ptOrigin = {0, 0};
+            ClientToScreen(src, &ptOrigin);
             HDC hdcScreen2 = GetDC(nullptr);
             BitBlt(hdcMem, 0, 0, w, h, hdcScreen2,
-                   rc.left, rc.top, SRCCOPY);
+                   ptOrigin.x, ptOrigin.y, SRCCOPY);
             ReleaseDC(nullptr, hdcScreen2);
             ok = TRUE;
         }
@@ -573,13 +575,15 @@ static void SwPaint(HWND hwnd) {
                 DeleteObject(br);
             }
         } else if (i < (int)g_switcherSnapshots.size() && g_switcherSnapshots[i]) {
+            BITMAP bm = {};
+            GetObject(g_switcherSnapshots[i], sizeof(bm), &bm);
             HDC hdcMem = CreateCompatibleDC(hdc);
             HBITMAP hOld2 = (HBITMAP)SelectObject(hdcMem, g_switcherSnapshots[i]);
             StretchBlt(hdc,
                        thumb.left, thumb.top,
                        thumb.right - thumb.left, thumb.bottom - thumb.top,
                        hdcMem, 0, 0,
-                       thumb.right - thumb.left, thumb.bottom - thumb.top,
+                       bm.bmWidth, bm.bmHeight,
                        SRCCOPY);
             SelectObject(hdcMem, hOld2);
             DeleteDC(hdcMem);
