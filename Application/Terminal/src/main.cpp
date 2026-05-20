@@ -78,7 +78,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
     ShowWindow(hwnd, SW_SHOWNORMAL);
     UpdateWindow(hwnd);
 
-    if (g_view) g_view->StartSession(g_shell);
+    if (g_view && !g_view->StartSession(g_shell)) {
+        std::wstring msg = L"Failed to start shell: " + g_shell + L"\n\n" + g_view->LastError();
+        MessageBoxW(hwnd, msg.c_str(), L"Terminal", MB_OK | MB_ICONERROR);
+    }
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
