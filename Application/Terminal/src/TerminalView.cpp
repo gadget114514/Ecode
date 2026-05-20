@@ -379,7 +379,7 @@ void TerminalView::OnPaint() {
             if (cell.wideContinuation) continue;
 
             bool isCursor = (logRow == curRow && col == buffer_.cursorColumn()
-                             && scrollOffset_ == 0);
+                             && scrollOffset_ == 0 && buffer_.cursorVisible());
             bool isSelected = IsSelected(logRow, col);
             DrawCell(rt, screenRow, col, cell, isCursor, cursorBlink_, isSelected);
         }
@@ -406,8 +406,10 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     if (cell.inverse) std::swap(fg, bg);
 
     // Draw background first
-    if (!bg.isDefault || isCursor) {
-        TermColor drawBg = isCursor ? fg : bg;
+    bool drawBlock = isCursor && cursorVisible
+                     && buffer_.cursorShape() == TerminalBuffer::CursorShape::Block;
+    if (!bg.isDefault || drawBlock) {
+        TermColor drawBg = drawBlock ? fg : bg;
         if (auto* b = GetBrush(drawBg))
             rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
     }
@@ -426,7 +428,7 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
 
     // Draw text
     if (!cell.text.empty() && cell.text != L" ") {
-        TermColor drawFg = isCursor ? bg : fg;
+        TermColor drawFg = drawBlock ? bg : fg;
         if (auto* b = GetBrush(drawFg)) {
             D2D1_RECT_F rect = D2D1::RectF(x, y, x + w, y + h);
             rt->DrawText(cell.text.c_str(), (UINT32)cell.text.size(),

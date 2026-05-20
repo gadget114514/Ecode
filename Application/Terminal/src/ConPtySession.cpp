@@ -199,9 +199,6 @@ HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
         return hr;
     }
 
-    // Make the HPCON handle inheritable so CreateProcessW can attach it to the child
-    SetHandleInformation(hPC_, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-
     // Close PTY-side pipe handles — ConPTY now owns them.
     // (PTYCON sample closes these immediately after CreatePseudoConsole.)
     CloseHandle(inputReadSide_);   inputReadSide_   = INVALID_HANDLE_VALUE;

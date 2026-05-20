@@ -57,8 +57,12 @@ void TerminalBuffer::resize(int columns, int rows) {
         normalizeWideCells(line);
         screen_.push_back(std::move(line));
     }
+    // Count rows inserted at the top; shift cursor down to stay at same content row
+    const int insertCount = rows_ - (int)screen_.size();
     while ((int)screen_.size() < rows_)
         screen_.insert(screen_.begin(), blankLine());
+    if (insertCount > 0)
+        cursorRow_ += insertCount;
 
     clampCursor();
 }
