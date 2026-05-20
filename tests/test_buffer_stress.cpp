@@ -1,3 +1,4 @@
+#define NOMINMAX
 #include "../include/Buffer.h"
 #include <algorithm>
 #include <iostream>
