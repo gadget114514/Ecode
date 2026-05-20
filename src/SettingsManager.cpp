@@ -96,8 +96,10 @@ void SettingsManager::Load() {
 
   wchar_t defExtBuf[64];
   if (GetPrivateProfileStringW(L"Editor", L"DefaultExtension", L"", defExtBuf,
-                                64, path.c_str()) > 0) {
+                                64, path.c_str()) > 0 && wcslen(defExtBuf) > 0) {
     m_defaultExtension = defExtBuf;
+  } else {
+    m_defaultExtension = L"*.txt;*.md;*.json";
   }
 
   wchar_t pluginDirBuf[MAX_PATH];
@@ -155,10 +157,12 @@ void SettingsManager::Load() {
   for (int i = 0; i < 50; ++i) {
     std::wstring keyCmd = L"CLI_Cmd_" + std::to_wstring(i);
     std::wstring keyDir = L"CLI_Dir_" + std::to_wstring(i);
+    std::wstring keyEnc = L"CLI_Enc_" + std::to_wstring(i);
     wchar_t cmdBuf[1024], dirBuf[MAX_PATH];
     if (GetPrivateProfileStringW(L"CLI", keyCmd.c_str(), L"", cmdBuf, 1024, path.c_str()) > 0) {
       GetPrivateProfileStringW(L"CLI", keyDir.c_str(), L"", dirBuf, MAX_PATH, path.c_str());
-      m_cliEntries.push_back({cmdBuf, dirBuf});
+      int enc = GetPrivateProfileIntW(L"CLI", keyEnc.c_str(), 0, path.c_str());
+      m_cliEntries.push_back({cmdBuf, dirBuf, enc});
     }
   }
 
@@ -258,6 +262,23 @@ void SettingsManager::Load() {
     m_activeTheme = m_themes[0].name;
   }
 
+  // Load hidden plugins
+  m_hiddenPlugins.clear();
+  wchar_t hiddenBuf[4096];
+  if (GetPrivateProfileStringW(L"HiddenPlugins", L"List", L"", hiddenBuf, 4096, path.c_str()) > 0 && wcslen(hiddenBuf) > 0) {
+    std::wstring list = hiddenBuf;
+    size_t start = 0, end;
+    while ((end = list.find(L',', start)) != std::wstring::npos) {
+      std::wstring pn = list.substr(start, end - start);
+      if (!pn.empty()) m_hiddenPlugins.push_back(pn);
+      start = end + 1;
+    }
+    if (start < list.size()) {
+      std::wstring pn = list.substr(start);
+      if (!pn.empty()) m_hiddenPlugins.push_back(pn);
+    }
+  }
+
   // Load Dired pairs
   m_diredPairs.clear();
   for (int i = 0; i < 50; ++i) {
@@ -355,6 +376,7 @@ void SettingsManager::Save() {
   }
 
   SaveCliEntries();
+  SaveHiddenPlugins();
   SaveThemes();
 }
 
@@ -453,6 +475,30 @@ std::wstring SettingsManager::GetBashCommand(std::wstring *workingDir) const {
   return result;
 }
 
+bool SettingsManager::IsPluginHidden(const std::wstring &name) const {
+  for (const auto &h : m_hiddenPlugins) {
+    if (h == name) return true;
+  }
+  return false;
+}
+
+void SettingsManager::ToggleHiddenPlugin(const std::wstring &name) {
+  for (auto it = m_hiddenPlugins.begin(); it != m_hiddenPlugins.end(); ++it) {
+    if (*it == name) { m_hiddenPlugins.erase(it); return; }
+  }
+  m_hiddenPlugins.push_back(name);
+}
+
+void SettingsManager::SaveHiddenPlugins() {
+  std::wstring path = GetSettingsPath();
+  std::wstring list;
+  for (size_t i = 0; i < m_hiddenPlugins.size(); ++i) {
+    if (i > 0) list += L",";
+    list += m_hiddenPlugins[i];
+  }
+  WritePrivateProfileStringW(L"HiddenPlugins", L"List", list.c_str(), path.c_str());
+}
+
 void SettingsManager::AddRecentFile(const std::wstring &path) {
   auto it = std::find(m_recentFiles.begin(), m_recentFiles.end(), path);
   if (it != m_recentFiles.end()) {
@@ -465,8 +511,8 @@ void SettingsManager::AddRecentFile(const std::wstring &path) {
   Save();
 }
 
-void SettingsManager::AddCliEntry(const std::wstring &cmd, const std::wstring &folder) {
-  m_cliEntries.push_back({cmd, folder});
+void SettingsManager::AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding) {
+  m_cliEntries.push_back({cmd, folder, encoding});
 }
 
 void SettingsManager::RemoveCliEntry(size_t index) {
@@ -481,8 +527,10 @@ void SettingsManager::SaveCliEntries() {
   for (size_t i = 0; i < m_cliEntries.size(); ++i) {
     std::wstring keyCmd = L"CLI_Cmd_" + std::to_wstring(i);
     std::wstring keyDir = L"CLI_Dir_" + std::to_wstring(i);
+    std::wstring keyEnc = L"CLI_Enc_" + std::to_wstring(i);
     WritePrivateProfileStringW(L"CLI", keyCmd.c_str(), m_cliEntries[i].command.c_str(), path.c_str());
     WritePrivateProfileStringW(L"CLI", keyDir.c_str(), m_cliEntries[i].folder.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"CLI", keyEnc.c_str(), std::to_wstring(m_cliEntries[i].encoding).c_str(), path.c_str());
   }
 }
 
