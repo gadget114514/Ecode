@@ -1,13 +1,15 @@
 cmake_minimum_required(VERSION 3.15)
 
-# Use static MD triplet so yaml-cpp (and all vcpkg deps) are statically linked
-# while keeping the /MD (dynamic) CRT — avoids shipping yaml-cpp.dll.
-set(VCPKG_TARGET_TRIPLET "x64-windows-static-md" CACHE STRING "vcpkg triplet")
+# Fully static build: static vcpkg deps + static CRT (/MT).
+set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "vcpkg triplet")
 
 project(JYEditor LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Static CRT — must match the x64-windows-static triplet.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_executable(JYEditor WIN32
     src/main.cpp
