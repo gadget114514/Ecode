@@ -189,9 +189,22 @@ static std::wstring FormatDate(FILETIME ft) {
     FILETIME lt; SYSTEMTIME st;
     FileTimeToLocalFileTime(&ft, &lt);
     FileTimeToSystemTime(&lt, &st);
-    wchar_t buf[64];
-    swprintf_s(buf, L"%04d-%02d-%02d %02d:%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
+    wchar_t buf[16];
+    swprintf_s(buf, L"%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
     return buf;
+}
+
+static float TextWidth(const std::wstring& text) {
+    if (!g_dw || !g_tf || text.empty()) return 0.0f;
+    IDWriteTextLayout* layout = nullptr;
+    HRESULT hr = g_dw->CreateTextLayout(text.c_str(), (UINT32)text.size(),
+                                         g_tf, 1000.0f, 100.0f, &layout);
+    if (FAILED(hr) || !layout) return 0.0f;
+    DWRITE_TEXT_METRICS metrics;
+    hr = layout->GetMetrics(&metrics);
+    float w = SUCCEEDED(hr) ? metrics.widthIncludingTrailingWhitespace : 0.0f;
+    layout->Release();
+    return w;
 }
 
 static std::wstring FormatAttr(DWORD attr) {
@@ -456,9 +469,9 @@ static void InitColumns(Pane& p) {
     p.columns.push_back({ColType::Name, 200.0f, true});
     p.columns.push_back({ColType::Ext,  48.0f,  true});
     p.columns.push_back({ColType::Size, 80.0f,  true});
-    p.columns.push_back({ColType::Date, 100.0f, true});
-    p.columns.push_back({ColType::Time, 60.0f,  true});
-    p.columns.push_back({ColType::Attr, 48.0f,  true});
+    p.columns.push_back({ColType::Date, TextWidth(L"20880808") + 12.0f, true});
+    p.columns.push_back({ColType::Time, TextWidth(L"88:88:88")   + 12.0f, true});
+    p.columns.push_back({ColType::Attr, TextWidth(L"DDDDDD") + 12.0f, true});
 }
 
 static void InitPane(Pane& p, const std::wstring& path) {
@@ -1002,9 +1015,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         GetCurrentDirectoryW(MAX_PATH, curDir);
         int argc = 0;
         LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+        int argIdx = 1;
+        if (argv && argc > argIdx && wcscmp(argv[argIdx], L"--embedded") == 0)
+            ++argIdx;
 
-        InitPane(g_panes[0], (argv && argc > 1) ? argv[1] : curDir);
-        std::wstring rightPath = (argv && argc > 2) ? argv[2] : L"";
+        InitPane(g_panes[0], (argv && argc > argIdx) ? argv[argIdx] : curDir);
+        std::wstring rightPath = (argv && argc > argIdx + 1) ? argv[argIdx + 1] : L"";
         if (argv) LocalFree(argv);
 
         if (!rightPath.empty() && GetFileAttributesW(rightPath.c_str()) != INVALID_FILE_ATTRIBUTES) {

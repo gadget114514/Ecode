@@ -360,19 +360,7 @@ void UpdateMenu(HWND hwnd) {
     DestroyMenu(hAi);
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
-  // Dired Menu (directory pairs only; launch Dired from Plugins menu)
-  HMENU hDired = CreatePopupMenu();
-  const auto &diredPairs = SettingsManager::Instance().GetDiredPairs();
-  for (size_t i = 0; i < diredPairs.size(); ++i) {
-    std::wstring text = diredPairs[i].label + L"  →  " + diredPairs[i].leftDir;
-    AppendMenu(hDired, MF_STRING, IDM_DIRED_START + i, text.c_str());
-  }
-  if (!diredPairs.empty())
-    AppendMenu(hDired, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hDired, MF_STRING, IDM_DIRED_CONFIGURE, L"Configure Dired Pairs...");
-
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hDired, L"Dired");
   // Process Menu - kill process-bound apps and terminals
   HMENU hProcess = CreatePopupMenu();
   bool hasProcesses = false;
