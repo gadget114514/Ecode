@@ -5,15 +5,15 @@
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Duktape](https://img.shields.io/badge/scripting-duktape-purple)
 
-**Ecode** is a blazing-fast, native Win32 text editor with **embedded terminal** and **CLI command launcher** — built for developers who want a fully integrated development environment without the overhead of Electron or web-based editors.
+**Ecode** is a blazing-fast, native Win32 text editor with **process-bounded terminal** and **CLI command launcher** — built for developers who want a fully integrated development environment without the overhead of Electron or web-based editors.
 
 ![Ecode Screenshot](images/opencode.jpg)
 
 ---
 
-## 🖥️ Embedded Terminal (VT420-compatible)
+## 🖥️ Process-Bounded Terminal (VT420-compatible)
 
-Ecode ships with a **native Win32 terminal emulator** as an embedded plugin — no separate window needed.
+Ecode launches a **native Win32 terminal emulator** as a child process and binds it to the editor tab — no separate window needed.
 
 - **Full VT420 escape sequence support**: DECSTBM scroll regions, SGR attributes, alternate screen buffer, mouse tracking, hyperlinks (OSC 8), clipboard access (OSC 52)
 - **Hardware-accelerated rendering**: Direct2D + DirectWrite for sharp text at any zoom level
@@ -37,7 +37,7 @@ Define **reusable shell command entries** with configurable working directories 
 - **Per-entry configuration**: Command, working directory, and encoding (UTF-8 / Shift-JIS) per entry
 - **Quick execution**: Launch any entry from the CLI Entries menu or dialog
 - **Batch operations**: Duplicate, edit, and reorder entries via the CLI Settings dialog
-- **Integrated workflow**: Output appears in the embedded terminal automatically
+- **Integrated workflow**: Output appears in the terminal automatically
 
 ### Example use cases
 
