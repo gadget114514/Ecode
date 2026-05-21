@@ -11,14 +11,14 @@
 
 ---
 
-## 🖥️ Process-Bounded Terminal (VT420-compatible)
+## 🖥️ Process-Bounded Terminal
 
 Ecode launches a **native Win32 terminal emulator** as a child process and binds it to the editor tab — no separate window needed.
 
 - **Full VT420 escape sequence support**: DECSTBM scroll regions, SGR attributes, alternate screen buffer, mouse tracking, hyperlinks (OSC 8), clipboard access (OSC 52)
 - **Hardware-accelerated rendering**: Direct2D + DirectWrite for sharp text at any zoom level
 - **Scrollback history**: Up to 10,000 lines with visual scroll bar and scroll position indicator
-- **VT420 scroll region compliance**: TUI apps (vim, less, htop) keep headers/footers fixed while scrolling
+- **Scroll region support**: TUI apps (vim, less, htop) keep headers/footers fixed while scrolling
 - **ConPTY-based**: True pseudo-console integration via Win32 Pseudo Console API
 - **Font discovery**: Cascadia Mono with Consolas fallback
 
@@ -69,7 +69,7 @@ Define **reusable shell command entries** with configurable working directories 
 *   **Tabbed Interface**: Manage multiple huge buffers simultaneously with ease.
 
 ### 🔌 Plugin Ecosystem
-*   **Terminal**: Full VT420 terminal emulator (ConPTY, D2D rendering, scrollback, DECSTBM)
+*   **Terminal**: Full terminal emulator (ConPTY, D2D rendering, scrollback, scroll regions)
 *   **Dired**: Dual-pane file manager with keyboard navigation and file operations
 *   **FastFD**: Multi-pane file dialog with Direct2D rendering and directory selection
 *   **CSVEditor**: Spreadsheet-style CSV viewer/editor
