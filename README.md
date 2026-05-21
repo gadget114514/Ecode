@@ -38,12 +38,6 @@ Save your most-used shell commands with names and working directories. Run them 
 | Git status | `git status` | `D:\project` |
 | AI chat | `claude` | `D:\project` |
 
-### File Manager (Dired)
-Dual-pane file browsing with keyboard navigation. Copy, move, rename, delete files, open terminals in any directory.
-
-### Fast File Dialog (FastFD)
-A graphical file picker with multiple panes and keyboard navigation. Browse directories, select paths, send them back to the editor.
-
 ### Git-Friendly
 - Atomic saves (write to temp, rename) — no corrupted files even on crash
 - Handles huge files instantly (memory-mapped I/O)
@@ -73,7 +67,7 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 ## Project Status
 
 - [x] Terminal + CLI launcher
-- [x] File manager (Dired, FastFD)
+
 - [x] Huge file support
 - [x] Multi-language UI
 - [ ] Theming
