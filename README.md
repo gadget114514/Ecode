@@ -42,6 +42,9 @@ Save your most-used shell commands with names and working directories. Run them 
 - Atomic saves (write to temp, rename) — no corrupted files even on crash
 - Handles huge files instantly (memory-mapped I/O)
 
+### Find in Files (Grep)
+Search across your project with pattern matching, extension filtering, and regex support. Results appear in a dedicated buffer with clickable file paths.
+
 ### Scriptable (optional)
 JavaScript engine built in. Create macros, automate editing tasks, add custom key bindings. Not required for day-to-day AI CLI use.
 
@@ -68,10 +71,10 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 
 - [x] Terminal + CLI launcher
 
+- [x] Find in files (grep with regex)
 - [x] Huge file support
 - [x] Multi-language UI
 - [ ] Theming
-- [ ] Search & replace
 
 ---
 
