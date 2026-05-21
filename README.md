@@ -4,6 +4,8 @@ Talk to AI, edit code, run commands — all in one fast native Windows app.
 
 No Electron. No webView. No 500MB install.
 
+> **Process-bounded architecture**: Plugins like the terminal run as **separate child processes**, not as in-process DLLs or web views. Each dies cleanly when closed. No process hikes or memory leaks.
+
 ---
 
 ## Why Ecode for AI CLI
