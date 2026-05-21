@@ -15,12 +15,11 @@
 
 Ecode launches a **native Win32 terminal emulator** as a child process and binds it to the editor tab — no separate window needed.
 
-- **Full VT420 escape sequence support**: DECSTBM scroll regions, SGR attributes, alternate screen buffer, mouse tracking, hyperlinks (OSC 8), clipboard access (OSC 52)
+- **AI CLI ready**: Stream long outputs from tools like Claude Code, render OSC 8 hyperlinks as clickable URLs, browse scrollback with Shift+PageUp/Down
 - **Hardware-accelerated rendering**: Direct2D + DirectWrite for sharp text at any zoom level
-- **Scrollback history**: Up to 10,000 lines with visual scroll bar and scroll position indicator
-- **Scroll region support**: TUI apps (vim, less, htop) keep headers/footers fixed while scrolling
+- **Scrollback history**: Up to 10,000 lines with visual scroll bar and position indicator
 - **ConPTY-based**: True pseudo-console integration via Win32 Pseudo Console API
-- **Font discovery**: Cascadia Mono with Consolas fallback
+- **Full ANSI support**: SGR attributes (bold, italic, underline, 256-color, truecolor), alternate screen buffer, mouse tracking, clipboard access (OSC 52)
 
 ```
 printf '\e[5;20r'      # Set scroll region (rows 5-20)
