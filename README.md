@@ -6,6 +6,14 @@ No Electron. No webView. No 500MB install.
 
 > **Process-bounded architecture**: Plugins like the terminal run as **separate child processes**, not as in-process DLLs or web views. Each dies cleanly when closed. No process hikes or memory leaks.
 
+| | Ecode | VS Code | Neovim + terminal | Notepad++ |
+|---|---|---|---|---|
+| **Architecture** | Native Win32 | Electron | TUI editor | Native Win32 |
+| **Terminal integrated** | Yes (process-bounded) | Yes (Electron) | Uses host terminal | No |
+| **Editor + Terminal in one window** | Yes | Yes | No (two windows) | No |
+| **Click file paths in terminal** | Yes (OSC 8) | No | No | N/A |
+| **CLI command launcher** | Built-in | Tasks/scripts | Shell aliases | No |
+
 ---
 
 ## Why Ecode for AI CLI
