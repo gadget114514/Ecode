@@ -950,6 +950,12 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
         }
     }
 
+    // Ctrl+V / Shift+Insert: paste from clipboard
+    if ((ctrl && vk == 'V') || (!ctrl && shift && vk == VK_INSERT)) {
+        PasteFromClipboard();
+        return;
+    }
+
     // Scroll-back keys (intercepted before PTY)
     if (shift && vk == VK_PRIOR) { ScrollBy(-VisibleRows()); return; }  // Shift+PageUp
     if (shift && vk == VK_NEXT)  { ScrollBy(VisibleRows());  return; }  // Shift+PageDown
