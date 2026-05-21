@@ -1,150 +1,86 @@
-# 🚀 Ecode: High-Performance Win32 Native Text Editor
+# Ecode
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Platform](https://img.shields.io/badge/platform-windows-blue)
-![License](https://img.shields.io/badge/license-MIT-orange)
-![Duktape](https://img.shields.io/badge/scripting-duktape-purple)
+Talk to AI, edit code, run commands — all in one fast native Windows app.
 
-**Ecode** is a blazing-fast, native Win32 text editor with **process-bounded terminal** and **CLI command launcher** — built for developers who want a fully integrated development environment without the overhead of Electron or web-based editors.
-
-![Ecode Screenshot](images/opencode.jpg)
+No Electron. No webView. No 500MB install.
 
 ---
 
-## 🖥️ Process-Bounded Terminal
+## Why Ecode for AI CLI
 
-Ecode launches a **native Win32 terminal emulator** as a child process and binds it to the editor tab — no separate window needed.
+AI coding tools (Claude Code, OpenCode, etc.) work best when you can **see the code**, **edit it**, and **run commands** side by side. Ecode gives you all three in one window:
 
-- **AI CLI ready**: Stream long outputs from tools like Claude Code, render OSC 8 hyperlinks as clickable URLs, browse scrollback with Shift+PageUp/Down
-- **Hardware-accelerated rendering**: Direct2D + DirectWrite for sharp text at any zoom level
-- **Scrollback history**: Up to 10,000 lines with visual scroll bar and position indicator
-- **ConPTY-based**: True pseudo-console integration via Win32 Pseudo Console API
-- **Full ANSI support**: SGR attributes (bold, italic, underline, 256-color, truecolor), alternate screen buffer, mouse tracking, clipboard access (OSC 52)
+- **Terminal + Editor side by side**: Run `claude` or `opencode` in the terminal tab while editing files next to it
+- **Copy AI output directly into code**: Select text from the AI's response and paste it right into your editor buffer
+- **Scroll back through AI conversations**: Browsable history with Shift+PageUp/Down — no more losing output off screen
+- **Snappy and lightweight**: Starts in under a second, uses <20MB RAM, no background processes
 
+---
+
+## Features at a Glance
+
+### Terminal (Process-Bounded)
+A real terminal runs as a child process inside an editor tab. Works with any CLI tool.
+
+- Stream AI tool output in real time
+- Click on file paths and URLs in AI output (OSC 8 hyperlinks)
+- Browse scrollback history with mouse wheel or Shift+PageUp/Down
+- Copy text from terminal output and paste into your code
+- Colors, bold, italic, underline — everything renders correctly
+
+### CLI Command Launcher
+Save your most-used shell commands with names and working directories. Run them from a menu anytime.
+
+| Example | Command | Directory |
+|---------|---------|-----------|
+| Build | `cmake --build .` | `D:\project\build` |
+| Test | `pytest tests/` | `D:\project` |
+| Git status | `git status` | `D:\project` |
+| AI chat | `claude` | `D:\project` |
+
+### File Manager (Dired)
+Dual-pane file browsing with keyboard navigation. Copy, move, rename, delete files, open terminals in any directory.
+
+### Fast File Dialog (FastFD)
+A graphical file picker with multiple panes and keyboard navigation. Browse directories, select paths, send them back to the editor.
+
+### Git-Friendly
+- Atomic saves (write to temp, rename) — no corrupted files even on crash
+- Handles huge files instantly (memory-mapped I/O)
+
+### Scriptable (optional)
+JavaScript engine built in. Create macros, automate editing tasks, add custom key bindings. Not required for day-to-day AI CLI use.
+
+---
+
+## Getting Started
+
+### Download
+Download the latest installer from [Releases](https://github.com/user/Ecode/releases).
+
+### Build from Source
+```powershell
+git clone https://github.com/user/Ecode.git
+cd Ecode
+mkdir build; cd build
+cmake ..
+cmake --build . --config Release --target installer
 ```
-printf '\e[5;20r'      # Set scroll region (rows 5-20)
-for i in $(seq 50); do echo "Line $i"; done   # Scroll within region
-Shift+PageUp           # Browse scrollback history
-```
+Requires: Windows 10/11, Visual Studio 2022, Powershell.
 
 ---
 
-## ⚡ CLI Command Launcher
+## Project Status
 
-Define **reusable shell command entries** with configurable working directories and encoding — accessible instantly from menus or keyboard shortcuts.
-
-- **Per-entry configuration**: Command, working directory, and encoding (UTF-8 / Shift-JIS) per entry
-- **Quick execution**: Launch any entry from the CLI Entries menu or dialog
-- **Batch operations**: Duplicate, edit, and reorder entries via the CLI Settings dialog
-- **Integrated workflow**: Output appears in the terminal automatically
-
-### Example use cases
-
-| Use Case | Command | Directory |
-|----------|---------|-----------|
-| Build project | `cmake --build .` | `D:\ws\Ecode\build` |
-| Run tests | `pytest tests/` | `D:\ws\project` |
-| Git status | `git status` | `D:\ws\repo` |
-| Deploy | `deploy.ps1` | `D:\ws\deploy` |
+- [x] Terminal + CLI launcher
+- [x] File manager (Dired, FastFD)
+- [x] Huge file support
+- [x] Multi-language UI
+- [ ] Theming
+- [ ] Search & replace
 
 ---
 
-## ✨ Key Technical Pillars
+## License
 
--   **⚡ Unmatched Performance**: Leveraging a **Piece Table** data structure for $O(1)$ edit performance, even with gigabyte-sized files.
--   **💾 Huge File Support**: Instant file opening via **Win32 Memory Mapping (MMF)**. If your OS can see it, Ecode can edit it.
--   **🎨 Visual Excellence**: Hardware-accelerated text rendering using **DirectWrite** and **Direct2D** for crisp, smooth typography.
--   **📜 Extreme Programmability**: Embedded **Duktape JS Engine** allows for live macros, custom key bindings, and editor extensions.
--   **🔌 Plugin Architecture**: Modular plugin system (Dired, FastFD, Terminal, CSVEditor, JYEditor) — drop a `.exe` in `plugins/` to add new features.
--   **🌍 Multi-lingual**: Built-in support for English, Japanese, Spanish, French, and German.
-
----
-
-## 🛠️ Features
-
-### 🧩 Core Engine
-*   **Piece Table Implementation**: Efficient internal representation of text edits.
-*   **Atomic Save Strategy**: "Save-to-temp-and-rename" ensures zero data loss during power failures or crashes.
-*   **Tabbed Interface**: Manage multiple huge buffers simultaneously with ease.
-
-### 🔌 Plugin Ecosystem
-*   **Terminal**: Full terminal emulator (ConPTY, D2D rendering, scrollback, scroll regions)
-*   **Dired**: Dual-pane file manager with keyboard navigation and file operations
-*   **FastFD**: Multi-pane file dialog with Direct2D rendering and directory selection
-*   **CSVEditor**: Spreadsheet-style CSV viewer/editor
-*   **JYEditor**: JSON/YAML tree editor
-*   **FastFileSearch**: Administrator-mode NTFS file search
-*   **Custom plugins**: Add your own `.exe` to `plugins/` — auto-discovered at startup
-
-### ⌨️ Scripting & Macros
-*   **Live Scratch Buffer**: Evaluate JavaScript on the fly to manipulate text or automate tasks.
-*   **JS-Invokable Key Bindings**: Bind any JavaScript function to custom key chords (e.g., `Ctrl+Alt+S`).
-*   **Rich JS API**: Access buffer contents, length, and editing functions directly from scripts.
-
-### 🌐 Global Ready
-*   **Multi-language UI**: Switch between English, 日本語, Español, Français, and Deutsch at runtime.
-*   **UTF-8 / UCS-2 Support**: Full compatibility with modern text encodings.
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-*   Windows 10/11
-*   Visual Studio 2022 (with C++ Desktop Development)
-*   Powershell (for build scripts)
-
-### Building from Source
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/user/Ecode.git
-    cd Ecode
-    ```
-2.  **Initialize environment**: Open a Developer Command Prompt.
-3.  **Run Build**:
-    ```powershell
-    mkdir build
-    cd build
-    cmake ..
-    cmake --build . --config Release --target installer
-    ```
-    This will compile the editor and generate the installer in `bin/EcodeSetup.exe`.
-
----
-
-## 📖 Feature Spotlight: The Scratch Buffer
-
-Want to automate a repetitive task? Open a **Scratch Buffer**, write some JS, and execute it instantly with `Ctrl+Enter`.
-
-```javascript
-// Duplicate the current line 10 times
-function duplicate() {
-  let text = Editor.getText(0, Editor.getLength());
-  for(let i=0; i<10; i++) Editor.insert(Editor.getLength(), text);
-}
-Editor.setKeyBinding("Ctrl+D", "duplicate");
-```
-
----
-
-## 📈 Project Status
-
--   [x] Piece Table & Memory Mapping
--   [x] DirectWrite Rendering Pipeline
--   [x] Duktape Integration (JS API)
--   [x] Terminal Emulator (VT420 + ConPTY)
--   [x] CLI Command Launcher
--   [x] Plugin System (Dired, FastFD, CSVEditor, etc.)
--   [x] Localization (v1.0)
--   [ ] Caret & Selection Logic (In Progress)
--   [ ] Theming System
--   [ ] Search & Regex
-
----
-
-## 📜 License
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
-
----
-
-*Built with ❤️ for the performance-obsessed developer.*
+MIT
