@@ -8,12 +8,24 @@ No Electron. No webView. No 500MB install.
 
 ## Why Ecode for AI CLI
 
-AI coding tools (Claude Code, OpenCode, etc.) work best when you can **see the code**, **edit it**, and **run commands** side by side. Ecode gives you all three in one window:
+A terminal alone is not enough. AI coding tools (Claude Code, OpenCode, etc.) produce output with **file paths**, **code snippets**, and **long conversations**. You need to act on that output — not just read it.
 
-- **Terminal + Editor side by side**: Run `claude` or `opencode` in the terminal tab while editing files next to it
-- **Copy AI output directly into code**: Select text from the AI's response and paste it right into your editor buffer
-- **Scroll back through AI conversations**: Browsable history with Shift+PageUp/Down — no more losing output off screen
-- **Snappy and lightweight**: Starts in under a second, uses <20MB RAM, no background processes
+| With just a terminal | With Ecode |
+|---|---|
+| AI says "edit line 42 in main.c" → you open a separate editor, find the file, scroll to the line | Click the file path in terminal output → it opens in the editor at the right line |
+| AI outputs a code block → you select, copy, switch windows, paste, save | Select in terminal, paste into editor tab beside it |
+| Long AI conversation scrolls off screen → lost forever | Shift+PageUp to browse history |
+| Type the same build/test commands over and over | Save them as CLI entries, run from a menu |
+| Heavy Electron editor takes 5+ seconds to start and 500MB RAM | Starts in <1 second, uses <20MB RAM |
+
+### What you get
+
+- **Terminal + Editor in one window**: Run `claude` or `opencode` while editing files right next to it — no alt-tabbing
+- **Click file paths in AI output**: OSC 8 hyperlinks render as clickable paths — one click opens the file
+- **Copy-paste between AI and code**: AI proposes a change → select in terminal → paste into editor → save
+- **Scrollable history**: Shift+PageUp/Down through AI conversations — nothing gets lost
+- **CLI launcher**: Save frequently used commands (build, test, deploy) with names and directories
+- **Snappy and lightweight**: Native Win32 app, <1s startup, <20MB RAM, no background processes
 
 ---
 
