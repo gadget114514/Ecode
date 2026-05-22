@@ -1026,24 +1026,34 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       size_t idx = LOWORD(wParam) - IDM_CLI_START;
       const auto &entries = SettingsManager::Instance().GetCliEntries();
       if (idx < entries.size()) {
-        std::wstring bashDir;
-        std::wstring bashCmd = SettingsManager::Instance().GetBashCommand(&bashDir);
-        if (!bashCmd.empty()) {
-          std::wstring cliDir = entries[idx].folder;
-          if (!cliDir.empty()) SetCurrentDirectoryW(cliDir.c_str());
+        std::wstring cliDir = entries[idx].folder;
+        if (!cliDir.empty()) SetCurrentDirectoryW(cliDir.c_str());
+        std::wstring shellArgs;
+        int st = entries[idx].shellType;
+        if (st < 0 || st > 2) st = 2;
+        if (st == 0) {
+          wchar_t comspec[MAX_PATH];
+          GetEnvironmentVariableW(L"COMSPEC", comspec, MAX_PATH);
+          shellArgs = std::wstring(comspec) + L" /k \"" + entries[idx].command + L"\"";
+        } else if (st == 1) {
+          shellArgs = L"powershell.exe -NoExit -Command \"" + entries[idx].command + L"\"";
+        } else {
+          std::wstring bashDir;
+          std::wstring bashCmd = SettingsManager::Instance().GetBashCommand(&bashDir);
+          if (bashCmd.empty()) break;
           std::wstring localePrefix = (entries[idx].encoding == 1) ? L"export LANG=ja_JP.UTF-8; " : L"export LANG=en_US.UTF-8; ";
-          std::wstring shellArgs = bashCmd + L" -c \"" + localePrefix + entries[idx].command + L"; exec bash --login -i\"";
-          std::wstring label = cliDir.substr(cliDir.find_last_of(L"\\/") + 1);
-          if (label.empty()) label = L"CLI";
-          wchar_t modPath[MAX_PATH];
-          GetModuleFileNameW(nullptr, modPath, MAX_PATH);
-          std::wstring exeDir = modPath;
-          exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
-          std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
-          if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
-            termExe = exeDir + L"\\Terminal.exe";
-          LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL);
+          shellArgs = bashCmd + L" -c \"" + localePrefix + entries[idx].command + L"; exec bash --login -i\"";
         }
+        std::wstring label = cliDir.substr(cliDir.find_last_of(L"\\/") + 1);
+        if (label.empty()) label = L"CLI";
+        wchar_t modPath[MAX_PATH];
+        GetModuleFileNameW(nullptr, modPath, MAX_PATH);
+        std::wstring exeDir = modPath;
+        exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
+        std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
+        if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
+          termExe = exeDir + L"\\Terminal.exe";
+        LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL);
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&
                LOWORD(wParam) < IDM_BUFFERS_START + 100) {
