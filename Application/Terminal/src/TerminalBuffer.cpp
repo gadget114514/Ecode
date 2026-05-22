@@ -151,8 +151,9 @@ void TerminalBuffer::putText(const std::wstring& text, const TerminalCell& attri
         return;
     }
 
-    // autowrap: if character doesn't fit, wrap now
-    if (cursorColumn_ + width > columns_) {
+    // autowrap: if character doesn't fit and DECAWM is set, wrap now.
+    // When DECAWM is off the character at the right margin is overwritten in-place.
+    if (autoWrapEnabled_ && cursorColumn_ + width > columns_) {
         if (!screen_.empty())
             screen_[cursorRow_][std::max(0, columns_ - 1)].softWrapped = true;
         carriageReturn();
@@ -243,15 +244,23 @@ void TerminalBuffer::moveCursorRow(int row) {
 
 void TerminalBuffer::moveCursorNextLine(int count) {
     pendingWrap_  = false;
+    const int oldRow = cursorRow_;
     cursorRow_   += std::max(1, count);
     cursorColumn_ = 0;
+    // When starting inside the scroll region, stop at the bottom margin.
+    if (oldRow >= scrollTop_ && oldRow <= scrollBottom_ && cursorRow_ > scrollBottom_)
+        cursorRow_ = scrollBottom_;
     clampCursor();
 }
 
 void TerminalBuffer::moveCursorPreviousLine(int count) {
     pendingWrap_  = false;
+    const int oldRow = cursorRow_;
     cursorRow_   -= std::max(1, count);
     cursorColumn_ = 0;
+    // When starting inside the scroll region, stop at the top margin.
+    if (oldRow >= scrollTop_ && oldRow <= scrollBottom_ && cursorRow_ < scrollTop_)
+        cursorRow_ = scrollTop_;
     clampCursor();
 }
 
@@ -765,7 +774,11 @@ void TerminalBuffer::reverseRectAttr(int top, int left, int bottom, int right) {
 }
 
 void TerminalBuffer::clampCursor() {
-    cursorRow_    = clamp(cursorRow_,    0, rows_    - 1);
+    // In origin mode the cursor is constrained to the scroll region.
+    // In normal mode it is constrained to the physical screen.
+    const int rowMin = originMode_ ? scrollTop_    : 0;
+    const int rowMax = originMode_ ? scrollBottom_ : rows_ - 1;
+    cursorRow_    = clamp(cursorRow_,    rowMin, rowMax);
     cursorColumn_ = clamp(cursorColumn_, 0, columns_ - 1);
 }
 
