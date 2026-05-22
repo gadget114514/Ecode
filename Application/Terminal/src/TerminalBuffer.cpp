@@ -452,10 +452,11 @@ void TerminalBuffer::useAlternateScreen(bool enabled) {
     if (alternateScreenActive_ == enabled) return;
 
     if (enabled) {
-        mainHistory_      = history_;
-        mainScreen_       = screen_;
-        mainCursorRow_    = cursorRow_;
-        mainCursorColumn_ = cursorColumn_;
+        mainHistory_       = history_;
+        mainScreen_        = screen_;
+        mainCursorRow_     = cursorRow_;
+        mainCursorColumn_  = cursorColumn_;
+        mainCursorVisible_ = cursorVisible_;  // カーソル表示状態を保存
         alternateScreen_.assign(rows_, blankLine());
         screen_ = alternateScreen_;
         history_.clear();
@@ -471,6 +472,7 @@ void TerminalBuffer::useAlternateScreen(bool enabled) {
         pendingWrap_      = false;
         cursorRow_        = mainCursorRow_;
         cursorColumn_     = mainCursorColumn_;
+        cursorVisible_    = mainCursorVisible_;  // カーソル表示状態を復元
         scrollTop_        = 0;
         scrollBottom_     = rows_ - 1;
     }
