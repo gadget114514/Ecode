@@ -952,13 +952,18 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       }
       HWND parent = GetParent(hDlg);
       SetCurrentDirectoryW(folder);
+      SettingsManager::Instance().SetShellEncoding(enc);
       std::wstring shellArgs;
       if (st == 0) {
         wchar_t comspec[MAX_PATH];
         GetEnvironmentVariableW(L"COMSPEC", comspec, MAX_PATH);
-        shellArgs = std::wstring(comspec) + L" /k \"" + cmd + L"\"";
+        std::wstring chcpCmd = (enc == 1) ? L"chcp 932 > nul & " : L"chcp 65001 > nul & ";
+        shellArgs = std::wstring(comspec) + L" /k \"" + chcpCmd + cmd + L"\"";
       } else if (st == 1) {
-        shellArgs = L"powershell.exe -NoExit -Command \"" + std::wstring(cmd) + L"\"";
+        std::wstring encSetup = (enc == 1)
+          ? L"[Console]::OutputEncoding=[System.Text.Encoding]::GetEncoding(932);[Console]::InputEncoding=[System.Text.Encoding]::GetEncoding(932); "
+          : L"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;[Console]::InputEncoding=[System.Text.Encoding]::UTF8; ";
+        shellArgs = L"powershell.exe -NoExit -Command \"" + encSetup + std::wstring(cmd) + L"\"";
       } else {
         std::wstring bashDir;
         std::wstring bashCmd = SettingsManager::Instance().GetBashCommand(&bashDir);
@@ -966,7 +971,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           MessageBoxW(hDlg, L"Git Bash is not installed. Configure Bash Path in Settings.", L"Error", MB_ICONERROR);
           return (INT_PTR)TRUE;
         }
-        std::wstring localePrefix = (enc == 1) ? L"export LANG=ja_JP.UTF-8; " : L"export LANG=en_US.UTF-8; ";
+        std::wstring localePrefix = (enc == 1) ? L"export LANG=ja_JP.SJIS; " : L"export LANG=en_US.UTF-8; ";
         shellArgs = bashCmd + L" -c \"" + localePrefix + cmd + L"; exec bash --login -i\"";
       }
       std::wstring label = std::wstring(folder);

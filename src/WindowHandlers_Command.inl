@@ -1028,20 +1028,26 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       if (idx < entries.size()) {
         std::wstring cliDir = entries[idx].folder;
         if (!cliDir.empty()) SetCurrentDirectoryW(cliDir.c_str());
+        int enc = entries[idx].encoding;
+        SettingsManager::Instance().SetShellEncoding(enc);
         std::wstring shellArgs;
         int st = entries[idx].shellType;
         if (st < 0 || st > 2) st = 2;
         if (st == 0) {
           wchar_t comspec[MAX_PATH];
           GetEnvironmentVariableW(L"COMSPEC", comspec, MAX_PATH);
-          shellArgs = std::wstring(comspec) + L" /k \"" + entries[idx].command + L"\"";
+          std::wstring chcpCmd = (enc == 1) ? L"chcp 932 > nul & " : L"chcp 65001 > nul & ";
+          shellArgs = std::wstring(comspec) + L" /k \"" + chcpCmd + entries[idx].command + L"\"";
         } else if (st == 1) {
-          shellArgs = L"powershell.exe -NoExit -Command \"" + entries[idx].command + L"\"";
+          std::wstring encSetup = (enc == 1)
+            ? L"[Console]::OutputEncoding=[System.Text.Encoding]::GetEncoding(932);[Console]::InputEncoding=[System.Text.Encoding]::GetEncoding(932); "
+            : L"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;[Console]::InputEncoding=[System.Text.Encoding]::UTF8; ";
+          shellArgs = L"powershell.exe -NoExit -Command \"" + encSetup + entries[idx].command + L"\"";
         } else {
           std::wstring bashDir;
           std::wstring bashCmd = SettingsManager::Instance().GetBashCommand(&bashDir);
           if (bashCmd.empty()) break;
-          std::wstring localePrefix = (entries[idx].encoding == 1) ? L"export LANG=ja_JP.UTF-8; " : L"export LANG=en_US.UTF-8; ";
+          std::wstring localePrefix = (enc == 1) ? L"export LANG=ja_JP.SJIS; " : L"export LANG=en_US.UTF-8; ";
           shellArgs = bashCmd + L" -c \"" + localePrefix + entries[idx].command + L"; exec bash --login -i\"";
         }
         std::wstring label = cliDir.substr(cliDir.find_last_of(L"\\/") + 1);
