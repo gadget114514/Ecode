@@ -60,6 +60,7 @@ static duk_ret_t js_editor_open(duk_context *ctx) {
     duk_push_boolean(ctx, false);
     return 1;
   }
+  bool doSwitch = duk_is_boolean(ctx, 1) ? (bool)duk_get_boolean(ctx, 1) : true;
   std::wstring wpath = StringToWString(path);
   if (g_editor) {
     Buffer *existing = g_editor->GetBufferByName(wpath);
@@ -67,7 +68,8 @@ static duk_ret_t js_editor_open(duk_context *ctx) {
       const auto &buffers = g_editor->GetBuffers();
       for (size_t i = 0; i < buffers.size(); ++i) {
         if (buffers[i].get() == existing) {
-          g_editor->SwitchToBuffer(i);
+          if (doSwitch)
+            g_editor->SwitchToBuffer(i);
           UpdateMenu(g_mainHwnd);
           InvalidateRect(g_mainHwnd, NULL, FALSE);
           duk_push_boolean(ctx, true);
@@ -78,6 +80,8 @@ static duk_ret_t js_editor_open(duk_context *ctx) {
 
     size_t index = g_editor->OpenFile(wpath);
     if (index != static_cast<size_t>(-1)) {
+      if (doSwitch)
+        g_editor->SwitchToBuffer(index);
       UpdateMenu(g_mainHwnd);
       InvalidateRect(g_mainHwnd, NULL, FALSE);
       duk_push_boolean(ctx, true);
