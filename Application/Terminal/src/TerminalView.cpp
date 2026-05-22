@@ -262,7 +262,9 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // Notify PTY of focus (if focus events enabled)
         if (buffer_.focusEventReportingEnabled())
             session_.Write("\x1b[I", 3);
+        cursorBlink_ = true;   // フォーカス取得時にカーソルを即座に表示する
         StartCursorTimer();
+        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     case WM_KILLFOCUS:
         if (buffer_.focusEventReportingEnabled())
