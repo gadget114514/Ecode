@@ -169,11 +169,13 @@ void SettingsManager::Load() {
     std::wstring keyCmd = L"CLI_Cmd_" + std::to_wstring(i);
     std::wstring keyDir = L"CLI_Dir_" + std::to_wstring(i);
     std::wstring keyEnc = L"CLI_Enc_" + std::to_wstring(i);
+    std::wstring keyShl = L"CLI_Shell_" + std::to_wstring(i);
     wchar_t cmdBuf[1024], dirBuf[MAX_PATH];
     if (GetPrivateProfileStringW(L"CLI", keyCmd.c_str(), L"", cmdBuf, 1024, path.c_str()) > 0) {
       GetPrivateProfileStringW(L"CLI", keyDir.c_str(), L"", dirBuf, MAX_PATH, path.c_str());
       int enc = GetPrivateProfileIntW(L"CLI", keyEnc.c_str(), 0, path.c_str());
-      m_cliEntries.push_back({cmdBuf, dirBuf, enc});
+      int st = GetPrivateProfileIntW(L"CLI", keyShl.c_str(), 2, path.c_str());
+      m_cliEntries.push_back({cmdBuf, dirBuf, enc, st});
     }
   }
 
@@ -526,8 +528,8 @@ void SettingsManager::AddRecentFile(const std::wstring &path) {
   Save();
 }
 
-void SettingsManager::AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding) {
-  m_cliEntries.push_back({cmd, folder, encoding});
+void SettingsManager::AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding, int shellType) {
+  m_cliEntries.push_back({cmd, folder, encoding, shellType});
 }
 
 void SettingsManager::RemoveCliEntry(size_t index) {
@@ -543,9 +545,11 @@ void SettingsManager::SaveCliEntries() {
     std::wstring keyCmd = L"CLI_Cmd_" + std::to_wstring(i);
     std::wstring keyDir = L"CLI_Dir_" + std::to_wstring(i);
     std::wstring keyEnc = L"CLI_Enc_" + std::to_wstring(i);
+    std::wstring keyShl = L"CLI_Shell_" + std::to_wstring(i);
     WritePrivateProfileStringW(L"CLI", keyCmd.c_str(), m_cliEntries[i].command.c_str(), path.c_str());
     WritePrivateProfileStringW(L"CLI", keyDir.c_str(), m_cliEntries[i].folder.c_str(), path.c_str());
     WritePrivateProfileStringW(L"CLI", keyEnc.c_str(), std::to_wstring(m_cliEntries[i].encoding).c_str(), path.c_str());
+    WritePrivateProfileStringW(L"CLI", keyShl.c_str(), std::to_wstring(m_cliEntries[i].shellType).c_str(), path.c_str());
   }
 }
 
