@@ -276,6 +276,13 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_COMMAND:
         if (LOWORD(wp) == 1 /* ID_TERMINAL_PASTE */) { PasteFromClipboard(); return 0; }
         if (LOWORD(wp) == 2 /* ID_TERMINAL_COPY */)  { CopySelectionToClipboard(); return 0; }
+        if (LOWORD(wp) == 3 /* ID_TERMINAL_CUT */) {
+            CopySelectionToClipboard();
+            selAnchorRow_ = -1; selAnchorCol_ = -1;
+            selEndRow_    = -1; selEndCol_    = -1;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
         break;
     case WM_TERMINAL_OUTPUT: {
         const char* data = (const char*)wp;
@@ -901,7 +908,13 @@ void TerminalView::PasteFromClipboard() {
                         out += utf8[i];
                 }
                 scrollOffset_ = 0;
-                session_.Write(out.data(), out.size());
+                if (buffer_.bracketedPasteEnabled()) {
+                    session_.Write("\x1b[200~", 6);
+                    session_.Write(out.data(), out.size());
+                    session_.Write("\x1b[201~", 6);
+                } else {
+                    session_.Write(out.data(), out.size());
+                }
             }
             GlobalUnlock(hData);
         }
@@ -915,6 +928,7 @@ void TerminalView::OnContextMenu(int screenX, int screenY) {
 
     bool hasSel = selAnchorRow_ >= 0;
     AppendMenuW(hMenu, MF_STRING | (hasSel ? 0 : MF_GRAYED), 2, L"Copy");
+    AppendMenuW(hMenu, MF_STRING | (hasSel ? 0 : MF_GRAYED), 3, L"Cut");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     bool canPaste = IsClipboardFormatAvailable(CF_UNICODETEXT);
     AppendMenuW(hMenu, MF_STRING | (canPaste ? 0 : MF_GRAYED), 1, L"Paste");
@@ -925,6 +939,12 @@ void TerminalView::OnContextMenu(int screenX, int screenY) {
 
     if (cmd == 1) { PasteFromClipboard(); }
     else if (cmd == 2) { CopySelectionToClipboard(); }
+    else if (cmd == 3) {
+        CopySelectionToClipboard();
+        selAnchorRow_ = -1; selAnchorCol_ = -1;
+        selEndRow_    = -1; selEndCol_    = -1;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -948,6 +968,23 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
             CopySelectionToClipboard();
             return;
         }
+    }
+
+    // Ctrl+X: cut selection (copy + clear); without selection falls through as \x18
+    if (ctrl && vk == 'X') {
+        if (selAnchorRow_ >= 0) {
+            CopySelectionToClipboard();
+            selAnchorRow_ = -1; selAnchorCol_ = -1;
+            selEndRow_    = -1; selEndCol_    = -1;
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            return;
+        }
+    }
+
+    // Ctrl+V / Shift+Insert: paste from clipboard
+    if ((ctrl && vk == 'V') || (!ctrl && shift && vk == VK_INSERT)) {
+        PasteFromClipboard();
+        return;
     }
 
     // Scroll-back keys (intercepted before PTY)
