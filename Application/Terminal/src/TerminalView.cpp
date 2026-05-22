@@ -503,11 +503,13 @@ void TerminalView::OnPaint() {
         // VT420 スクロール領域対応:
         // スクロールバック中かつ部分スクロール領域が有効なとき、
         // 領域外の行は常に現在の画面内容（ピン固定）を表示する。
+        bool isPinned = false;
         if (scrollOffset_ > 0 && buffer_.hasScrollRegion()) {
             const bool outsideRegion = screenRow < buffer_.scrollTop() ||
                                        screenRow > buffer_.scrollBottom();
             if (outsideRegion) {
                 logRow = histLines + screenRow;  // 現在の画面行をピン固定
+                isPinned = true;
             }
         }
 
@@ -519,15 +521,22 @@ void TerminalView::OnPaint() {
             const TerminalCell& cell = line[col];
             if (cell.wideContinuation) continue;
 
+            // カーソルはスクロールオフセット 0 のときか、ピン固定行（スクロール領域外）のときに表示する。
+            // スクロールバック中でもピン固定行はカレント画面を表示しているためカーソルを描く。
             bool isCursor = (logRow == curRow && col == buffer_.cursorColumn()
-                             && scrollOffset_ == 0 && buffer_.cursorVisible());
+                             && (scrollOffset_ == 0 || isPinned)
+                             && buffer_.cursorVisible());
             bool isSelected = IsSelected(logRow, col);
             DrawCell(rt, screenRow, col, cell, isCursor, cursorBlink_, isSelected);
         }
     }
 
     // IME 変換中文字列をカーソル位置にインライン描画
-    if (imeActive_ && !imeComposition_.empty() && scrollOffset_ == 0) {
+    // ピン固定行にカーソルがある場合（スクロールバック中）も表示する。
+    const bool cursorPinned = buffer_.hasScrollRegion() && scrollOffset_ > 0 &&
+                              (buffer_.cursorRow() < buffer_.scrollTop() ||
+                               buffer_.cursorRow() > buffer_.scrollBottom());
+    if (imeActive_ && !imeComposition_.empty() && (scrollOffset_ == 0 || cursorPinned)) {
         const float cx = buffer_.cursorColumn() * cellWidth_;
         const float cy = buffer_.cursorRow()    * cellHeight_;
         const float compW = imeComposition_.size() * cellWidth_;
