@@ -523,7 +523,10 @@ void TerminalView::OnPaint() {
 
             // カーソルはスクロールオフセット 0 のときか、ピン固定行（スクロール領域外）のときに表示する。
             // スクロールバック中でもピン固定行はカレント画面を表示しているためカーソルを描く。
-            bool isCursor = (logRow == curRow && col == buffer_.cursorColumn()
+            // ワイド文字のベースセルにカーソルがあるか、カーソルが継続セルを指している場合（CJK等）もカーソルを描く
+            bool isCursor = (logRow == curRow
+                             && (col == buffer_.cursorColumn() ||
+                                 (cell.wide && col + 1 == buffer_.cursorColumn()))
                              && (scrollOffset_ == 0 || isPinned)
                              && buffer_.cursorVisible());
             bool isSelected = IsSelected(logRow, col);
