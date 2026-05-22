@@ -328,7 +328,18 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             queryKittyKeyboardProtocol();
             return;
         }
-        // fall through for unrecognised prefixes
+        if (prefix == L'?' && fin == L'J') {
+            // DECSED: Selective Erase in Display — treat as ED (DECSCA not implemented)
+            buffer_->clearScreenMode(paramInt(splitParams(rest), 0, 0), currentAttrs_);
+            return;
+        }
+        if (prefix == L'?' && fin == L'K') {
+            // DECSEL: Selective Erase in Line — treat as EL (DECSCA not implemented)
+            buffer_->clearLine(paramInt(splitParams(rest), 0, 0), currentAttrs_);
+            return;
+        }
+        // fall through for unrecognised prefixes — strip prefix so numeric params parse correctly
+        params = rest;
     }
 
     auto parts = splitParams(params);
