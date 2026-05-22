@@ -191,6 +191,7 @@ private:
     std::vector<Line> mainHistory_;
     std::vector<Line> mainScreen_;
     std::vector<Line> alternateScreen_;
-    int mainCursorRow_    = 0;
-    int mainCursorColumn_ = 0;
+    int  mainCursorRow_     = 0;
+    int  mainCursorColumn_  = 0;
+    bool mainCursorVisible_ = true;  // saved across alternate screen switches
 };
