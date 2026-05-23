@@ -50,6 +50,8 @@ A real terminal runs as a child process inside an editor tab. Works with any CLI
 - Copy text from terminal output and paste into your code
 - Colors, bold, italic, underline — everything renders correctly
 
+![](https://github.com/user-attachments/assets/5a0ab0e6-0b00-4ca2-8784-2256205d9191)
+
 ### CLI Command Launcher
 Save your most-used shell commands with names and working directories. Run them from a menu anytime.
 
@@ -59,6 +61,8 @@ Save your most-used shell commands with names and working directories. Run them 
 | Test | `pytest tests/` | `D:\project` |
 | Git status | `git status` | `D:\project` |
 | AI chat | `claude` | `D:\project` |
+
+![](https://github.com/user-attachments/assets/ff2abfe1-512d-4255-9f26-6afff6cdda63)
 
 ### Git-Friendly
 - Atomic saves (write to temp, rename) — no corrupted files even on crash
