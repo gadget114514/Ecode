@@ -347,20 +347,40 @@ bool ScriptEngine::RunFile(const std::wstring &path) {
       std::vector<char> buffer(size);
       if (ifs.read(buffer.data(), size)) {
         duk_push_lstring(m_ctx, buffer.data(), size);
-        duk_load_function(m_ctx);
-        if (duk_pcall(m_ctx, 0) != 0) {
+        // duk_load_function throws TypeError on invalid/stale bytecode (e.g.
+        // after a Duktape version bump).  Use duk_safe_call to catch that
+        // instead of crashing via an uncaught longjmp.
+        if (duk_safe_call(
+                m_ctx,
+                [](duk_context *ctx, void *) -> duk_ret_t {
+                  duk_load_function(ctx);
+                  return 1;
+                },
+                nullptr, 1, 1) != 0) {
           const char *err = duk_safe_to_string(m_ctx, -1);
-          DebugLog("ScriptEngine::RunFile: Bytecode execution error: " +
-                       std::string(err),
-                   LOG_ERROR);
+          DebugLog("ScriptEngine::RunFile: Invalid bytecode in " +
+                       WStringToString(bytecodePath) + ": " +
+                       std::string(err) + " — retrying from source",
+                   LOG_WARN);
           duk_pop(m_ctx);
-          return false;
+          // Fall through to source loading below.
+        } else {
+          if (duk_pcall(m_ctx, 0) != 0) {
+            const char *err = duk_safe_to_string(m_ctx, -1);
+            DebugLog("ScriptEngine::RunFile: Bytecode execution error in " +
+                         WStringToString(path) + ": " + std::string(err),
+                     LOG_ERROR);
+            std::cerr << "Script error in " << WStringToString(path) << ": "
+                      << err << std::endl;
+            duk_pop(m_ctx);
+            return false;
+          }
+          duk_pop(m_ctx);
+          return true;
         }
-        duk_pop(m_ctx);
-        return true;
       }
     }
-    DebugLog("ScriptEngine::RunFile: Failed to load bytecode, falling back to "
+    DebugLog("ScriptEngine::RunFile: Failed to use bytecode, falling back to "
              "source",
              LOG_WARN);
   }
