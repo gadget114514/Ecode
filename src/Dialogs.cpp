@@ -276,7 +276,7 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 INT_PTR CALLBACK AiSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                    LPARAM lParam);
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
-               const std::wstring& label, int type);
+               const std::wstring& label, int type, int iImage = -1);
 
 INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                  LPARAM lParam) {
@@ -811,7 +811,10 @@ static void RefreshCliList(HWND hDlg) {
     std::wstring enc = entries[i].encoding ? L"SJIS" : L"UTF8";
     int st = entries[i].shellType;
     if (st < 0 || st > 2) st = 2;
-    std::wstring text = entries[i].command + L"  [" + enc + L"," + kShellNames[st] + L"]  →  " + entries[i].folder;
+    std::wstring lbl = entries[i].label.empty()
+      ? entries[i].folder
+      : entries[i].label;
+    std::wstring text = entries[i].command + L"  [" + enc + L"," + kShellNames[st] + L"]  →  " + lbl;
     SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)text.c_str());
   }
 }
@@ -830,6 +833,10 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hShell, CB_ADDSTRING, 0, (LPARAM)L"powershell");
     SendMessage(hShell, CB_ADDSTRING, 0, (LPARAM)L"bash");
     SendMessage(hShell, CB_SETCURSEL, 2, 0);
+    HWND hIcon = GetDlgItem(hDlg, IDC_CLI_ICON);
+    for (int i = 0; i < TAB_ICON_COUNT; ++i)
+      SendMessage(hIcon, CB_ADDSTRING, 0, (LPARAM)g_tabIconNames[i]);
+    SendMessage(hIcon, CB_SETCURSEL, 0, 0);
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
@@ -845,6 +852,10 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           int st = entries[sel].shellType;
           if (st < 0 || st > 2) st = 2;
           SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_SETCURSEL, st, 0);
+          int icn = entries[sel].iconIndex;
+          if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
+          SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_SETCURSEL, icn, 0);
+          SetDlgItemTextW(hDlg, IDC_CLI_LABEL, entries[sel].label.c_str());
         }
       }
       return (INT_PTR)TRUE;
@@ -855,14 +866,17 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       }
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDC_CLI_ADD) {
-      wchar_t cmd[1024], folder[MAX_PATH];
+      wchar_t cmd[1024], folder[MAX_PATH], lbl[256];
       GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);
       GetDlgItemTextW(hDlg, IDC_CLI_FOLDER, folder, MAX_PATH);
+      GetDlgItemTextW(hDlg, IDC_CLI_LABEL, lbl, 256);
       int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
       int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
       if (st < 0 || st > 2) st = 2;
+      int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0);
+      if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
       if (wcslen(cmd) > 0 && wcslen(folder) > 0) {
-        SettingsManager::Instance().AddCliEntry(cmd, folder, enc, st);
+        SettingsManager::Instance().AddCliEntry(cmd, folder, enc, st, icn, lbl);
         SettingsManager::Instance().Save();
         RefreshCliList(hDlg);
       }
@@ -874,7 +888,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         const auto &entries = SettingsManager::Instance().GetCliEntries();
         if (sel >= 0 && sel < (int)entries.size()) {
           auto &entry = entries[sel];
-          SettingsManager::Instance().AddCliEntry(entry.command, entry.folder, entry.encoding, entry.shellType);
+          SettingsManager::Instance().AddCliEntry(entry.command, entry.folder, entry.encoding, entry.shellType, entry.iconIndex, entry.label);
           SettingsManager::Instance().Save();
           RefreshCliList(hDlg);
         }
@@ -904,10 +918,16 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           if (enc < 0) enc = 0;
           int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
           if (st < 0 || st > 2) st = 2;
+          int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0);
+          if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
+          wchar_t lbl[256];
+          GetDlgItemTextW(hDlg, IDC_CLI_LABEL, lbl, 256);
           entries[sel].command   = cmd;
           entries[sel].folder    = folder;
           entries[sel].encoding  = enc;
           entries[sel].shellType = st;
+          entries[sel].iconIndex = icn;
+          entries[sel].label     = lbl;
           SettingsManager::Instance().SetCliEntries(entries);
           SettingsManager::Instance().Save();
           RefreshCliList(hDlg);
@@ -916,12 +936,15 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       }
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDC_CLI_RUN) {
-      wchar_t cmd[1024], folder[MAX_PATH];
+      wchar_t cmd[1024], folder[MAX_PATH], lbl[256];
       GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);
       GetDlgItemTextW(hDlg, IDC_CLI_FOLDER, folder, MAX_PATH);
+      GetDlgItemTextW(hDlg, IDC_CLI_LABEL, lbl, 256);
       int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
       int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
       if (st < 0 || st > 2) st = 2;
+      int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0);
+      if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
       if (wcslen(cmd) == 0 || wcslen(folder) == 0) {
         HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
         int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
@@ -930,9 +953,12 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           if (sel >= 0 && sel < (int)entries.size()) {
             wcscpy_s(cmd, 1024, entries[sel].command.c_str());
             wcscpy_s(folder, MAX_PATH, entries[sel].folder.c_str());
+            wcscpy_s(lbl, 256, entries[sel].label.c_str());
             enc = entries[sel].encoding;
             st = entries[sel].shellType;
             if (st < 0 || st > 2) st = 2;
+            icn = entries[sel].iconIndex;
+            if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
           }
         }
       }
@@ -974,15 +1000,18 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         std::wstring localePrefix = (enc == 1) ? L"export LANG=ja_JP.SJIS; " : L"export LANG=en_US.UTF-8; ";
         shellArgs = bashCmd + L" -c \"" + localePrefix + cmd + L"; exec bash --login -i\"";
       }
-      std::wstring label = std::wstring(folder);
-      size_t pos = label.find_last_of(L"\\/");
-      if (pos != std::wstring::npos) label = label.substr(pos + 1);
+      std::wstring label = (wcslen(lbl) > 0) ? std::wstring(lbl)
+                         : std::wstring(folder);
+      if (label == std::wstring(folder)) {
+        size_t pos = label.find_last_of(L"\\/");
+        if (pos != std::wstring::npos) label = label.substr(pos + 1);
+      }
       if (label.empty()) label = L"CLI";
       wchar_t modPath[MAX_PATH];
       GetModuleFileNameW(nullptr, modPath, MAX_PATH);
       std::wstring exeDir = modPath;
       exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
-      LaunchApp(parent, exeDir + L"\\Terminal.exe", shellArgs, label, 10);
+      LaunchApp(parent, exeDir + L"\\Terminal.exe", shellArgs, label, 10, icn);
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDCANCEL) {

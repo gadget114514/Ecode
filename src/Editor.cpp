@@ -242,6 +242,7 @@ void Editor::FindFile(const std::wstring &pattern, const std::wstring &dir) {
   tab.hwnd = hListView;
   tab.label = L"Files: " + pattern;
   tab.type = 0;
+  tab.iImage = TAB_ICON_GRAY;
   tab.data = nullptr;
   g_appTabs.push_back(std::move(tab));
   int appIdx = static_cast<int>(g_appTabs.size()) - 1;
