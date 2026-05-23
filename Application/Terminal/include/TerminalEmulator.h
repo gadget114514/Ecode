@@ -70,6 +70,7 @@ private:
     void handleCsi(const std::wstring& params, wchar_t finalByte);
     void handleOsc(const std::wstring& text);
     void handlePrivateMode(const std::wstring& params, bool enabled);
+    void handlePrivateModeSaveRestore(const std::wstring& params, bool save);
     void handleSgr(const std::vector<std::wstring>& parts);
     TermColor parseSgrExtendedColor(const std::vector<std::wstring>& parts, size_t& i);
     void handleCursorStyle(int value);

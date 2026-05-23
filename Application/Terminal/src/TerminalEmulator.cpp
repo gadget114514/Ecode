@@ -309,7 +309,7 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             return;
         }
         if (prefix == L'?' && (fin == L's' || fin == L'r')) {
-            // save/restore private modes — ignored
+            handlePrivateModeSaveRestore(rest, fin == L's');
             return;
         }
         if (prefix == L'>' && fin == L'c') {
@@ -513,6 +513,10 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
         case 47:
         case 1047:
         case 1049: buffer_->useAlternateScreen(enabled);              break;
+        case 1048:
+            if (enabled) buffer_->saveCursor();
+            else         buffer_->restoreCursor();
+            break;
         case 2004: buffer_->setBracketedPasteEnabled(enabled);        break;
         // Windows Terminal extensions – not implemented
         case 2026:
@@ -535,6 +539,22 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
     }
     }
 }
+}
+
+void TerminalEmulator::handlePrivateModeSaveRestore(const std::wstring& params, bool save) {
+    wchar_t buf[128];
+    swprintf_s(buf, L"[VT] private mode %s", save ? L"SAVE" : L"RESTORE");
+    logDebug(buf);
+    auto modes = splitParams(params);
+    for (auto& m : modes) {
+        int value = 0;
+        try { value = std::stoi(m); } catch(...) { continue; }
+        if (save) {
+            buffer_->savePrivateMode(value);
+        } else {
+            buffer_->restorePrivateMode(value);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -688,15 +708,24 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
 
     switch (num) {
     case 0:
-    case 2: // window/tab title
+    case 2: { // window/tab title
+        wchar_t buf[256];
+        swprintf_s(buf, L"[VT] OSC %d (set title: %s)", num, arg1.c_str());
+        logDebug(buf);
         if (onTitle_) onTitle_(arg1);
         break;
+    }
 
     case 8: { // OSC 8 hyperlink (terminalpp)
         // format: params ; url  (params ignored)
         const size_t sep2 = arg1.find(L';');
         if (sep2 == std::wstring::npos) break;
         std::wstring url = arg1.substr(sep2 + 1);
+        {
+            wchar_t buf[256];
+            swprintf_s(buf, L"[VT] OSC 8 (hyperlink: %s)", url.empty() ? L"close" : url.c_str());
+            logDebug(buf);
+        }
         if (url.empty())
             activeHyperlinkUrl_.clear();   // close hyperlink
         else
@@ -705,6 +734,7 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
     }
 
     case 52: { // OSC 52 clipboard write (terminalpp)
+        logDebug(L"[VT] OSC 52 (clipboard write)");
         const size_t sep2 = arg1.find(L';');
         if (sep2 == std::wstring::npos) break;
         std::wstring b64 = arg1.substr(sep2 + 1);
@@ -721,6 +751,7 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
     }
 
     case 112: // reset cursor colour
+        logDebug(L"[VT] OSC 112 (reset cursor colour)");
         buffer_->setCursorBlink(true);
         break;
 
@@ -737,6 +768,11 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
 // Cursor style (DECSCUSR — CSI Ps SP q)
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handleCursorStyle(int value) {
+    {
+        wchar_t buf[128];
+        swprintf_s(buf, L"[VT] DECSCUSR cursor style %d", value);
+        logDebug(buf);
+    }
     switch (value) {
     case 0: case 1: buffer_->setCursorShape(TerminalBuffer::CursorShape::Block);     buffer_->setCursorBlink(true);  break;
     case 2:         buffer_->setCursorShape(TerminalBuffer::CursorShape::Block);     buffer_->setCursorBlink(false); break;
@@ -757,8 +793,12 @@ void TerminalEmulator::sendDeviceStatusReport(int value) {
         emitResponse(L"\x1b[0n");
     } else if (value == 6) {
         wchar_t buf[64];
+        int r = buffer_->cursorRow();
+        if (buffer_->originMode()) {
+            r -= buffer_->scrollTop();
+        }
         swprintf(buf, 64, L"\x1b[%d;%dR",
-                 buffer_->cursorRow() + 1, buffer_->cursorColumnRaw() + 1);
+                 r + 1, buffer_->cursorColumnRaw() + 1);
         emitResponse(buf);
     }
 }
@@ -791,6 +831,9 @@ void TerminalEmulator::sendWindowReport(int value) {
 // modifyOtherKeys / Kitty keyboard
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handleKeyModifierOptions(const std::wstring& params) {
+    wchar_t buf[128];
+    swprintf_s(buf, L"[VT] modifyOtherKeys CSI > %s m", params.c_str());
+    logDebug(buf);
     auto parts = splitParams(params);
     int resource = paramInt(parts, 0, 0);
     int value    = paramInt(parts, 1, 0);
@@ -808,6 +851,9 @@ void TerminalEmulator::queryKeyModifierOptions(const std::wstring& params) {
 }
 
 void TerminalEmulator::handleKittyKeyboardProtocol(const std::wstring& params) {
+    wchar_t buf[128];
+    swprintf_s(buf, L"[VT] kitty keyboard protocol CSI ? %s u", params.c_str());
+    logDebug(buf);
     auto parts = splitParams(params);
     // strip leading '?' if present
     std::wstring first = parts.empty() ? L"" : parts[0];

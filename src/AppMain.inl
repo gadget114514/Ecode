@@ -12,6 +12,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   switch (uMsg) {
   case WM_CREATE:
     return HandleCreate(hwnd);
+  case WM_COPYDATA: {
+    PCOPYDATASTRUCT pcds = (PCOPYDATASTRUCT)lParam;
+    if (pcds && pcds->dwData == 0x5654) {
+      const char* logMsg = (const char*)pcds->lpData;
+      if (logMsg && strncmp(logMsg, "[VT]", 4) == 0) {
+        if (g_editor) {
+          g_editor->LogMessage(logMsg);
+        }
+      }
+    }
+    return 0;
+  }
   case WM_SETFOCUS:
     if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size())
       SetFocus(g_appTabs[g_activeAppTab].hwnd);
