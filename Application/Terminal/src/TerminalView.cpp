@@ -634,8 +634,16 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     TermColor bg = cell.background.isDefault ? DefaultBg() : cell.background;
     TermColor dc = cell.decorColor.isDefault ? fg : cell.decorColor;
 
-    // Apply inverse (reverse video) at render time — swap fg/bg
-    if (cell.inverse) std::swap(fg, bg);
+    // Apply inverse (reverse video) at render time — swap fg/bg.
+    // DefaultFg()/DefaultBg() both return TermColor with isDefault=true, so after
+    // the swap the new bg still has isDefault=true and the background fill below
+    // would be skipped (the "skip default bg" optimisation).  Clear the flag so
+    // the swapped colour is always rendered.
+    if (cell.inverse) {
+        std::swap(fg, bg);
+        bg.isDefault = false;
+        fg.isDefault = false;
+    }
 
     // Draw background first
     bool drawBlock = isCursor && cursorVisible
