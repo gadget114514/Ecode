@@ -251,6 +251,14 @@ constexpr int TAB_ICON_COUNT  = 12;
 
 extern HIMAGELIST g_tabImageList;
 extern const wchar_t* g_tabIconNames[TAB_ICON_COUNT];
+
+// IME inline composition state
+extern std::wstring g_imeComposition;   // current composition string (UTF-16)
+extern std::vector<BYTE> g_imeCompAttr; // per-char attribute for composition
+extern bool g_imeComposing;             // true during composition
+extern std::string g_imeCompUtf8;       // composition as UTF-8 (for viewport insert)
+extern size_t g_imeCompViewOffset;      // byte offset of composition in viewport text
+extern size_t g_imeCompViewLen;         // byte length of composition in viewport text
 extern FINDREPLACEW g_fr;
 extern WCHAR g_szFindWhat[256];
 extern WCHAR g_szReplaceWith[256];
