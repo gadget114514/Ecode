@@ -347,20 +347,40 @@ bool ScriptEngine::RunFile(const std::wstring &path) {
       std::vector<char> buffer(size);
       if (ifs.read(buffer.data(), size)) {
         duk_push_lstring(m_ctx, buffer.data(), size);
-        duk_load_function(m_ctx);
-        if (duk_pcall(m_ctx, 0) != 0) {
+        // duk_load_function throws TypeError on invalid/stale bytecode (e.g.
+        // after a Duktape version bump).  Use duk_safe_call to catch that
+        // instead of crashing via an uncaught longjmp.
+        if (duk_safe_call(
+                m_ctx,
+                [](duk_context *ctx, void *) -> duk_ret_t {
+                  duk_load_function(ctx);
+                  return 1;
+                },
+                nullptr, 1, 1) != 0) {
           const char *err = duk_safe_to_string(m_ctx, -1);
-          DebugLog("ScriptEngine::RunFile: Bytecode execution error: " +
-                       std::string(err),
-                   LOG_ERROR);
+          DebugLog("ScriptEngine::RunFile: Invalid bytecode in " +
+                       WStringToString(bytecodePath) + ": " +
+                       std::string(err) + " — retrying from source",
+                   LOG_WARN);
           duk_pop(m_ctx);
-          return false;
+          // Fall through to source loading below.
+        } else {
+          if (duk_pcall(m_ctx, 0) != 0) {
+            const char *err = duk_safe_to_string(m_ctx, -1);
+            DebugLog("ScriptEngine::RunFile: Bytecode execution error in " +
+                         WStringToString(path) + ": " + std::string(err),
+                     LOG_ERROR);
+            std::cerr << "Script error in " << WStringToString(path) << ": "
+                      << err << std::endl;
+            duk_pop(m_ctx);
+            return false;
+          }
+          duk_pop(m_ctx);
+          return true;
         }
-        duk_pop(m_ctx);
-        return true;
       }
     }
-    DebugLog("ScriptEngine::RunFile: Failed to load bytecode, falling back to "
+    DebugLog("ScriptEngine::RunFile: Failed to use bytecode, falling back to "
              "source",
              LOG_WARN);
   }
@@ -375,8 +395,14 @@ bool ScriptEngine::RunFile(const std::wstring &path) {
   }
 
   std::streamsize fileSize = ifs.tellg();
+  if (fileSize < 0) {
+    DebugLog("ScriptEngine::RunFile: Cannot determine file size: " +
+                 WStringToString(path),
+             LOG_ERROR);
+    return false;
+  }
   ifs.seekg(0, std::ios::beg);
-  std::string code(fileSize, '\0');
+  std::string code(static_cast<size_t>(fileSize), '\0');
   ifs.read(&code[0], fileSize);
 
   // Handle BOM
@@ -390,7 +416,8 @@ bool ScriptEngine::RunFile(const std::wstring &path) {
                   WStringToString(path).c_str()); // filename for error messages
   if (duk_pcompile_string_filename(m_ctx, 0, code.c_str()) != 0) {
     const char *err = duk_safe_to_string(m_ctx, -1);
-    DebugLog("ScriptEngine::RunFile: Compile error: " + std::string(err),
+    DebugLog("ScriptEngine::RunFile: Compile error in " +
+                 WStringToString(path) + ": " + std::string(err),
              LOG_ERROR);
     std::cerr << "Script error in " << WStringToString(path) << ": " << err
               << std::endl;
@@ -398,26 +425,39 @@ bool ScriptEngine::RunFile(const std::wstring &path) {
     return false;
   }
 
-  // Dump bytecode
+  // Dump bytecode — duk_dump_function throws on non-Ecmascript functions;
+  // protect it so a cache-write failure never aborts execution.
   duk_dup(m_ctx, -1);
-  duk_dump_function(m_ctx);
-  duk_size_t sz;
-  const void *ptr = duk_get_lstring(m_ctx, -1, &sz);
-  if (ptr && sz > 0) {
-    std::ofstream ofs(bytecodePath, std::ios::binary);
-    if (ofs) {
-      ofs.write((const char *)ptr, sz);
-      DebugLog("ScriptEngine::RunFile: Saved bytecode to " +
-                   WStringToString(bytecodePath),
-               LOG_DEBUG);
+  if (duk_safe_call(
+          m_ctx,
+          [](duk_context *ctx, void *) -> duk_ret_t {
+            duk_dump_function(ctx);
+            return 1;
+          },
+          nullptr, 1, 1) == 0) {
+    duk_size_t sz;
+    const void *ptr = duk_get_lstring(m_ctx, -1, &sz);
+    if (ptr && sz > 0) {
+      std::ofstream ofs(bytecodePath, std::ios::binary);
+      if (ofs) {
+        ofs.write((const char *)ptr, sz);
+        DebugLog("ScriptEngine::RunFile: Saved bytecode to " +
+                     WStringToString(bytecodePath),
+                 LOG_DEBUG);
+      }
     }
+  } else {
+    DebugLog("ScriptEngine::RunFile: Failed to dump bytecode for " +
+                 WStringToString(path) + " (skipping cache)",
+             LOG_WARN);
   }
-  duk_pop(m_ctx); // pop bytecode buffer
+  duk_pop(m_ctx); // pop bytecode buffer or error
 
   // Execute
   if (duk_pcall(m_ctx, 0) != 0) {
     const char *err = duk_safe_to_string(m_ctx, -1);
-    DebugLog("ScriptEngine::RunFile: Execution error: " + std::string(err),
+    DebugLog("ScriptEngine::RunFile: Execution error in " +
+                 WStringToString(path) + ": " + std::string(err),
              LOG_ERROR);
     std::cerr << "Script error in " << WStringToString(path) << ": " << err
               << std::endl;
@@ -425,7 +465,7 @@ bool ScriptEngine::RunFile(const std::wstring &path) {
     return false;
   }
 
-  DebugLog("ScriptEngine::RunFile: Success");
+  DebugLog("ScriptEngine::RunFile: Success: " + WStringToString(path));
   duk_pop(m_ctx); // pop return value
   return true;
 }
