@@ -65,6 +65,7 @@ void OpenFastFileSearch(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"File Search";
   tab.type = 2;
+  tab.iImage = TAB_ICON_ORANGE;
   if (!IsUserAnAdmin()) {
     tab.hwnd = CreateWindowExW(0, L"STATIC",
                                L"\n\n\n\n\n\n\n\n\n⚠️ Fast File Search requires Administrator privileges.\n\nPlease relaunch Ecode as Administrator (Right-click -> Run as Administrator) to use this tool.",
@@ -157,6 +158,7 @@ void OpenCSVEditor(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"CSV Editor";
   tab.type = 3;
+  tab.iImage = TAB_ICON_RED;
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting CSV Editor...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -240,6 +242,7 @@ void OpenJYEditor(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"JY Editor";
   tab.type = 4;
+  tab.iImage = TAB_ICON_PINK;
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting JY Editor...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -334,6 +337,7 @@ void OpenDired(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"Dired";
   tab.type = 5;
+  tab.iImage = TAB_ICON_TEAL;
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting Dired...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -456,7 +460,7 @@ void ScanPlugins() {
 }
 
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
-                      const std::wstring& label, int type) {
+                      const std::wstring& label, int type, int iImage = -1) {
   if (GetFileAttributesW(exePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
     std::wstring msg = L"Plugin not found:\n" + exePath;
     MessageBoxW(hwnd, msg.c_str(), L"Plugin Not Found", MB_OK | MB_ICONWARNING);
@@ -466,6 +470,7 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   AppTabInfo tab;
   tab.label = label;
   tab.type  = type;
+  tab.iImage = iImage;
   tab.hwnd  = CreateWindowExW(0, L"STATIC", L"Starting...",
                                WS_CHILD | WS_VISIBLE | SS_CENTER,
                                0, 0, 100, 100, hwnd, nullptr,
@@ -882,15 +887,15 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
       termExe = exeDir + L"\\Terminal.exe";
     if (LOWORD(wParam) == IDM_TOOLS_TERMINAL) {
-      LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL);
+      LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
     } else if (LOWORD(wParam) == IDM_TOOLS_TERMINAL_CMD) {
-      LaunchApp(hwnd, termExe, L"cmd.exe", L"cmd", TAB_TYPE_TERMINAL);
+      LaunchApp(hwnd, termExe, L"cmd.exe", L"cmd", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
     } else {
       std::wstring bashDir;
       std::wstring cmd = SettingsManager::Instance().GetBashCommand(&bashDir);
       if (!cmd.empty()) {
         if (!bashDir.empty()) SetCurrentDirectoryW(bashDir.c_str());
-        LaunchApp(hwnd, termExe, cmd, L"bash", TAB_TYPE_TERMINAL);
+        LaunchApp(hwnd, termExe, cmd, L"bash", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
       }
     }
     break;
@@ -1050,7 +1055,9 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           std::wstring localePrefix = (enc == 1) ? L"export LANG=ja_JP.SJIS; " : L"export LANG=en_US.UTF-8; ";
           shellArgs = bashCmd + L" -c \"" + localePrefix + entries[idx].command + L"; exec bash --login -i\"";
         }
-        std::wstring label = cliDir.substr(cliDir.find_last_of(L"\\/") + 1);
+        std::wstring label = entries[idx].label.empty()
+          ? cliDir.substr(cliDir.find_last_of(L"\\/") + 1)
+          : entries[idx].label;
         if (label.empty()) label = L"CLI";
         wchar_t modPath[MAX_PATH];
         GetModuleFileNameW(nullptr, modPath, MAX_PATH);
@@ -1059,7 +1066,9 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
         if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
           termExe = exeDir + L"\\Terminal.exe";
-        LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL);
+        int icn = entries[idx].iconIndex;
+        if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
+        LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL, icn);
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&
                LOWORD(wParam) < IDM_BUFFERS_START + 100) {
