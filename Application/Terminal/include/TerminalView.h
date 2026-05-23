@@ -149,7 +149,7 @@ private:
     float baseline_   = 12.0f;
 
     // Cursor blink
-    bool   cursorBlink_   = false;  // current visible state
+    bool   cursorBlink_   = true;   // current visible state (true = visible; starts visible so cursor shows at startup)
     UINT_PTR cursorTimer_ = 0;
 
     // Output mutex (reader thread → UI thread via PostMessage; no lock needed,
