@@ -56,7 +56,9 @@ bool g_bypassCache = false;
 bool g_compileAllScripts = false;
 volatile LONG g_grepCancelFlag = 0;
 bool g_grepSearchActive = false;
+HIMAGELIST g_tabImageList = nullptr;
 
+#include "TabIconHelper.inl"
 #include "TreeViewHelpers.inl"
 #include "AppMain.inl"
 #include "MinibufferHandler.inl"

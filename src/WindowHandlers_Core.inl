@@ -90,6 +90,13 @@ static LRESULT HandleCreate(HWND hwnd) {
   // Global hotkey: Ctrl+Shift+T → Tab Switcher
   RegisterHotKey(hwnd, HOTKEY_ID_TABSWITCHER, MOD_CONTROL | MOD_SHIFT, 'T');
 
+  // Create tab icon image list
+  g_tabImageList = ImageList_Create(16, 16, ILC_COLOR32, TAB_ICON_COUNT, 0);
+  if (g_tabImageList) {
+    InitTabIcons(g_tabImageList);
+    TabCtrl_SetImageList(g_tabHwnd, g_tabImageList);
+  }
+
   // Subclass tab control for drag-reorder support
   g_oldTabProc = (WNDPROC)SetWindowLongPtr(
       g_tabHwnd, GWLP_WNDPROC, (LONG_PTR)TabSubclassProc);

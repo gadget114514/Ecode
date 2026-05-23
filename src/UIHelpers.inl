@@ -134,16 +134,18 @@ void UpdateTabs(HWND hwnd) {
     }
 
     TCITEMW tie = {0};
-    tie.mask = TCIF_TEXT;
+    tie.mask = TCIF_TEXT | TCIF_IMAGE;
     tie.pszText = (LPWSTR)name.c_str();
+    tie.iImage = buffers[i]->IsShell() ? TAB_ICON_GREEN : TAB_ICON_GRAY;
     TabCtrl_InsertItem(g_tabHwnd, static_cast<int>(i), &tie);
   }
   // Append all app tabs after buffer tabs
   int appStart = static_cast<int>(buffers.size());
   for (size_t i = 0; i < g_appTabs.size(); ++i) {
     TCITEMW tci = {0};
-    tci.mask = TCIF_TEXT;
+    tci.mask = TCIF_TEXT | TCIF_IMAGE;
     tci.pszText = (LPWSTR)g_appTabs[i].label.c_str();
+    tci.iImage = g_appTabs[i].iImage >= 0 ? g_appTabs[i].iImage : TAB_ICON_GRAY;
     TabCtrl_InsertItem(g_tabHwnd, appStart + static_cast<int>(i), &tci);
   }
 
