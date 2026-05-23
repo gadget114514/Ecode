@@ -3,6 +3,12 @@
 There are same name editor gainning a lot of stars. but this editor and terminal just one star from me. Hahaha.
 
 The development of this application is very early stage now. 
+
+# Purpose
+
+I want to use CLI and small editor in a pane. I've not edited at all. I always go and back between several windows in which CLI runs.
+Maybe such application exists, but I started the development. it was hard even using AI CLIs.
+
 Talk to AI, edit code, run commands — all in one fast native Windows app.
 
 Minimal, No Electron. No webView. No 500MB install.
