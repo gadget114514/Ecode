@@ -14,6 +14,18 @@
 #include <imm.h>
 #pragma comment(lib, "shell32.lib")
 
+// IME 文字列の表示幅を計算（全角=2, 半角=1）
+static int ImeCellWidth(const std::wstring& s) {
+    int w = 0;
+    for (wchar_t c : s) {
+        if (c >= 0x3000 && c <= 0x9FFF) w += 2;
+        else if (c >= 0xFF00 && c <= 0xFFEF) w += 2;
+        else if (c == L'？' || c == L'！' || c == L'、' || c == L'。') w += 2;
+        else w += 1;
+    }
+    return (std::max)(w, 1);
+}
+
 // ---------------------------------------------------------------------------
 // static registration
 // ---------------------------------------------------------------------------
@@ -171,19 +183,19 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_IME_STARTCOMPOSITION: {
         imeComposition_.clear();
         imeActive_ = true;
-        // IME 変換ウィンドウをカーソル位置に移動
+        imeCompAttr_.clear();
         if (HIMC hImc = ImmGetContext(hwnd)) {
-            COMPOSITIONFORM cf{};
-            cf.dwStyle        = CFS_POINT;
-            cf.ptCurrentPos.x = (LONG)(buffer_.cursorColumn() * cellWidth_);
-            cf.ptCurrentPos.y = (LONG)(buffer_.cursorRow()    * cellHeight_);
+            POINT pt;
+            pt.x = (LONG)(buffer_.cursorColumn() * cellWidth_);
+            pt.y = (LONG)(buffer_.cursorRow()    * cellHeight_);
+            COMPOSITIONFORM cf{CFS_POINT, pt};
             ImmSetCompositionWindow(hImc, &cf);
-
+            CANDIDATEFORM ccf{0, CFS_CANDIDATEPOS, pt};
+            ImmSetCandidateWindow(hImc, &ccf);
             LOGFONTW lf{};
             lf.lfHeight  = (LONG)cellHeight_;
             lf.lfCharSet = DEFAULT_CHARSET;
             if (textFormat_) {
-                // フォント名を DirectWrite から取得して IME に渡す
                 wchar_t fname[LF_FACESIZE] = L"Cascadia Mono";
                 textFormat_->GetFontFamilyName(fname, LF_FACESIZE);
                 wcsncpy_s(lf.lfFaceName, fname, LF_FACESIZE);
@@ -197,20 +209,32 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_IME_COMPOSITION: {
         if (HIMC hImc = ImmGetContext(hwnd)) {
-            // 変換中文字列（下線表示用）
+            // 変換中文字列 + 属性
             if (lp & GCS_COMPSTR) {
                 int bytes = ImmGetCompositionStringW(hImc, GCS_COMPSTR, nullptr, 0);
                 if (bytes > 0) {
                     imeComposition_.resize(bytes / sizeof(wchar_t));
                     ImmGetCompositionStringW(hImc, GCS_COMPSTR,
                                              imeComposition_.data(), bytes);
+                    imeShift_ = ImeCellWidth(imeComposition_);
+                    int attrSize = ImmGetCompositionStringW(hImc, GCS_COMPATTR, nullptr, 0);
+                    if (attrSize > 0) {
+                        imeCompAttr_.resize(attrSize);
+                        ImmGetCompositionStringW(hImc, GCS_COMPATTR,
+                                                 imeCompAttr_.data(), attrSize);
+                    } else {
+                        imeCompAttr_.assign(imeComposition_.size(), ATTR_INPUT);
+                    }
                 } else {
                     imeComposition_.clear();
+                    imeCompAttr_.clear();
+                    imeShift_ = 0;
                 }
                 InvalidateRect(hwnd_, nullptr, FALSE);
             }
-            // 確定文字列を PTY へ送信（WM_CHAR には頼らない）
+            // 確定文字列を PTY へ送信
             if (lp & GCS_RESULTSTR) {
+                imeShift_ = 0;
                 int bytes = ImmGetCompositionStringW(hImc, GCS_RESULTSTR, nullptr, 0);
                 if (bytes > 0) {
                     std::wstring result(bytes / sizeof(wchar_t), L'\0');
@@ -231,13 +255,27 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             ImmReleaseContext(hwnd, hImc);
         }
-        return 0;   // DefWindowProc を呼ばないことで WM_CHAR が二重送信されるのを防ぐ
+        return 0;
     }
 
     case WM_IME_ENDCOMPOSITION:
         imeComposition_.clear();
         imeActive_ = false;
+        imeCompAttr_.clear();
         InvalidateRect(hwnd_, nullptr, FALSE);
+        return DefWindowProcW(hwnd, msg, wp, lp);
+
+    case WM_IME_NOTIFY:
+        if (wp == IMN_OPENCANDIDATE || wp == IMN_CHANGECANDIDATE) {
+            if (HIMC hImc = ImmGetContext(hwnd)) {
+                POINT pt;
+                pt.x = (LONG)(buffer_.cursorColumn() * cellWidth_);
+                pt.y = (LONG)(buffer_.cursorRow()    * cellHeight_);
+                CANDIDATEFORM cf{0, CFS_CANDIDATEPOS, pt};
+                ImmSetCandidateWindow(hImc, &cf);
+                ImmReleaseContext(hwnd, hImc);
+            }
+        }
         return DefWindowProcW(hwnd, msg, wp, lp);
 
     case WM_MOUSEWHEEL: {
@@ -551,7 +589,7 @@ void TerminalView::OnPaint() {
     if (imeActive_ && !imeComposition_.empty() && (scrollOffset_ == 0 || cursorPinned)) {
         const float cx = buffer_.cursorColumn() * cellWidth_;
         const float cy = buffer_.cursorRow()    * cellHeight_;
-        const float compW = imeComposition_.size() * cellWidth_;
+        float compW = (float)imeShift_ * cellWidth_;
 
         // 背景（薄いハイライト）
         TermColor imeBg;
@@ -559,23 +597,52 @@ void TerminalView::OnPaint() {
         if (auto* b = GetBrush(imeBg, 0.85f))
             rt->FillRectangle(D2D1::RectF(cx, cy, cx + compW, cy + cellHeight_), b);
 
-        // テキスト
+        // テキスト（1文字ずつセル位置に描画＝確定後との字間一致）
         TermColor imeFg;
         imeFg.r = 255; imeFg.g = 255; imeFg.b = 255; imeFg.isDefault = false;
         if (auto* b = GetBrush(imeFg)) {
-            D2D1_RECT_F tr = D2D1::RectF(cx, cy, cx + compW + cellWidth_, cy + cellHeight_);
-            rt->DrawText(imeComposition_.c_str(), (UINT32)imeComposition_.size(),
-                         textFormat_, tr, b,
-                         D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+            float cellW = cellWidth_;
+            int cellPos = 0;
+            for (size_t ci = 0; ci < imeComposition_.size(); ++ci) {
+                wchar_t ch = imeComposition_[ci];
+                int cw = ImeCellWidth(std::wstring(1, ch));
+                float chx = cx + (float)cellPos * cellW;
+                D2D1_RECT_F cr = D2D1::RectF(chx, cy, chx + (float)cw * cellW, cy + cellHeight_);
+                rt->DrawText(&ch, 1, textFormat_, cr, b,
+                             D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+                cellPos += cw;
+            }
         }
 
-        // 下線
-        TermColor lineCol;
-        lineCol.r = 180; lineCol.g = 180; lineCol.b = 255; lineCol.isDefault = false;
-        if (auto* b = GetBrush(lineCol))
-            rt->DrawLine(D2D1::Point2F(cx, cy + cellHeight_ - 1.5f),
-                         D2D1::Point2F(cx + compW, cy + cellHeight_ - 1.5f),
-                         b, 1.5f);
+        // 下線（文字ごとの属性＋セル幅に応じて）
+        {
+            float cellW = cellWidth_;
+            TermColor wavyCol;  wavyCol.r = 255; wavyCol.g = 200; wavyCol.b = 100; wavyCol.isDefault = false;
+            TermColor lineCol;  lineCol.r = 180;  lineCol.g = 180;  lineCol.b = 255; lineCol.isDefault = false;
+            int cellPos = 0;
+            for (size_t ci = 0; ci < imeComposition_.size(); ++ci) {
+                int cw = ImeCellWidth(std::wstring(1, imeComposition_[ci]));
+                float ux = cx + (float)cellPos * cellW;
+                float uy = cy + cellHeight_ - 1.5f;
+                float uw = (float)cw * cellW;
+                BYTE attr = (ci < imeCompAttr_.size()) ? imeCompAttr_[ci] : ATTR_INPUT;
+                if (attr == ATTR_INPUT) {
+                    if (auto* b = GetBrush(wavyCol)) {
+                        float amp = 1.5f, step = 2.0f;
+                        for (float wx = 0; wx < uw; wx += step) {
+                            float x0 = ux + wx, x1 = ux + (std::min)(wx + step, uw);
+                            float y0 = uy + amp * sinf(wx / 4.0f * 3.14159f);
+                            float y1 = uy + amp * sinf((wx + step) / 4.0f * 3.14159f);
+                            rt->DrawLine(D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1), b, 1.0f);
+                        }
+                    }
+                } else {
+                    if (auto* b = GetBrush(lineCol))
+                        rt->DrawLine(D2D1::Point2F(ux, uy), D2D1::Point2F(ux + uw, uy), b, 1.0f);
+                }
+                cellPos += cw;
+            }
+        }
     }
 
     rt->PopAxisAlignedClip();
@@ -594,7 +661,12 @@ void TerminalView::OnPaint() {
 void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
                             const TerminalCell& cell, bool isCursor, bool cursorVisible,
                             bool isSelected) {
-    const float x = col * cellWidth_;
+    int visualCol = col;
+    if (imeShift_ > 0 && row == buffer_.cursorRow() && col >= buffer_.cursorColumn()) {
+        visualCol = col + imeShift_;
+        if (visualCol >= buffer_.columns()) return; // off-screen
+    }
+    const float x = visualCol * cellWidth_;
     const float y = row * cellHeight_;
     const float w = cellWidth_ * (cell.wide ? 2.0f : 1.0f);
     const float h = cellHeight_;

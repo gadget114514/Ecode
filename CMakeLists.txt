@@ -248,6 +248,29 @@ target_link_libraries(test_buffer_stress
     dwrite
 )
 
+add_executable(test_cursor_move EXCLUDE_FROM_ALL
+    tests/test_cursor_move.cpp
+    ${TEST_BASE_SOURCES}
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src-duktape/duktape.c
+    src-duktape/duktape.c
+    src/FileUtils.cpp
+)
+target_link_libraries(test_cursor_move
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+    d2d1
+    dwrite
+)
+
 # Libraries to link
 target_link_libraries(ecode
     user32

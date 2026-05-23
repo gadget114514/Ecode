@@ -162,6 +162,8 @@ private:
     int  selEndCol_    = -1;
 
     // IME インライン入力
-    std::wstring imeComposition_;   // 変換中の文字列（空 = 非アクティブ）
-    bool         imeActive_ = false;
+    std::wstring     imeComposition_;   // 変換中の文字列（空 = 非アクティブ）
+    std::vector<BYTE> imeCompAttr_;     // 各文字の属性（ATTR_INPUT/ATTR_CONVERTED）
+    bool             imeActive_ = false;
+    int              imeShift_ = 0;     // 編集中の右シフト量（セル単位）
 };

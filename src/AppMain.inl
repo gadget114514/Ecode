@@ -370,34 +370,87 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     lParam &= ~ISC_SHOWUICOMPOSITIONWINDOW;
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
   case WM_IME_STARTCOMPOSITION: {
+    g_imeComposing = true;
+    g_imeComposition.clear();
+    g_imeCompAttr.clear();
     HIMC himc = ImmGetContext(hwnd);
     if (himc) {
-      COMPOSITIONFORM cf = {CFS_POINT, g_renderer->GetCaretScreenPoint()};
-      ScreenToClient(hwnd, &cf.ptCurrentPos);
+      POINT ptScreen = g_renderer->GetCaretScreenPoint();
+      POINT ptClient = ptScreen;
+      ScreenToClient(hwnd, &ptClient);
+      COMPOSITIONFORM cf = {CFS_POINT, ptClient};
       ImmSetCompositionWindow(himc, &cf);
+      CANDIDATEFORM ccf = {0, CFS_CANDIDATEPOS, ptScreen};
+      ImmSetCandidateWindow(himc, &ccf);
+      ImmReleaseContext(hwnd, himc);
+    }
+    InvalidateRect(hwnd, NULL, FALSE);
+    return 0;
+  }
+  case WM_IME_COMPOSITION: {
+    HIMC himc = ImmGetContext(hwnd);
+    if (himc) {
+      // Intermediate composition string (visual overlay, not in buffer)
+      if (lParam & GCS_COMPSTR) {
+        LONG size = ImmGetCompositionStringW(himc, GCS_COMPSTR, NULL, 0);
+        if (size > 0) {
+          g_imeComposition.resize(size / sizeof(wchar_t));
+          ImmGetCompositionStringW(himc, GCS_COMPSTR, g_imeComposition.data(), size);
+          LONG attrSize = ImmGetCompositionStringW(himc, GCS_COMPATTR, NULL, 0);
+          if (attrSize > 0) {
+            g_imeCompAttr.resize(attrSize);
+            ImmGetCompositionStringW(himc, GCS_COMPATTR, g_imeCompAttr.data(), attrSize);
+          } else {
+            g_imeCompAttr.assign(g_imeComposition.size(), ATTR_INPUT);
+          }
+        } else {
+          g_imeComposition.clear();
+          g_imeCompAttr.clear();
+        }
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      // Finalized result string -> insert directly into buffer (not via WM_CHAR)
+      if (lParam & GCS_RESULTSTR) {
+        Buffer *buf = g_editor ? g_editor->GetActiveBuffer() : nullptr;
+        LONG size = ImmGetCompositionStringW(himc, GCS_RESULTSTR, NULL, 0);
+        if (size > 0 && buf) {
+          std::vector<wchar_t> wbuf(size / sizeof(wchar_t) + 1);
+          ImmGetCompositionStringW(himc, GCS_RESULTSTR, wbuf.data(), size);
+          int utf8Len = WideCharToMultiByte(CP_UTF8, 0, wbuf.data(), (int)(size / sizeof(wchar_t)), NULL, 0, NULL, NULL);
+          std::string utf8(utf8Len, '\0');
+          WideCharToMultiByte(CP_UTF8, 0, wbuf.data(), (int)(size / sizeof(wchar_t)), utf8.data(), utf8Len, NULL, NULL);
+          buf->Insert(buf->GetCaretPos(), utf8);
+          buf->MoveCaret((int)utf8.length());
+          buf->SetSelectionAnchor(buf->GetCaretPos());
+          EnsureCaretVisible(hwnd);
+          UpdateScrollbars(hwnd);
+        }
+        g_imeComposition.clear();
+        g_imeCompAttr.clear();
+        g_imeComposing = false;
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
       ImmReleaseContext(hwnd, himc);
     }
     return 0;
   }
-  case WM_IME_COMPOSITION: {
-    if (lParam & GCS_RESULTSTR) {
+  case WM_IME_ENDCOMPOSITION:
+    g_imeComposition.clear();
+    g_imeCompAttr.clear();
+    g_imeComposing = false;
+    InvalidateRect(hwnd, NULL, FALSE);
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+  case WM_IME_NOTIFY: {
+    if (wParam == IMN_OPENCANDIDATE || wParam == IMN_CHANGECANDIDATE) {
       HIMC himc = ImmGetContext(hwnd);
       if (himc) {
-        LONG size = ImmGetCompositionStringW(himc, GCS_RESULTSTR, NULL, 0);
-        if (size > 0) {
-          std::vector<wchar_t> buf(size / sizeof(wchar_t) + 1);
-          ImmGetCompositionStringW(himc, GCS_RESULTSTR, buf.data(), size);
-          buf[size / sizeof(wchar_t)] = L'\0';
-          for (wchar_t wc : buf) {
-            if (wc == L'\0')
-              break;
-            SendMessage(hwnd, WM_CHAR, (WPARAM)wc, 0);
-          }
-        }
+        CANDIDATEFORM cf = {0, CFS_CANDIDATEPOS, {0, 0}};
+        cf.ptCurrentPos = g_renderer->GetCaretScreenPoint(); // screen coords
+        ImmSetCandidateWindow(himc, &cf);
         ImmReleaseContext(hwnd, himc);
       }
     }
-    return 0;
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
   }
   case WM_CLOSE:
     return HandleClose(hwnd);
