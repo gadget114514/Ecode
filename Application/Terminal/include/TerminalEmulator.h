@@ -45,11 +45,6 @@ public:
     void setHyperlinkOpenCallback(std::function<void(const std::wstring&)> cb) {
         onHyperlinkOpen_ = std::move(cb);
     }
-    // Debug log callback (*Messages* buffer)
-    void setLogCallback(std::function<void(const std::wstring&)> cb) {
-        onLog_ = std::move(cb);
-    }
-
     // Whether bold colours should use the bright palette variants (terminalpp)
     void setBoldIsBright(bool v) { boldIsBright_ = v; }
 
@@ -87,7 +82,6 @@ private:
     static int paramInt(const std::vector<std::wstring>& p, size_t i, int def = 0);
 
     void emitResponse(const std::wstring& s) { if (onResponse_) onResponse_(s); }
-    void logDebug(const std::wstring& s) { if (onLog_) onLog_(s); }
 
     // --- state ---
     TerminalBuffer* buffer_ = nullptr;
@@ -115,5 +109,4 @@ private:
     std::function<void(const std::wstring&)> onTitle_;
     std::function<void(const std::wstring&)> onClipboard_;
     std::function<void(const std::wstring&)> onHyperlinkOpen_;
-    std::function<void(const std::wstring&)> onLog_;
 };
