@@ -140,6 +140,10 @@ public:
     void useAlternateScreen(bool enabled);
     bool alternateScreenActive() const;
 
+    // private mode save/restore (?Ps s / ?Ps r)
+    void savePrivateMode(int mode);
+    void restorePrivateMode(int mode);
+
     // --- static utilities ---
     static int characterWidth(wchar_t ch);
     static int characterWidth(const std::wstring& text);
@@ -158,6 +162,12 @@ private:
     int cursorColumn_ = 0;
     int savedCursorRow_    = 0;
     int savedCursorColumn_ = 0;
+    bool savedCursorVisible_ = true;
+
+    // Alternate screen saved cursor
+    int savedCursorRowAlt_    = 0;
+    int savedCursorColumnAlt_ = 0;
+    bool savedCursorVisibleAlt_ = true;
     int scrollTop_    = 0;
     int scrollBottom_ = 29;
     int maxHistoryLines_ = 10000;
@@ -185,12 +195,18 @@ private:
     bool pendingWrap_    = false;
     bool alternateScreenActive_ = false;
 
+    // saved private modes (?Ps s / ?Ps r)
+    bool savedPrivateMode1_    = false;
+    bool savedPrivateMode25_   = true;
+    bool savedPrivateMode1049_ = false;
+
     // screen data
     std::vector<Line> history_;
     std::vector<Line> screen_;
     std::vector<Line> mainHistory_;
     std::vector<Line> mainScreen_;
     std::vector<Line> alternateScreen_;
-    int mainCursorRow_    = 0;
-    int mainCursorColumn_ = 0;
+    int  mainCursorRow_     = 0;
+    int  mainCursorColumn_  = 0;
+    bool mainCursorVisible_ = true;  // saved across alternate screen switches
 };

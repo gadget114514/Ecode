@@ -60,6 +60,38 @@ TerminalView::TerminalView() {
     emulator_.setHyperlinkOpenCallback([](const std::wstring& url) {
         ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     });
+
+    // Send emulator debug log messages with [VT] prefix to the Ecode Messages buffer via WM_COPYDATA,
+    // and append to vt_debug.log
+    emulator_.setLogCallback([this](const std::wstring& logMsg) {
+        if (hwnd_ && logMsg.rfind(L"[VT]", 0) == 0) {
+            int len = WideCharToMultiByte(CP_UTF8, 0, logMsg.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (len > 0) {
+                std::string sMsg(len, '\0');
+                WideCharToMultiByte(CP_UTF8, 0, logMsg.c_str(), -1, &sMsg[0], len, nullptr, nullptr);
+                HWND root = GetAncestor(hwnd_, GA_ROOT);
+                if (root) {
+                    COPYDATASTRUCT cds{};
+                    cds.dwData = 0x5654;
+                    cds.cbData = (DWORD)len;
+                    cds.lpData = (PVOID)sMsg.c_str();
+                    SendMessageW(root, WM_COPYDATA, (WPARAM)hwnd_, (LPARAM)&cds);
+                }
+            }
+        }
+        // append every [VT] message to vt_debug.log
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, L"vt_debug.log", L"ab") == 0 && f) {
+            int len = WideCharToMultiByte(CP_UTF8, 0, logMsg.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (len > 0) {
+                std::string utf8(static_cast<size_t>(len), '\0');
+                WideCharToMultiByte(CP_UTF8, 0, logMsg.c_str(), -1, &utf8[0], len, nullptr, nullptr);
+                fwrite(utf8.c_str(), 1, static_cast<size_t>(len) - 1, f);
+                fwrite("\n", 1, 1, f);
+            }
+            fclose(f);
+        }
+    });
 }
 
 TerminalView::~TerminalView() {
@@ -96,8 +128,13 @@ bool TerminalView::StartSession(const std::wstring& shell,
     int rows = (int)(buffer_.rows());
     if (hwnd_) {
         RECT rc; GetClientRect(hwnd_, &rc);
-        if (cellWidth_  > 0) cols = std::max(10, (int)((rc.right  - rc.left) / cellWidth_));
-        if (cellHeight_ > 0) rows = std::max(3,  (int)((rc.bottom - rc.top)  / cellHeight_));
+        if (rc.right - rc.left > 120 && rc.bottom - rc.top > 100) {
+            if (cellWidth_  > 0) cols = std::max(10, (int)((rc.right  - rc.left) / cellWidth_));
+            if (cellHeight_ > 0) rows = std::max(3,  (int)((rc.bottom - rc.top)  / cellHeight_));
+        } else {
+            cols = 80;
+            rows = 24;
+        }
     }
     buffer_.resize(cols, rows);
 
@@ -262,7 +299,9 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // Notify PTY of focus (if focus events enabled)
         if (buffer_.focusEventReportingEnabled())
             session_.Write("\x1b[I", 3);
+        cursorBlink_ = true;   // フォーカス取得時にカーソルを即座に表示する
         StartCursorTimer();
+        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     case WM_KILLFOCUS:
         if (buffer_.focusEventReportingEnabled())
@@ -503,11 +542,13 @@ void TerminalView::OnPaint() {
         // VT420 スクロール領域対応:
         // スクロールバック中かつ部分スクロール領域が有効なとき、
         // 領域外の行は常に現在の画面内容（ピン固定）を表示する。
+        bool isPinned = false;
         if (scrollOffset_ > 0 && buffer_.hasScrollRegion()) {
             const bool outsideRegion = screenRow < buffer_.scrollTop() ||
                                        screenRow > buffer_.scrollBottom();
             if (outsideRegion) {
                 logRow = histLines + screenRow;  // 現在の画面行をピン固定
+                isPinned = true;
             }
         }
 
@@ -519,15 +560,26 @@ void TerminalView::OnPaint() {
             const TerminalCell& cell = line[col];
             if (cell.wideContinuation) continue;
 
-            bool isCursor = (logRow == curRow && col == buffer_.cursorColumn()
-                             && scrollOffset_ == 0 && buffer_.cursorVisible());
+            // カーソルはスクロールオフセット 0 のときか、ピン固定行（スクロール領域外）のときに表示する。
+            // スクロールバック中でもピン固定行はカレント画面を表示しているためカーソルを描く。
+            // ワイド文字のベースセルにカーソルがあるか、カーソルが継続セルを指している場合（CJK等）もカーソルを描く
+            bool isCursor = (logRow == curRow
+                             && (col == buffer_.cursorColumn() ||
+                                 (cell.wide && col + 1 == buffer_.cursorColumn()))
+                             && (scrollOffset_ == 0 || isPinned)
+                             && buffer_.cursorVisible());
             bool isSelected = IsSelected(logRow, col);
-            DrawCell(rt, screenRow, col, cell, isCursor, cursorBlink_, isSelected);
+            bool showCursor = cursorBlink_ || !buffer_.cursorBlink();
+            DrawCell(rt, screenRow, col, cell, isCursor, showCursor, isSelected);
         }
     }
 
     // IME 変換中文字列をカーソル位置にインライン描画
-    if (imeActive_ && !imeComposition_.empty() && scrollOffset_ == 0) {
+    // ピン固定行にカーソルがある場合（スクロールバック中）も表示する。
+    const bool cursorPinned = buffer_.hasScrollRegion() && scrollOffset_ > 0 &&
+                              (buffer_.cursorRow() < buffer_.scrollTop() ||
+                               buffer_.cursorRow() > buffer_.scrollBottom());
+    if (imeActive_ && !imeComposition_.empty() && (scrollOffset_ == 0 || cursorPinned)) {
         const float cx = buffer_.cursorColumn() * cellWidth_;
         const float cy = buffer_.cursorRow()    * cellHeight_;
         const float compW = imeComposition_.size() * cellWidth_;
@@ -582,8 +634,16 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     TermColor bg = cell.background.isDefault ? DefaultBg() : cell.background;
     TermColor dc = cell.decorColor.isDefault ? fg : cell.decorColor;
 
-    // Apply inverse (reverse video) at render time — swap fg/bg
-    if (cell.inverse) std::swap(fg, bg);
+    // Apply inverse (reverse video) at render time — swap fg/bg.
+    // DefaultFg()/DefaultBg() both return TermColor with isDefault=true, so after
+    // the swap the new bg still has isDefault=true and the background fill below
+    // would be skipped (the "skip default bg" optimisation).  Clear the flag so
+    // the swapped colour is always rendered.
+    if (cell.inverse) {
+        std::swap(fg, bg);
+        bg.isDefault = false;
+        fg.isDefault = false;
+    }
 
     // Draw background first
     bool drawBlock = isCursor && cursorVisible

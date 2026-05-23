@@ -57,12 +57,16 @@ void TerminalBuffer::resize(int columns, int rows) {
         normalizeWideCells(line);
         screen_.push_back(std::move(line));
     }
-    // Count rows inserted at the top; shift cursor down to stay at same content row
+    // Count rows inserted at the top; shift cursor to stay at same content row
     const int insertCount = rows_ - (int)screen_.size();
     while ((int)screen_.size() < rows_)
         screen_.insert(screen_.begin(), blankLine());
-    if (insertCount > 0)
+    if (insertCount > 0) {
         cursorRow_ += insertCount;
+    } else {
+        const int discardCount = (std::max)(0, (int)oldScreen.size() - rows_);
+        cursorRow_ -= discardCount;
+    }
 
     clampCursor();
 }
@@ -151,8 +155,9 @@ void TerminalBuffer::putText(const std::wstring& text, const TerminalCell& attri
         return;
     }
 
-    // autowrap: if character doesn't fit, wrap now
-    if (cursorColumn_ + width > columns_) {
+    // autowrap: if character doesn't fit and DECAWM is set, wrap now.
+    // When DECAWM is off the character at the right margin is overwritten in-place.
+    if (autoWrapEnabled_ && cursorColumn_ + width > columns_) {
         if (!screen_.empty())
             screen_[cursorRow_][std::max(0, columns_ - 1)].softWrapped = true;
         carriageReturn();
@@ -243,27 +248,49 @@ void TerminalBuffer::moveCursorRow(int row) {
 
 void TerminalBuffer::moveCursorNextLine(int count) {
     pendingWrap_  = false;
+    const int oldRow = cursorRow_;
     cursorRow_   += std::max(1, count);
     cursorColumn_ = 0;
+    // When starting inside the scroll region, stop at the bottom margin.
+    if (oldRow >= scrollTop_ && oldRow <= scrollBottom_ && cursorRow_ > scrollBottom_)
+        cursorRow_ = scrollBottom_;
     clampCursor();
 }
 
 void TerminalBuffer::moveCursorPreviousLine(int count) {
     pendingWrap_  = false;
+    const int oldRow = cursorRow_;
     cursorRow_   -= std::max(1, count);
     cursorColumn_ = 0;
+    // When starting inside the scroll region, stop at the top margin.
+    if (oldRow >= scrollTop_ && oldRow <= scrollBottom_ && cursorRow_ < scrollTop_)
+        cursorRow_ = scrollTop_;
     clampCursor();
 }
 
 void TerminalBuffer::saveCursor() {
-    savedCursorRow_    = cursorRow_;
-    savedCursorColumn_ = cursorColumn_;
+    if (alternateScreenActive_) {
+        savedCursorRowAlt_     = cursorRow_;
+        savedCursorColumnAlt_  = cursorColumn_;
+        savedCursorVisibleAlt_ = cursorVisible_;
+    } else {
+        savedCursorRow_        = cursorRow_;
+        savedCursorColumn_     = cursorColumn_;
+        savedCursorVisible_    = cursorVisible_;
+    }
 }
 
 void TerminalBuffer::restoreCursor() {
     pendingWrap_  = false;
-    cursorRow_    = savedCursorRow_;
-    cursorColumn_ = savedCursorColumn_;
+    if (alternateScreenActive_) {
+        cursorRow_     = savedCursorRowAlt_;
+        cursorColumn_  = savedCursorColumnAlt_;
+        cursorVisible_ = savedCursorVisibleAlt_;
+    } else {
+        cursorRow_     = savedCursorRow_;
+        cursorColumn_  = savedCursorColumn_;
+        cursorVisible_ = savedCursorVisible_;
+    }
     clampCursor();
 }
 
@@ -443,10 +470,11 @@ void TerminalBuffer::useAlternateScreen(bool enabled) {
     if (alternateScreenActive_ == enabled) return;
 
     if (enabled) {
-        mainHistory_      = history_;
-        mainScreen_       = screen_;
-        mainCursorRow_    = cursorRow_;
-        mainCursorColumn_ = cursorColumn_;
+        mainHistory_       = history_;
+        mainScreen_        = screen_;
+        mainCursorRow_     = cursorRow_;
+        mainCursorColumn_  = cursorColumn_;
+        mainCursorVisible_ = cursorVisible_;  // カーソル表示状態を保存
         alternateScreen_.assign(rows_, blankLine());
         screen_ = alternateScreen_;
         history_.clear();
@@ -462,6 +490,7 @@ void TerminalBuffer::useAlternateScreen(bool enabled) {
         pendingWrap_      = false;
         cursorRow_        = mainCursorRow_;
         cursorColumn_     = mainCursorColumn_;
+        cursorVisible_    = mainCursorVisible_;  // カーソル表示状態を復元
         scrollTop_        = 0;
         scrollBottom_     = rows_ - 1;
     }
@@ -470,6 +499,26 @@ void TerminalBuffer::useAlternateScreen(bool enabled) {
 }
 
 bool TerminalBuffer::alternateScreenActive() const { return alternateScreenActive_; }
+
+void TerminalBuffer::savePrivateMode(int mode) {
+    switch (mode) {
+    case 1:    savedPrivateMode1_    = applicationCursorMode_; break;
+    case 25:   savedPrivateMode25_   = cursorVisible_;          break;
+    case 1049:
+    case 1047:
+    case 47:   savedPrivateMode1049_ = alternateScreenActive_;  break;
+    }
+}
+
+void TerminalBuffer::restorePrivateMode(int mode) {
+    switch (mode) {
+    case 1:    setApplicationCursorMode(savedPrivateMode1_); break;
+    case 25:   setCursorVisible(savedPrivateMode25_);          break;
+    case 1049:
+    case 1047:
+    case 47:   useAlternateScreen(savedPrivateMode1049_);  break;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // private helpers
@@ -561,14 +610,24 @@ void TerminalBuffer::normalizeWideCells(Line& line) {
 }
 
 void TerminalBuffer::resizeLines(std::vector<Line>& lines, int oldColumns) {
-    for (Line& line : lines) {
+    std::vector<Line> oldScreen = lines;
+    lines.clear();
+    lines.reserve(rows_);
+
+    const int keepRows = std::min(rows_, (int)oldScreen.size());
+    const int start    = std::max(0, (int)oldScreen.size() - keepRows);
+    for (int i = 0; i < keepRows; ++i) {
+        Line line = oldScreen[start + i];
         line.resize(columns_);
         for (int c = oldColumns; c < columns_; ++c) line[c] = TerminalCell();
         for (int c = 0; c < columns_; ++c)
             if (line[c].text.empty() && !line[c].wideContinuation)
                 line[c] = TerminalCell();
         normalizeWideCells(line);
+        lines.push_back(std::move(line));
     }
+    while ((int)lines.size() < rows_)
+        lines.insert(lines.begin(), blankLine());
 }
 
 void TerminalBuffer::eraseCell(int row, int column, const TerminalCell& attrs) {
@@ -765,7 +824,11 @@ void TerminalBuffer::reverseRectAttr(int top, int left, int bottom, int right) {
 }
 
 void TerminalBuffer::clampCursor() {
-    cursorRow_    = clamp(cursorRow_,    0, rows_    - 1);
+    // In origin mode the cursor is constrained to the scroll region.
+    // In normal mode it is constrained to the physical screen.
+    const int rowMin = originMode_ ? scrollTop_    : 0;
+    const int rowMax = originMode_ ? scrollBottom_ : rows_ - 1;
+    cursorRow_    = clamp(cursorRow_,    rowMin, rowMax);
     cursorColumn_ = clamp(cursorColumn_, 0, columns_ - 1);
 }
 
