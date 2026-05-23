@@ -2,6 +2,7 @@
 
 There are same name editor gainning a lot of stars. but this editor and terminal just one star from me. Hahaha.
 
+The development of this application is very early stage now. 
 Talk to AI, edit code, run commands — all in one fast native Windows app.
 
 Minimal, No Electron. No webView. No 500MB install.
