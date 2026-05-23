@@ -60,11 +60,6 @@ public:
     void SendInput(const std::string& utf8);
     void SendInput(const std::wstring& text);
 
-    // Set debug log callback (forwards to TerminalEmulator)
-    void SetLogCallback(std::function<void(const std::wstring&)> cb) {
-        emulator_.setLogCallback(std::move(cb));
-    }
-
     // Window class name for RegisterClassEx
     static constexpr const wchar_t* kClassName = L"EcodeTerminalView";
     static bool RegisterWindowClass(HINSTANCE hInst);

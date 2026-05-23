@@ -61,37 +61,6 @@ TerminalView::TerminalView() {
         ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     });
 
-    // Send emulator debug log messages with [VT] prefix to the Ecode Messages buffer via WM_COPYDATA,
-    // and append to vt_debug.log
-    emulator_.setLogCallback([this](const std::wstring& logMsg) {
-        if (hwnd_ && logMsg.rfind(L"[VT]", 0) == 0) {
-            int len = WideCharToMultiByte(CP_UTF8, 0, logMsg.c_str(), -1, nullptr, 0, nullptr, nullptr);
-            if (len > 0) {
-                std::string sMsg(len, '\0');
-                WideCharToMultiByte(CP_UTF8, 0, logMsg.c_str(), -1, &sMsg[0], len, nullptr, nullptr);
-                HWND root = GetAncestor(hwnd_, GA_ROOT);
-                if (root) {
-                    COPYDATASTRUCT cds{};
-                    cds.dwData = 0x5654;
-                    cds.cbData = (DWORD)len;
-                    cds.lpData = (PVOID)sMsg.c_str();
-                    SendMessageW(root, WM_COPYDATA, (WPARAM)hwnd_, (LPARAM)&cds);
-                }
-            }
-        }
-        // append every [VT] message to vt_debug.log
-        FILE* f = nullptr;
-        if (_wfopen_s(&f, L"vt_debug.log", L"ab") == 0 && f) {
-            int len = WideCharToMultiByte(CP_UTF8, 0, logMsg.c_str(), -1, nullptr, 0, nullptr, nullptr);
-            if (len > 0) {
-                std::string utf8(static_cast<size_t>(len), '\0');
-                WideCharToMultiByte(CP_UTF8, 0, logMsg.c_str(), -1, &utf8[0], len, nullptr, nullptr);
-                fwrite(utf8.c_str(), 1, static_cast<size_t>(len) - 1, f);
-                fwrite("\n", 1, 1, f);
-            }
-            fclose(f);
-        }
-    });
 }
 
 TerminalView::~TerminalView() {
