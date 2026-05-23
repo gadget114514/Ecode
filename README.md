@@ -91,7 +91,7 @@ JavaScript engine built in. Create macros, automate editing tasks, add custom ke
 ## Getting Started
 
 ### Download
-Download the latest installer from [Releases](https://github.com/user/Ecode/releases).
+Download the latest installer from [Releases](https://github.com/gadget114514/Ecode/releases).
 
 ### Build from Source
 ```powershell
