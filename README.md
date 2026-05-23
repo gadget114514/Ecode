@@ -1,8 +1,10 @@
 # Ecode
 
+There are same name editor gainning a lot of stars. but this editor and terminal just one star from me. Hahaha.
+
 Talk to AI, edit code, run commands — all in one fast native Windows app.
 
-No Electron. No webView. No 500MB install.
+Minimal, No Electron. No webView. No 500MB install.
 
 > **Process-bounded architecture**: Plugins like the terminal run as **separate child processes**, not as in-process DLLs or web views. Each dies cleanly when closed. No process hikes or memory leaks.
 
@@ -50,6 +52,8 @@ A real terminal runs as a child process inside an editor tab. Works with any CLI
 - Copy text from terminal output and paste into your code
 - Colors, bold, italic, underline — everything renders correctly
 
+
+This figure shows the opencode running in terminal.
 ![](https://github.com/user-attachments/assets/5a0ab0e6-0b00-4ca2-8784-2256205d9191)
 
 ### CLI Command Launcher
@@ -62,6 +66,7 @@ Save your most-used shell commands with names and working directories. Run them 
 | Git status | `git status` | `D:\project` |
 | AI chat | `claude` | `D:\project` |
 
+This figure shows the psmux(third party) running in terminal.
 ![](https://github.com/user-attachments/assets/ff2abfe1-512d-4255-9f26-6afff6cdda63)
 
 ### Git-Friendly
