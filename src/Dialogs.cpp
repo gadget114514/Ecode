@@ -998,7 +998,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           return (INT_PTR)TRUE;
         }
         std::wstring localePrefix = (enc == 1) ? L"export LANG=ja_JP.SJIS; " : L"export LANG=en_US.UTF-8; ";
-        shellArgs = bashCmd + L" -c \"" + localePrefix + cmd + L"; exec bash --login -i\"";
+        shellArgs = bashCmd + L" -c \"" + localePrefix + cmd + L"\"";
       }
       std::wstring label = (wcslen(lbl) > 0) ? std::wstring(lbl)
                          : std::wstring(folder);
@@ -1011,6 +1011,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       GetModuleFileNameW(nullptr, modPath, MAX_PATH);
       std::wstring exeDir = modPath;
       exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
+      if (g_editor) g_editor->LogMessage("[Launch] CLI Dialog: " + WStringToString(shellArgs));
       LaunchApp(parent, exeDir + L"\\Terminal.exe", shellArgs, label, 10, icn);
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;

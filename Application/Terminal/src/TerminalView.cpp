@@ -4,7 +4,8 @@
 #include <cstdio>
 #include <shellapi.h>   // ShellExecuteW for hyperlink open
 #include <windowsx.h>  // GET_X_LPARAM / GET_Y_LPARAM
-#include <shlobj.h>    // SHGetFolderPathW
+#include <shlobj.h>    // SHGetFolderPathW, SHGetKnownFolderPath
+#include <shlwapi.h>   // PathAppendW
 #include <string>
 
 #pragma comment(lib, "d2d1.lib")
@@ -44,7 +45,9 @@ bool TerminalView::RegisterWindowClass(HINSTANCE hInst) {
 // ---------------------------------------------------------------------------
 // ctor / dtor
 // ---------------------------------------------------------------------------
-TerminalView::TerminalView() {
+TerminalView::TerminalView()
+    : imageManager_(nullptr)
+{
     emulator_.reset(&buffer_);
 
     // Response callback: PTY → emulator response → PTY
@@ -73,11 +76,26 @@ TerminalView::TerminalView() {
         ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     });
 
+    // OSC 1337 inline image callback
+    emulator_.setImageDataCallback([this](const std::vector<uint8_t>& data,
+                                          int widthPx, int heightPx,
+                                          bool preserveAspectRatio,
+                                          const std::wstring& name) {
+        OnImageData(data, widthPx, heightPx, preserveAspectRatio, name);
+    });
+
+    // OSC 1337 file download callback
+    emulator_.setFileDownloadCallback([this](const std::vector<uint8_t>& data,
+                                              const std::wstring& name) {
+        OnFileDownload(data, name);
+    });
 }
 
 TerminalView::~TerminalView() {
     StopCursorTimer();
     session_.Close();
+    delete imageManager_;
+    imageManager_ = nullptr;
     ReleaseRenderTarget();
     if (dwFactory_)  { dwFactory_->Release();  dwFactory_  = nullptr; }
     if (d2dFactory_) { d2dFactory_->Release(); d2dFactory_ = nullptr; }
@@ -356,6 +374,9 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
     // D2D factory
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2dFactory_);
 
+    // Image manager (for OSC 1337)
+    imageManager_ = new ImageManager(d2dFactory_);
+
     // DWrite factory
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
                         __uuidof(IDWriteFactory),
@@ -511,6 +532,117 @@ ID2D1SolidColorBrush* TerminalView::GetBrush(const TermColor& c, float alpha) {
 }
 
 // ---------------------------------------------------------------------------
+// OSC 1337 — OnImageData
+// ---------------------------------------------------------------------------
+void TerminalView::OnImageData(const std::vector<uint8_t>& data,
+                                int widthPx, int heightPx,
+                                bool preserveAspectRatio,
+                                const std::wstring& /*name*/)
+{
+    if (data.empty() || !buffer_.rows()) return;
+
+    // Determine display size in pixels (auto = use cell-based default)
+    int dispW = widthPx;
+    int dispH = heightPx;
+
+    // Store and decode via ImageManager
+    uint64_t imageId = imageManager_
+        ? imageManager_->StoreImage(data, dispW, dispH, preserveAspectRatio)
+        : 0;
+
+    if (imageId == 0) return;
+
+    // Calculate how many cells the image occupies
+    int cellW = (int)cellWidth_;
+    int cellH = (int)cellHeight_;
+    if (cellW < 1) cellW = 8;
+    if (cellH < 1) cellH = 16;
+
+    // If auto-size, compute from image's inherent size
+    if (dispW <= 0 || dispH <= 0) {
+        int origW = 0, origH = 0;
+        if (imageManager_)
+            imageManager_->GetDimensions(imageId, origW, origH);
+        if (origW > 0 && origH > 0) {
+            // Scale to fit within reasonable cell bounds
+            // Default: max 80 cells wide, preserve aspect ratio
+            int maxCellsW = std::min(80, buffer_.columns());
+            int autoCellsW = (origW + cellW - 1) / cellW;
+            int autoCellsH = (origH + cellH - 1) / cellH;
+            if (autoCellsW > maxCellsW) {
+                float scale = (float)maxCellsW / autoCellsW;
+                autoCellsW = maxCellsW;
+                autoCellsH = std::max(1, (int)(autoCellsH * scale));
+            }
+            dispW = autoCellsW * cellW;
+            dispH = autoCellsH * cellH;
+
+            // Re-store with computed display size
+            imageManager_->Remove(imageId);
+            imageId = imageManager_->StoreImage(data, dispW, dispH, preserveAspectRatio);
+            if (imageId == 0) return;
+        }
+    }
+
+    // Convert pixels to cells (round up)
+    int widthCells  = std::max(1, (dispW + cellW - 1) / cellW);
+    int heightCells = std::max(1, (dispH + cellH - 1) / cellH);
+
+    // Clamp to available columns
+    widthCells = std::min(widthCells, buffer_.columns());
+
+    buffer_.placeImage(imageId, widthCells, heightCells);
+}
+
+// ---------------------------------------------------------------------------
+// OSC 1337 — OnFileDownload (inline=0)
+// ---------------------------------------------------------------------------
+void TerminalView::OnFileDownload(const std::vector<uint8_t>& data,
+                                   const std::wstring& name)
+{
+    if (data.empty()) return;
+
+    // Determine save path: Downloads folder
+    wchar_t downloadsPath[MAX_PATH] = {};
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_PROFILE, nullptr, 0, downloadsPath))) {
+        downloadsPath[0] = L'.';
+        downloadsPath[1] = L'\0';
+    }
+
+    std::wstring savePath = downloadsPath;
+    savePath += L"\\Downloads\\";
+    savePath += name.empty() ? L"Unnamed file" : name;
+
+    // If file exists, append a number
+    if (GetFileAttributesW(savePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        size_t dot = savePath.rfind(L'.');
+        std::wstring base = (dot != std::wstring::npos)
+            ? savePath.substr(0, dot)
+            : savePath;
+        std::wstring ext = (dot != std::wstring::npos)
+            ? savePath.substr(dot)
+            : L"";
+        for (int i = 1; i < 1000; ++i) {
+            wchar_t num[16];
+            swprintf_s(num, L" (%d)", i);
+            std::wstring candidate = base + num + ext;
+            if (GetFileAttributesW(candidate.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                savePath = candidate;
+                break;
+            }
+        }
+    }
+
+    HANDLE hFile = CreateFileW(savePath.c_str(), GENERIC_WRITE, 0, nullptr,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return;
+
+    DWORD written = 0;
+    WriteFile(hFile, data.data(), (DWORD)data.size(), &written, nullptr);
+    CloseHandle(hFile);
+}
+
+// ---------------------------------------------------------------------------
 // OnPaint
 // ---------------------------------------------------------------------------
 void TerminalView::OnPaint() {
@@ -566,6 +698,7 @@ void TerminalView::OnPaint() {
             if (col >= (int)line.size()) break;
             const TerminalCell& cell = line[col];
             if (cell.wideContinuation) continue;
+            if (cell.imagePlaceholderIndex > 0) continue; // image continuation cell
 
             // カーソルはスクロールオフセット 0 のときか、ピン固定行（スクロール領域外）のときに表示する。
             // スクロールバック中でもピン固定行はカレント画面を表示しているためカーソルを描く。
@@ -661,6 +794,33 @@ void TerminalView::OnPaint() {
 void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
                             const TerminalCell& cell, bool isCursor, bool cursorVisible,
                             bool isSelected) {
+    // --- OSC 1337 inline image rendering (before IME shift) ---
+    if (cell.imageId != 0 && cell.imagePlaceholderIndex == 0 && imageManager_) {
+        const float x = col * cellWidth_;
+        const float y = row * cellHeight_;
+        float imgW = cell.imageWidthCells * cellWidth_;
+        float imgH = cell.imageHeightCells * cellHeight_;
+        if (auto* bmp = imageManager_->GetBitmap(cell.imageId, rt)) {
+            rt->DrawBitmap(bmp, D2D1::RectF(x, y, x + imgW, y + imgH));
+        } else {
+            TermColor missingCol;
+            missingCol.r = 60; missingCol.g = 60; missingCol.b = 80; missingCol.isDefault = false;
+            if (auto* b = GetBrush(missingCol))
+                rt->FillRectangle(D2D1::RectF(x, y, x + imgW, y + imgH), b);
+        }
+        if (isSelected) {
+            TermColor selColor;
+            selColor.r = 80; selColor.g = 130; selColor.b = 220; selColor.isDefault = false;
+            if (auto* b = GetBrush(selColor, 0.4f))
+                rt->FillRectangle(D2D1::RectF(x, y, x + imgW, y + imgH), b);
+        }
+        if (isCursor && cursorVisible) {
+            if (auto* b = GetBrush(DefaultFg()))
+                rt->DrawRectangle(D2D1::RectF(x, y, x + imgW, y + imgH), b, 1.0f);
+        }
+        return;
+    }
+
     int visualCol = col;
     if (imeShift_ > 0 && row == buffer_.cursorRow() && col >= buffer_.cursorColumn()) {
         visualCol = col + imeShift_;

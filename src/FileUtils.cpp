@@ -3,9 +3,6 @@
 void DebugLog(const std::string &msg, LogLevel level) {
   if (level < g_currentLogLevel)
     return;
-  std::ofstream ofs("debug_init.log", std::ios::app);
-  const char *levelStr[] = {"DEBUG", "INFO", "WARN", "ERROR"};
-  ofs << "[" << levelStr[level] << "] " << msg << std::endl;
   if (g_logCallback)
     g_logCallback(msg, level);
 }

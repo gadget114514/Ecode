@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cwchar>
+#include <unordered_map>
 
 // ---------------------------------------------------------------------------
 // 16-colour ANSI palette  (Windows Terminal / xterm standard)
@@ -109,6 +110,11 @@ void TerminalEmulator::reset(TerminalBuffer* buffer) {
     isInverseMode_    = false;
     lineDrawingG0_    = false;
     activeHyperlinkUrl_.clear();
+
+    // Reset multipart state
+    multipartActive_  = false;
+    multipartOptions_.clear();
+    multipartBuffer_.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -700,9 +706,249 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
         buffer_->setCursorBlink(true);
         break;
 
+    case 1337: // iTerm2 proprietary escape codes
+        handleOsc1337(arg1);
+        break;
+
     default:
         break;
     }
+}
+
+// ---------------------------------------------------------------------------
+// OSC 1337 — iTerm2 inline images / file transfer
+// ---------------------------------------------------------------------------
+void TerminalEmulator::handleOsc1337(const std::wstring& params) {
+    // Dispatch by keyword (first segment before '=' or ':')
+    // "File=...", "MultipartFile=...", "FilePart=...", "FileEnd"
+    // "SetUserVar=...", "SetBadgeFormat=...", "SetMark", etc. (ignored for now)
+
+    if (params.find(L"File=") == 0) {
+        handleOsc1337File(params.substr(5));  // strip "File="
+    } else if (params.find(L"MultipartFile=") == 0) {
+        handleOsc1337MultipartStart(params.substr(14));
+    } else if (params.find(L"FilePart=") == 0) {
+        handleOsc1337FilePart(params.substr(9));
+    } else if (params.find(L"FileEnd") == 0) {
+        handleOsc1337FileEnd();
+    }
+    // Other OSC 1337 sub-commands (SetUserVar, SetBadgeFormat, etc.) are ignored
+}
+
+// Parse key=value;key=value format into a map
+static std::unordered_map<std::wstring, std::wstring> parseKeyValuePairs(const std::wstring& s) {
+    std::unordered_map<std::wstring, std::wstring> map;
+    size_t start = 0;
+    while (start < s.size()) {
+        size_t eq = s.find(L'=', start);
+        if (eq == std::wstring::npos) break;
+        std::wstring key = s.substr(start, eq - start);
+        size_t semicolon = s.find(L';', eq + 1);
+        std::wstring value;
+        if (semicolon == std::wstring::npos) {
+            value = s.substr(eq + 1);
+            start = s.size();
+        } else {
+            value = s.substr(eq + 1, semicolon - eq - 1);
+            start = semicolon + 1;
+        }
+        map[key] = value;
+    }
+    return map;
+}
+
+// Parse width/height values: N, Npx, N%, auto
+static void parseDimension(const std::wstring& s, int cellSize, int viewportSize,
+                           int& outPixels, bool& outAuto)
+{
+    outPixels = 0;
+    outAuto = true; // default to auto
+
+    if (s.empty() || s == L"auto") return;
+
+    outAuto = false;
+
+    if (s.size() >= 3 && s.substr(s.size() - 2) == L"px") {
+        // Npx
+        outPixels = std::stoi(s.substr(0, s.size() - 2));
+    } else if (s.back() == L'%') {
+        // N%
+        std::wstring numStr = s.substr(0, s.size() - 1);
+        int pct = std::stoi(numStr);
+        outPixels = viewportSize * pct / 100;
+    } else {
+        // N (character cells)
+        int cells = std::stoi(s);
+        outPixels = cells * cellSize;
+    }
+    if (outPixels < 1) outPixels = 1;
+}
+
+void TerminalEmulator::handleOsc1337File(const std::wstring& s) {
+    // Format: [key=value;...]:base64data
+    // Find the ':' separator that separates options from data
+    size_t colon = s.find(L':');
+    if (colon == std::wstring::npos) return;
+
+    std::wstring optStr = s.substr(0, colon);
+    std::wstring b64data = s.substr(colon + 1);
+
+    auto opts = parseKeyValuePairs(optStr);
+
+    // Determine inline flag
+    bool inlineFlag = true; // default to inline for safety
+    auto itInline = opts.find(L"inline");
+    if (itInline != opts.end() && itInline->second == L"0") {
+        inlineFlag = false;
+    }
+
+    // Decode name (base64)
+    std::wstring name = L"Unnamed file";
+    auto itName = opts.find(L"name");
+    if (itName != opts.end()) {
+        std::string decodedName = base64Decode(itName->second);
+        if (!decodedName.empty()) {
+            int needed = MultiByteToWideChar(CP_UTF8, 0, decodedName.c_str(), -1, nullptr, 0);
+            if (needed > 0) {
+                std::wstring ws(needed, L'\0');
+                MultiByteToWideChar(CP_UTF8, 0, decodedName.c_str(), -1, ws.data(), needed);
+                if (!ws.empty() && ws.back() == L'\0') ws.pop_back();
+                name = ws;
+            }
+        }
+    }
+
+    // Preserve aspect ratio
+    bool preserveAspectRatio = true;
+    auto itPar = opts.find(L"preserveAspectRatio");
+    if (itPar != opts.end() && itPar->second == L"0") {
+        preserveAspectRatio = false;
+    }
+
+    if (inlineFlag) {
+        // Parse width/height
+        int widthPx = 0, heightPx = 0;
+        bool widthAuto = true, heightAuto = true;
+
+        // We need cell dimensions from the buffer for proper sizing
+        if (buffer_) {
+            int cellW = buffer_->cellWidth();
+            int cellH = buffer_->cellHeight();
+            int viewW = cellW * buffer_->columns();
+            int viewH = cellH * buffer_->rows();
+
+            auto itW = opts.find(L"width");
+            if (itW != opts.end())
+                parseDimension(itW->second, cellW, viewW, widthPx, widthAuto);
+
+            auto itH = opts.find(L"height");
+            if (itH != opts.end())
+                parseDimension(itH->second, cellH, viewH, heightPx, heightAuto);
+        }
+
+        // Decode base64 data
+        std::string rawData = base64Decode(b64data);
+
+        if (!rawData.empty()) {
+            std::vector<uint8_t> data(rawData.begin(), rawData.end());
+
+            if (onImageData_) {
+                onImageData_(data, widthPx, heightPx, preserveAspectRatio, name);
+            }
+        }
+    } else {
+        // File download
+        std::string rawData = base64Decode(b64data);
+        if (!rawData.empty() && onFileDownload_) {
+            std::vector<uint8_t> data(rawData.begin(), rawData.end());
+            onFileDownload_(data, name);
+        }
+    }
+}
+
+void TerminalEmulator::handleOsc1337MultipartStart(const std::wstring& opts) {
+    multipartActive_  = true;
+    multipartOptions_ = opts;
+    multipartBuffer_.clear();
+}
+
+void TerminalEmulator::handleOsc1337FilePart(const std::wstring& b64chunk) {
+    if (!multipartActive_) return;
+    // Accumulate base64 text (decode at the end)
+    multipartBuffer_ += base64Decode(b64chunk);
+}
+
+void TerminalEmulator::handleOsc1337FileEnd() {
+    if (!multipartActive_) return;
+    multipartActive_ = false;
+
+    if (multipartBuffer_.empty()) {
+        multipartOptions_.clear();
+        return;
+    }
+
+    // Re-parse options (may differ from original File= options)
+    auto opts = parseKeyValuePairs(multipartOptions_);
+
+    bool inlineFlag = true;
+    auto itInline = opts.find(L"inline");
+    if (itInline != opts.end() && itInline->second == L"0") {
+        inlineFlag = false;
+    }
+
+    std::wstring name = L"Unnamed file";
+    auto itName = opts.find(L"name");
+    if (itName != opts.end()) {
+        std::string decodedName = base64Decode(itName->second);
+        if (!decodedName.empty()) {
+            int needed = MultiByteToWideChar(CP_UTF8, 0, decodedName.c_str(), -1, nullptr, 0);
+            if (needed > 0) {
+                std::wstring ws(needed, L'\0');
+                MultiByteToWideChar(CP_UTF8, 0, decodedName.c_str(), -1, ws.data(), needed);
+                if (!ws.empty() && ws.back() == L'\0') ws.pop_back();
+                name = ws;
+            }
+        }
+    }
+
+    bool preserveAspectRatio = true;
+    auto itPar = opts.find(L"preserveAspectRatio");
+    if (itPar != opts.end() && itPar->second == L"0") {
+        preserveAspectRatio = false;
+    }
+
+    if (inlineFlag) {
+        int widthPx = 0, heightPx = 0;
+        bool widthAuto = true, heightAuto = true;
+
+        if (buffer_) {
+            int cellW = buffer_->cellWidth();
+            int cellH = buffer_->cellHeight();
+            int viewW = cellW * buffer_->columns();
+            int viewH = cellH * buffer_->rows();
+
+            auto itW = opts.find(L"width");
+            if (itW != opts.end())
+                parseDimension(itW->second, cellW, viewW, widthPx, widthAuto);
+
+            auto itH = opts.find(L"height");
+            if (itH != opts.end())
+                parseDimension(itH->second, cellH, viewH, heightPx, heightAuto);
+        }
+
+        std::vector<uint8_t> data(multipartBuffer_.begin(), multipartBuffer_.end());
+        if (!data.empty() && onImageData_) {
+            onImageData_(data, widthPx, heightPx, preserveAspectRatio, name);
+        }
+    } else {
+        std::vector<uint8_t> data(multipartBuffer_.begin(), multipartBuffer_.end());
+        if (!data.empty() && onFileDownload_) {
+            onFileDownload_(data, name);
+        }
+    }
+
+    multipartBuffer_.clear();
+    multipartOptions_.clear();
 }
 
 // ---------------------------------------------------------------------------
