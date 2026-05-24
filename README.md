@@ -107,12 +107,16 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 
 ## Project Status
 - [x] Terminal + CLI launcher
-- [x] Text editor
+- [x] Simple Text editor
 - [x] Find in files (grep with regex)
 - [x] Huge file support
-- [x] Multi-language UI
-- [x] CLI
-- [x] Applicatios/Plugins
+- [ ] Multi-language UI
+- [x] CLI (agy,opencode,claude CLI)
+- [x] Launcher Applications/Plugins
+- [x] Applications(admin)
+- [x] Inline IME input 
+- [x] osc1337
+- [x] sixel
 - [ ] Theming
 - [ ] Session save/resume
 - [ ] Notepad keybindings
