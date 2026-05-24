@@ -86,8 +86,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     if (!hwnd) return 1;
 
     if (embedded) {
-        // Wait for parent to move us into position
-        ShowWindow(hwnd, SW_SHOW);
+        // Parent (ecode) will show and reposition after embedding via WM_EMBED_APP
     } else {
         ShowWindow(hwnd, nCmdShow);
     }

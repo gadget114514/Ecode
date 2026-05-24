@@ -280,6 +280,7 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         imeComposition_.clear();
         imeActive_ = false;
         imeCompAttr_.clear();
+        imeShift_ = 0;
         InvalidateRect(hwnd_, nullptr, FALSE);
         return DefWindowProcW(hwnd, msg, wp, lp);
 
