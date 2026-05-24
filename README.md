@@ -120,6 +120,8 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 - [ ] MCP server
 - [ ] Document/About/Help
 - [ ] Autosave editor
+- [ ] UI/small icons
+- [ ] Language Server or AI assistant
       
 
 ---
