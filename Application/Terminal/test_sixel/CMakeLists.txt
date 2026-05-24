@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.10)
+project(test_sixel LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+add_executable(test_sixel main.cpp)
+set_target_properties(test_sixel PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../bin")

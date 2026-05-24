@@ -1,0 +1,530 @@
+                  ------------------------------
+                   What's new in libsixel-1.8.7
+                  ------------------------------
+
+* Additional fix for #222, packed byte-size validation in
+  sixel_encoder_encode_bytes() and Python bindings.
+  Thanks to @xyzzy42
+
+* tests: add C and Python regression coverage for #222 packed
+  encode_bytes() paths.
+
+* Security fix for GHSA-hx93-w8p2-ffh5, integer overflow in high-color
+  encoder allocation that can lead to out-of-bounds memory access.
+  Based on a patch provided by @curious-rabbit.
+
+* Security fix for GHSA-9jm7-77gr-qghv, integer overflow in SIXEL parser
+  repeat/count handling that can lead to out-of-bounds write.
+  Based on a patch provided by @curious-rabbit.
+
+* Security fix for GHSA-wpx3-h5g8-qr3w, NULL pointer dereference when
+  palette allocation fails during SIXEL decode.
+  Based on a patch provided by @curious-rabbit.
+
+* Security fix for CVE-2026-33023 (GHSA-hr25-g2j6-qjw6),
+  use-after-free in load_with_gdkpixbuf().
+  Thanks to @nicoppida
+
+* Security fix for CVE-2026-33018 (GHSA-w46f-jr9f-rgvp),
+  use-after-free in load_gif().
+  Thanks to @nicoppida
+
+* Security fix for CVE-2026-33019 (GHSA-c854-ffg9-g72c), integer
+  overflow that leads to out-of-bounds read in img2sixel.
+  Thanks to @nicoppida
+
+* Security fix for CVE-2026-33020 (GHSA-2xgm-4x47-2x2p), integer
+  overflow in write_png_to_file() that leads to heap overflow.
+  Thanks to @nicoppida
+
+* Security fix for CVE-2026-33021 (GHSA-j6m5-2cc7-3whc),
+  use-after-free in sixel_encoder_encode_bytes().
+  Thanks to @nicoppida
+
+* Security fix for #222, out-of-bounds memory access in packed pixel
+  format copy path.
+  Thanks to @xyzzy42
+
+* Security fix for #220, GIF transparent index out-of-bounds access and
+  compositing with per-frame palettes.
+  Thanks to @ShangzhiXu
+
+* Security fix for #220, integer overflow in SIXEL DCS parameter
+  handling path.
+  Thanks to @ShangzhiXu
+
+* Security fix for #220, integer overflows in resize target arithmetic,
+  encoder item5 path, and quant complexion path.
+  Thanks to @ShangzhiXu
+
+* Security fix for #220, invalid libpng cleanup path on malformed PNG
+  input.
+  Thanks to @ShangzhiXu
+
+* fix memory leak issue in GIF loader callback path (#207)
+  Thanks to @optionGo
+
+* add regression tests for issue #220
+  Thanks to @ShangzhiXu
+
+* python: fix bugs in sixel_encoder_encode_bytes
+  Thanks to @xyzzy42
+
+* build: make distcheck pass by shipping required fixtures
+
+* build: align maintainer mode default with develop
+
+* fix invalid pointer access in encoder.c (#193, #195)
+  Thanks to @momo-trip, @akinomyoga
+
+* fix wrong HLS to RGB conversion. (#191)
+  Thanks to @gnachman, @j4james
+
+* fix NULL pointer dereference problem in img2sixel.c (#192)
+  Thanks to @momo-trip, @akinomyoga
+
+* fix double free problem in encoder.c (#194)
+  Thanks to @momo-trip
+
+* Serucity fix for #200, heap buffer overflow in debug palette function.
+  Thanks to @err2zero
+
+* add EXTRA_DIST for LICENSE files (#129)
+  Thanks to @ttdoda
+
+* Travis-ci: added support for ppc64le (#140)
+  Thanks to @dthadi3
+
+* export sixel_allocator_new to dll (#151)
+  Thanks to @johnnychen94
+
+* README: Add Idris 2 language bindings (#155)
+  Thanks to @Kaiepi
+
+* performance: If width and height are unchanged, nothing to do. (#170)
+  Thanks to @rokuyama
+
+* README: add MacPorts to install options (#183)
+  Thanks to @barracuda156
+
+* fix for bash completion (#189)
+  Thanks to @rcorre
+
+* Add backport feature (nanosleep) for windows, github actions CI (#202)
+  Thanks to @Kreijstal
+
+* README: update NixOS link (#204)
+  Thanks to @max-amb
+
+* build: Remove override of $LIBJPEG_CFLAGS and $LIBJPEG_LIBS set by PKG_CHECK_MODULES()
+
+* fix Problems with the dithering palette calculation (#188)
+  Thanks to @gnachman, @j4james
+
+* fix SEGV error in sixel_encoder_setopt (#174)
+  Thanks to @shinibufa , @j4james
+
+* curl: send original UserAgent header: "libsixel/${LIBSIXEL_VERSION}"
+
+* fix heap-buffer-overflow in error_diffuse, quant.c:876 #172
+  Thanks to @waugustus
+
+* fix Heap-buffer-overflow in scale.c:214 #179
+  Thanks to @chameleon10712, @j4james
+
+* build: fallback support for environments without pkg-config.
+
+* fix double-free problem in loader.c (#150)
+  Thanks to @duytai, @ctrlcctrlv
+
+* fix an assertion issue in stbi__create_png_image_raw (#163)
+  Thanks to @kdsjZh, @dankamongmen
+
+* Update stb_image.h from upstream to version 2.30
+  THanks to @hzeller
+
+* Update examples/drawing: add SGR-Pixels mode
+
+* fix a problem on monochromatic encoded (-e) output (#112)
+  Thanks to @interkosmos, @j4james
+
+* fix a FPE issue (#166, #167)
+  Thanks to @waugustus, @j4james
+
+* cli: fix a scaling issue introduced in v1.6.1, which is caused
+       when one of -w/-h is a percentage and the other is unset or "auto"
+
+* fix a memory leak ploblem (#164)
+  Thanks to @muetzenmann, @j4james
+
+                  ------------------------------
+                   What's new in libsixel-1.8 (<= 1.8.6) ?
+                  ------------------------------
+
+* python: Fix broken python interface problem(#128), reported by @fd00.
+
+* build: Introduce VPATH build support(#56), suggested by @tkelman.
+
+* Security fix for CVE-2019-20205 (#127), integer overflow problem,
+  reported by @sleicasper.
+
+* Security fix for CVE-2019-20056 (#126), assertion failure problem,
+  reported by @sleicasper.
+
+* Security fix for CVE-2019-20094 (#125), heap overflow problem,
+  reported by @cuanduo.
+
+* Security fix for #124, illegal longjump() call problem,
+  reported by @cuanduo.
+
+* Serucity fix for #74 and #123, access violation problem,
+  reported by @HongxuChen and SuhwanSong.
+
+* Security fix for #122, heap overflow problem,
+  reported by @SuhwanSong.
+
+* Security fix for CVE-2019-20023(#117, #119, #120), memory leaks problem,
+  reported by @SuhwanSong and @gutiniao.
+
+* Strip first flag check in LZW compression function for issue #118,
+  reported by @yoichi
+
+* Security fix for CVE-2019-11024 (#85), recursive loop problem,
+  reported by @Loginsoft-Research.
+
+* Security fix for #73, illegal memory access problem,
+  reported by @HongxuChen.
+
+* Security fix for #89, core dumped issue,
+  reported by @niugx.
+
+* Security fix for #107, large memory allocation problem,
+  reported by @cuanduo.
+
+* Security fix for #114, heap-buffer-overflow problem,
+  reported by @SuhwanSong.
+
+* Security fix for #116, heap-buffer-overflow problem,
+  reported by @SuhwanSong.
+
+* Security fix for #118, heap-buffer-overflow problem,
+  reported by @SuhwanSong.
+
+* Security fix for #121, heap-buffer-overflow problem,
+  reported by @gutiniao
+
+* Security fix for #73, illegal memory access problem,
+  reported by @HongxuChen.
+
+* Security fix for CVE-2018-19757 (#79), NULL pointer dereference problem,
+  reported by @nluedtke and fixed by @knok (#91, #94).
+
+* Security fix for CVE-2018-19762 (#81), heap-based buffer overflow problem,
+  reported by @nluedtke and fixed by @knok (#92).
+
+* Security fix for CVE-2018-19756 (#80), heap-based buffer over-read problem,
+  reported by @nluedtke and fixed by @knok (#93).
+
+* Security fix for CVE-2018-19763 (#82), heap-based buffer over-read problem,
+  reported by @nluedtke and fixed by @knok (#95).
+
+* Security fix for CVE-2018-19761, illegal address access, fixed by @knok (#96).
+
+* Security fix for CVE-2018-19759, heap-based buffer over-read problem, fixed by @knok (#98).
+
+* Security fix for CVE-2018-3753 (#83), infinite loop problem,
+  reported by @cool-tomato and fixed by @knok (#99).
+
+* Security fix for CVE-2018-19759 (#102),
+  heap-based buffer over-read that will cause a denial of service.
+  reported and fixed by @YourButterfly. (#106)
+
+* Security fix for CVE-2019-19635 (#103), heap-based buffer overflow,
+  reported and fixed by @YourButterfly. (#106)
+
+* Security fix for CVE-2019-19636 (#104) and CVE-2019-19637 (#105), integer overflow problem.
+  reported and fixed by @YourButterfly. (#106)
+
+* gif loader: check LZW code size (Issue #75), Thanks to @HongxuChen.
+              https://github.com/saitoha/libsixel/commit/7808a06b88c11dbc502318cdd51fa374f8cd47ee
+
+* core: Fix a global-buffer-overflow problem (Issue #72), Thanks to @fgeek.
+        https://github.com/saitoha/libsixel/commit/c868b59ec89bdb24c42a0de89e5319a989076c66
+
+* core: Fix unexpected hangs/performance issues (Issue #76), Thanks to @HongxuChen.
+        https://github.com/saitoha/libsixel/commit/88561b7a810017b91d26b6273323dde4b6f9b273
+        https://github.com/saitoha/libsixel/commit/2d3d9ffe8ab886b7bc670fd896d63c628436cc66
+        https://github.com/saitoha/libsixel/commit/c9363cd1d5929e1d721af9f09633061dfa8152fe
+
+* core: Upgrade stb_image to 2.19.
+
+* core: Introduce new dithering method, a_dither / x_dither (http://pippin.gimp.org/a_dither/).
+        Thanks to @hodefoting.
+        https://github.com/saitoha/libsixel/pull/53
+
+* core: Fix wrong HLS color handling.
+        https://github.com/saitoha/libsixel/commit/0fb35d22e7ba4ed8bce3be42791e6b39c3187b89
+
+* core: Improve quality of 15bpp(hi-color mode) dither.
+        https://github.com/saitoha/libsixel/commit/42f34283defea67c2d6294af4bd7dcb4fdf9f046
+
+* core: Fix memory leak problems(CVE-2018-14072, CVE-2018-14073), Thanks to @fCorleone.
+        https://github.com/saitoha/libsixel/commit/f94bc6fec696abd77be275226f28409602bd1f27
+        https://github.com/saitoha/libsixel/commit/84ed0bc35e273ebd0a7fbc9d8f8669f7cf5f5612
+
+* core: Fix some heap buffer-overflow problems, Thanks to @fgeek.
+        https://github.com/saitoha/libsixel/commit/6a19d99f95dafbbb50facf9267497afbcfba5731
+        https://github.com/saitoha/libsixel/commit/0d70e046437370c86696f2ed38ac0413855d98ce
+        https://github.com/saitoha/libsixel/commit/438188c1f8b418a38674364cf5c126ef3ed4166a
+        https://github.com/saitoha/libsixel/commit/ba21bb94d68f8bf7dc590400a707753f5d5c4709
+
+* img2sixel: Allow a deferred clear code in a GIF format
+             GIF decoder must do nothing when the table is full.
+             See Section "DEFERRED CLEAR CODE IN LZW COMPRESSION" in
+             https://www.w3.org/Graphics/GIF/spec-gif89a.txt.
+             Thanks to @mame.
+             https://github.com/saitoha/libsixel/pull/63
+
+* img2sixel: Marks -D option (read source images from stdin continuously) as deprecated
+             https://github.com/saitoha/libsixel/commit/9c8ffa62203899d866fc28e3ab7c6dfd9a0019b1
+
+* Some bug fixes and minor improvements.
+  Thanks to @set135, @ttdoda, @tsutsui.
+
+* Announcement for package maintainers:
+  Immutable tarball is provided, because GitHub auto-generated tarball may be not immutable.
+
+    https://github.com/saitoha/libsixel/releases/download/v1.8.0/libsixel-1.8.0.tar.gz
+
+  For details, see https://github.com/saitoha/libsixel/issues/64 .
+
+
+                  ------------------------------
+                   What's new in libsixel-1.7 ?
+                  ------------------------------
+* core: Upgrade stb_image to 2.12.
+
+* core: Upgrade stb_image_write.h to v1.02.
+
+* core: introduce canonical,fast decoder to prevent segmentation faults
+
+* python: add row level API functions to python interface
+
+* img2sixel: fix broken -S option
+
+* img2sixel: fix broken animated GIF resizing feature
+
+* example: add example/drawing
+
+* example: add example/python
+
+* converters: Makefile tweak from yacp(thanks to @fd00)
+  https://github.com/fd00/yacp/blob/896e9bd819b373e8e99fefcec12bd85c73e7f123/libsixel/libsixel-1.6.0-1bl1.src.patch
+
+* packaging: fix for cygport compilation
+
+
+                  ------------------------------
+                   What's new in libsixel-1.6 ?
+                  ------------------------------
+* img2sixel: Add -R(--gri-limit) option.
+
+* configure: Fix check for gdImageCreateFromPngPtr availability(thanks to @hattya).
+
+* core: Upgrade stb_image to 2.10.
+
+* core: Upgrade stb_image_write.h to v1.01.
+
+* libsixel-config: Add --datarootdir option to libsixel-config.
+
+* img2sixel: Solve encoder option confliction between -m/-e/-I/-b.
+
+* core: Introduce new API for output object, sixel_output_set_gri_arg_limit().
+
+* core: Add new API: sixel_encoder_encode_bytes().
+
+
+                  ------------------------------
+                   What's new in libsixel-1.5 ?
+                  ------------------------------
+* img2sixel: Add -k(--insecure) option.
+
+* img2sixel: Add -B(--bgcolor) option.
+
+* core: Introduce new API for dither object, sixel_dither_set_transparent().
+
+* core: Respect transparency of paletted images(GIF/PNG).
+
+* core: Introduce API set for generic image maniplation:
+    sixel_frame_get_pixels()
+    sixel_frame_ref()
+    sixel_frame_unref()
+    sixel_frame_init()
+    sixel_frame_get_pixels()
+    sixel_frame_get_palette()
+    sixel_frame_get_width()
+    sixel_frame_get_height()
+    sixel_frame_get_ncolors()
+    sixel_frame_get_pixelformat()
+    sixel_frame_get_transparent()
+    sixel_frame_get_multiframe()
+    sixel_frame_get_delay()
+    sixel_frame_get_frame_no()
+    sixel_frame_get_loop_no()
+    sixel_frame_strip_alpha()
+    sixel_frame_resize()
+    sixel_frame_clip()
+
+* core: Introduce API set for load/write well-known image formats:
+    sixel_helper_load_image_file()
+    sixel_helper_write_image_file()
+
+* core: Add more high level APIs (File-to-File conversion API):
+    sixel_encoder_create()
+    sixel_encoder_ref()
+    sixel_encoder_unref()
+    sixel_encoder_set_cancel_flag()
+    sixel_encoder_setopt()
+    sixel_encoder_encode()
+    sixel_decoder_create()
+    sixel_decoder_ref()
+    sixel_decoder_unref()
+    sixel_decoder_setopt()
+    sixel_decoder_decode()
+
+* core: Introduce new APIs for semantic error handling:
+    sixel_helper_set_additional_message()
+    sixel_helper_get_additional_message()
+    sixel_helper_format_error()
+
+* core: Introduce custom allocator APIs:
+    sixel_allocator_new()
+    sixel_allocator_ref()
+    sixel_allocator_unref()
+    sixel_allocator_malloc()
+    sixel_allocator_calloc()
+    sixel_allocator_realloc()
+    sixel_allocator_free()
+
+* core: Add new constructor methods that returns SIXELSTATUS for semantic error handling:
+    sixel_output_new()
+    sixel_dither_new()
+    sixel_frame_new()
+    sixel_encoder_new()
+    sixel_decoder_new()
+    sixel_allocator_new()
+    sixel_output_new()
+    sixel_dither_new()
+    sixel_frame_new()
+    sixel_encoder_new()
+    sixel_decoder_new()
+
+* core: Improve processing quality of loading paletted PNG images.
+
+* core: Improve processing quality and performance of loading GIF images.
+
+* core: Update stb_image.h to version 2.06
+
+* core: Update stb_image_write.h to version 0.94
+
+* Add Python interface
+
+* Add Perl interface (alpha)
+
+* Add PHP interface (alpha)
+
+* Add Ruby interface (alpha)
+
+* Add new build helper program: libsixel-config
+
+* A lot of bug fixes and minor improvements.
+  Thanks to @msmhrt, @ttdoda, and @msmhrt.
+
+
+                  ------------------------------
+                   What's new in libsixel-1.4 ?
+                  ------------------------------
+* core: SIXEL encoder supports various pixel formats(thanks to @uobikiemukot).
+
+* core: Supports high-color(15bpp output) mode(thanks to @arakiken).
+
+* core: More high compressed output mode is introduced(thanks to @arakiken).
+
+* core: Fix typoed API(thanks to @waywardmonkeys).
+
+* core: Fix a minor performance bug(thanks to @arakiken).
+
+* img2sixel: New option -D(--pipe-mode) is introduced.
+             With this option, img2sixel continuously read source images from
+             stdin.
+
+* img2sixel: Introduce -I(--high-color) option, high-color(15bpp) output mode
+             is added(thanks to @arakiken).
+
+* img2sixel: New option -E(--encode-policy) is added. high-compressed
+             mode(-E size) is introduced(thanks to @arakiken).
+
+* img2sixel: New option -b(--builtin-palette) is added. built-in support of
+             VT-340 palette is added(thanks to @vrtsds).
+
+* img2sixel: Performance inprovement for loading 8bit indexed PNG.
+
+* tests: 'make test' achieves 90% coverage.
+
+* A lot of bug fixes and minor improvements.
+  Thanks to @obache, @ttdoda, @vrtsds, and @msmhrt.
+
+
+                   ------------------------------
+                   What's new in libsixel-1.3 ?
+                  ------------------------------
+
+* Now libcurl is automatically linked to img2sixel.
+  If you don't want to build with libcurl, you should configure with
+  --without-libcurl option.
+
+* Add libjpeg integration(linked automatically to img2sixel).
+
+* Add libpng integration(linked automatically to img2sixel/sixel2png).
+
+* Introduce -t(--palette-type) option.
+  img2sixel can output HLS paletted sixel with "-t hls".
+  Add new API sixel_output_set_palette_type.
+
+* Introduce -v(--verbose) option.
+
+* Add new API sixel_dither_set_body_only.
+
+* Now img2sixel can load SIXEL as input data.
+
+* Some bug fixes and minor improvements.
+  Thanks to @obache and @arakiken.
+
+
+                  ------------------------------
+                   What's new in libsixel-1.2 ?
+                  ------------------------------
+
+* Introduce GNU Screen penetration (-P) feature written by @arakiken.
+  This works with arakiken's GNU screen sixel branch
+  (screen-sixel, https://bitbucket.org/arakiken/screen/branch/screen).
+
+* Introduce crop operation (-c) feature written by @arakiken.
+  This works with arakiken's w3m remoteimg branch
+  https://bitbucket.org/arakiken/w3m/branch/remoteimg
+  (w3m with "-sixel" option)
+
+* Introduce -C (complexion score) option and implement complexion correction
+  feature. (discussion with @tsutsui)
+
+* Introduce static image extraction from Gif animation (-S).
+  (discussion with @isaki68k)
+
+* Introduce --enable-debug configure option.
+
+* Add APIs for skipping DCS envelope
+  sixel_output_{get,set}_skip_dcs_envelope. (disscussion with @uobikiemukot)
+
+* Some bug fixes and minor improvements.
+  Thanks to @elfring, @isaki68k, @knok, @mattn, @tsutsui, @waywardmonkeys
+  and @ttdoda.
