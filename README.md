@@ -106,13 +106,21 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 ---
 
 ## Project Status
-
 - [x] Terminal + CLI launcher
-
+- [x] Text editor
 - [x] Find in files (grep with regex)
 - [x] Huge file support
 - [x] Multi-language UI
+- [x] CLI
+- [x] Applicatios/Plugins
 - [ ] Theming
+- [ ] Session save/resume
+- [ ] Notepad keybindings
+- [ ] JavaScript macros / bytecode compiler and loader
+- [ ] MCP server
+- [ ] Document/About/Help
+- [ ] Autosave editor
+      
 
 ---
 
