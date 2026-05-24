@@ -296,6 +296,9 @@ void SettingsManager::Load() {
     }
   }
 
+  m_enableSessionManagement =
+      GetPrivateProfileIntW(L"Session", L"EnableSessionManagement", 0, path.c_str()) != 0;
+
   // Load Dired pairs
   m_diredPairs.clear();
   for (int i = 0; i < 50; ++i) {
@@ -395,6 +398,8 @@ void SettingsManager::Save() {
   for (const auto& pair : m_aiApiKeys) {
     WritePrivateProfileStringW(L"AI_API_KEYS", pair.first.c_str(), pair.second.c_str(), path.c_str());
   }
+
+  WriteInt(L"Session", L"EnableSessionManagement", m_enableSessionManagement ? 1 : 0);
 
   SaveCliEntries();
   SaveHiddenPlugins();
@@ -635,5 +640,258 @@ void SettingsManager::SaveThemes() {
     WriteHex(sect.c_str(), L"Number", t.number);
     WriteHex(sect.c_str(), L"Comment", t.comment);
     WriteHex(sect.c_str(), L"Function", t.function);
+  }
+}
+
+// -----------------------------------------------------------------------
+// Session management
+// -----------------------------------------------------------------------
+
+std::wstring SettingsManager::GetSessionsDirectory() const {
+  std::wstring dir = GetAppDataPath() + L"\\sessions";
+  CreateDirectoryW(dir.c_str(), NULL);
+  return dir;
+}
+
+std::wstring SettingsManager::GetSessionIndexPath() const {
+  return GetSessionsDirectory() + L"\\sessions.ini";
+}
+
+std::wstring SettingsManager::GetSessionDir(int index) const {
+  return GetSessionsDirectory() + L"\\session_" + std::to_wstring(index);
+}
+
+int SettingsManager::SaveSession(const std::wstring &name) {
+  std::wstring idxPath = GetSessionIndexPath();
+
+  // Find next free session index
+  int index = 0;
+  wchar_t buf[64];
+  while (GetPrivateProfileStringW(L"Sessions", std::to_wstring(index).c_str(),
+                                  L"", buf, 64, idxPath.c_str()) > 0) {
+    index++;
+  }
+
+  std::wstring sessionDir = GetSessionDir(index);
+  CreateDirectoryW(sessionDir.c_str(), NULL);
+
+  // Write session metadata
+  std::wstring iniPath = sessionDir + L"\\session.ini";
+  WritePrivateProfileStringW(L"Session", L"Name", name.c_str(), iniPath.c_str());
+
+  SYSTEMTIME st;
+  GetLocalTime(&st);
+  wchar_t timeBuf[64];
+  swprintf(timeBuf, 64, L"%04d-%02d-%02d %02d:%02d:%02d",
+           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+  WritePrivateProfileStringW(L"Session", L"Time", timeBuf, iniPath.c_str());
+
+  extern Editor *g_editor;
+  int bufferCount = 0;
+  if (g_editor) {
+    const auto &buffers = g_editor->GetBuffers();
+    for (size_t i = 0; i < buffers.size(); ++i) {
+      auto *buf = buffers[i].get();
+      std::wstring section = L"Buffer_" + std::to_wstring(i);
+      WritePrivateProfileStringW(section.c_str(), L"Path", buf->GetPath().c_str(), iniPath.c_str());
+      WriteInt(section.c_str(), L"CaretPos", (int)buf->GetCaretPos());
+      WriteInt(section.c_str(), L"SelectionAnchor", (int)buf->GetSelectionAnchor());
+      WriteInt(section.c_str(), L"ScrollLine", (int)buf->GetScrollLine());
+      WriteInt(section.c_str(), L"ScrollX", (int)buf->GetScrollX());
+      WriteInt(section.c_str(), L"Encoding", (int)buf->GetEncoding());
+      WriteInt(section.c_str(), L"IsDirty", buf->IsDirty() ? 1 : 0);
+      WriteInt(section.c_str(), L"IsScratch", buf->IsScratch() ? 1 : 0);
+      WriteInt(section.c_str(), L"IsShell", buf->IsShell() ? 1 : 0);
+
+      // Save folded lines
+      std::wstring foldedStr;
+      for (auto line : buf->GetFoldedLines()) {
+        if (!foldedStr.empty()) foldedStr += L",";
+        foldedStr += std::to_wstring((int)line);
+      }
+      WritePrivateProfileStringW(section.c_str(), L"FoldedLines", foldedStr.c_str(), iniPath.c_str());
+
+      // Save content for non-file-backed buffers
+      if (buf->GetPath().empty() || buf->IsScratch() || buf->IsShell()) {
+        std::wstring contentFile = L"buffer_" + std::to_wstring(i) + L".txt";
+        std::wstring contentPath = sessionDir + L"\\" + contentFile;
+        std::string content = buf->GetText(0, buf->GetTotalLength());
+        FILE *f = _wfopen(contentPath.c_str(), L"wb");
+        if (f) {
+          fwrite(content.c_str(), 1, content.size(), f);
+          fclose(f);
+        }
+        WritePrivateProfileStringW(section.c_str(), L"ContentFile", contentFile.c_str(), iniPath.c_str());
+      }
+
+      bufferCount++;
+    }
+  }
+
+  WriteInt(L"Session", L"BufferCount", bufferCount);
+
+  // Update sessions.ini master index
+  WritePrivateProfileStringW(L"Sessions", std::to_wstring(index).c_str(),
+                             name.c_str(), idxPath.c_str());
+
+  return index;
+}
+
+bool SettingsManager::LoadSession(int index) {
+  std::wstring sessionDir = GetSessionDir(index);
+  std::wstring iniPath = sessionDir + L"\\session.ini";
+
+  if (GetFileAttributesW(sessionDir.c_str()) == INVALID_FILE_ATTRIBUTES)
+    return false;
+
+  int bufferCount = GetPrivateProfileIntW(L"Session", L"BufferCount", 0, iniPath.c_str());
+  if (bufferCount == 0) return false;
+
+  extern Editor *g_editor;
+  if (!g_editor) return false;
+
+  // Clear existing buffers (except close them properly)
+  while (g_editor->GetBuffers().size() > 0) {
+    g_editor->CloseBuffer(0);
+  }
+
+  for (int i = 0; i < bufferCount; ++i) {
+    std::wstring section = L"Buffer_" + std::to_wstring(i);
+    wchar_t pathBuf[MAX_PATH];
+    GetPrivateProfileStringW(section.c_str(), L"Path", L"", pathBuf, MAX_PATH, iniPath.c_str());
+    std::wstring path = pathBuf;
+
+    wchar_t contentFileBuf[256];
+    GetPrivateProfileStringW(section.c_str(), L"ContentFile", L"", contentFileBuf, 256, iniPath.c_str());
+    std::wstring contentFile = contentFileBuf;
+
+    size_t bufIdx;
+    if (!path.empty() && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+      bufIdx = g_editor->OpenFile(path);
+    } else if (!contentFile.empty()) {
+      g_editor->NewFile(L"Restored");
+      bufIdx = g_editor->GetBuffers().size() - 1;
+      std::wstring contentPath = sessionDir + L"\\" + contentFile;
+      FILE *f = _wfopen(contentPath.c_str(), L"rb");
+      if (f) {
+        fseek(f, 0, SEEK_END);
+        long len = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (len > 0) {
+          std::string content((size_t)len, '\0');
+          fread(&content[0], 1, len, f);
+          g_editor->GetBuffers()[bufIdx]->Insert(0, content);
+        }
+        fclose(f);
+      }
+    } else {
+      continue;
+    }
+
+    auto *buf = g_editor->GetBuffers()[bufIdx].get();
+    buf->SetCaretPos(GetPrivateProfileIntW(section.c_str(), L"CaretPos", 0, iniPath.c_str()));
+    buf->SetSelectionAnchor(GetPrivateProfileIntW(section.c_str(), L"SelectionAnchor", 0, iniPath.c_str()));
+    buf->SetScrollLine(GetPrivateProfileIntW(section.c_str(), L"ScrollLine", 0, iniPath.c_str()));
+    buf->SetScrollX((float)GetPrivateProfileIntW(section.c_str(), L"ScrollX", 0, iniPath.c_str()));
+    buf->SetEncoding((Encoding)GetPrivateProfileIntW(section.c_str(), L"Encoding", 0, iniPath.c_str()));
+
+    int isScratch = GetPrivateProfileIntW(section.c_str(), L"IsScratch", 0, iniPath.c_str());
+    if (isScratch) buf->SetScratch(true);
+    int isShell = GetPrivateProfileIntW(section.c_str(), L"IsShell", 0, iniPath.c_str());
+    if (isShell) buf->SetShell(true);
+
+    // Restore folded lines
+    wchar_t foldedBuf[4096];
+    if (GetPrivateProfileStringW(section.c_str(), L"FoldedLines", L"", foldedBuf, 4096, iniPath.c_str()) > 0) {
+      std::wstring fStr = foldedBuf;
+      size_t start = 0, end;
+      while ((end = fStr.find(L',', start)) != std::wstring::npos) {
+        int line = std::stoi(fStr.substr(start, end - start));
+        buf->FoldLine((size_t)line);
+        start = end + 1;
+      }
+      if (start < fStr.size()) {
+        int line = std::stoi(fStr.substr(start));
+        buf->FoldLine((size_t)line);
+      }
+    }
+  }
+
+  return true;
+}
+
+bool SettingsManager::DeleteSession(int index) {
+  std::wstring sessionDir = GetSessionDir(index);
+  if (GetFileAttributesW(sessionDir.c_str()) == INVALID_FILE_ATTRIBUTES)
+    return false;
+
+  // Delete all files in session directory
+  std::wstring searchPath = sessionDir + L"\\*";
+  WIN32_FIND_DATAW fd;
+  HANDLE hFind = FindFirstFileW(searchPath.c_str(), &fd);
+  if (hFind != INVALID_HANDLE_VALUE) {
+    do {
+      std::wstring fname = fd.cFileName;
+      if (fname != L"." && fname != L"..") {
+        std::wstring fullPath = sessionDir + L"\\" + fname;
+        DeleteFileW(fullPath.c_str());
+      }
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
+  }
+  RemoveDirectoryW(sessionDir.c_str());
+
+  // Remove from master index
+  std::wstring idxPath = GetSessionIndexPath();
+  WritePrivateProfileStringW(L"Sessions", std::to_wstring(index).c_str(), NULL, idxPath.c_str());
+
+  return true;
+}
+
+std::vector<SessionInfo> SettingsManager::GetSessionList() const {
+  std::vector<SessionInfo> list;
+  std::wstring idxPath = GetSessionIndexPath();
+
+  wchar_t buf[4096];
+  if (GetPrivateProfileSectionW(L"Sessions", buf, 4096, idxPath.c_str()) > 0) {
+    wchar_t *p = buf;
+    while (*p) {
+      std::wstring line(p);
+      size_t eqPos = line.find(L'=');
+      if (eqPos != std::wstring::npos) {
+        SessionInfo info;
+        info.index = std::stoi(line.substr(0, eqPos));
+        info.name = line.substr(eqPos + 1);
+
+        // Read time and buffer count from session ini
+        std::wstring iniPath = GetSessionDir(info.index) + L"\\session.ini";
+        wchar_t timeBuf[64];
+        if (GetPrivateProfileStringW(L"Session", L"Time", L"", timeBuf, 64, iniPath.c_str()) > 0)
+          info.time = timeBuf;
+        info.bufferCount = GetPrivateProfileIntW(L"Session", L"BufferCount", 0, iniPath.c_str());
+
+        list.push_back(info);
+      }
+      p += line.length() + 1;
+    }
+  }
+
+  return list;
+}
+
+int SettingsManager::GetAutoSaveSessionIndex() const {
+  return GetPrivateProfileIntW(L"Session", L"AutoSaveIndex", -1, GetSessionIndexPath().c_str());
+}
+
+void SettingsManager::SetAutoSaveSessionIndex(int index) {
+  WritePrivateProfileStringW(L"Session", L"AutoSaveIndex",
+                             std::to_wstring(index).c_str(), GetSessionIndexPath().c_str());
+}
+
+void SettingsManager::ClearAutoSaveSession() {
+  int idx = GetAutoSaveSessionIndex();
+  if (idx >= 0) {
+    DeleteSession(idx);
+    WritePrivateProfileStringW(L"Session", L"AutoSaveIndex", NULL, GetSessionIndexPath().c_str());
   }
 }

@@ -19,6 +19,28 @@ struct DiredPair {
   std::wstring rightDir;
 };
 
+struct SessionBufferState {
+  std::wstring path;          // file path (empty for scratch/shell)
+  size_t caretPos = 0;
+  size_t selectionAnchor = 0;
+  int scrollLine = 0;
+  int scrollX = 0;
+  int desiredColumn = 0;
+  int encoding = 0;           // 0=UTF8, 1=UTF16LE, 2=UTF16BE, 3=ANSI
+  bool isDirty = false;
+  bool isScratch = false;
+  bool isShell = false;
+  std::vector<int> foldedLines;
+  std::wstring contentFile;   // filename within session dir for non-file-backed content
+};
+
+struct SessionInfo {
+  int index = 0;              // N from session_N
+  std::wstring name;
+  std::wstring time;
+  int bufferCount = 0;
+};
+
 struct ThemeEntry {
   std::wstring name;
   std::wstring background;  // 8-char hex RRGGBBAA
@@ -70,6 +92,9 @@ public:
   bool IsShowAI() const { return m_showAI; }
   void SetShowAI(bool show) { m_showAI = show; }
 
+  bool IsSessionManagementEnabled() const { return m_enableSessionManagement; }
+  void SetSessionManagementEnabled(bool enabled) { m_enableSessionManagement = enabled; }
+
   int GetTabGridCellW() const { return m_tabGridCellW; }
   void SetTabGridCellW(int w) { m_tabGridCellW = w; }
   int GetTabGridCellH() const { return m_tabGridCellH; }
@@ -109,6 +134,18 @@ public:
 
   std::wstring GetPluginsDirectory() const { return m_pluginsDirectory; }
   void SetPluginsDirectory(const std::wstring &dir) { m_pluginsDirectory = dir; }
+
+  // Session management
+  std::wstring GetSessionsDirectory() const;
+  std::wstring GetSessionIndexPath() const;
+  std::wstring GetSessionDir(int index) const;
+  int SaveSession(const std::wstring &name);
+  bool LoadSession(int index);
+  bool DeleteSession(int index);
+  std::vector<SessionInfo> GetSessionList() const;
+  int GetAutoSaveSessionIndex() const;
+  void SetAutoSaveSessionIndex(int index);
+  void ClearAutoSaveSession();
 
   // Returns bash exe path (--cd stripped), sets workingDir to the directory from --cd if present
   std::wstring GetBashCommand(std::wstring *workingDir = nullptr) const;
@@ -174,6 +211,7 @@ private:
   bool m_tabGridRefreshEnabled = false;
   int m_tabGridRefreshIntervalMs = 1000;
   bool m_showAI = false;
+  bool m_enableSessionManagement = false;
   std::vector<CliEntry> m_cliEntries;
   std::vector<DiredPair> m_diredPairs;
 

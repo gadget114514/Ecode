@@ -56,7 +56,6 @@ bool g_bypassCache = false;
 bool g_compileAllScripts = false;
 volatile LONG g_grepCancelFlag = 0;
 bool g_grepSearchActive = false;
-HIMAGELIST g_tabImageList = nullptr;
 std::wstring g_imeComposition;
 std::vector<BYTE> g_imeCompAttr;
 bool g_imeComposing = false;
@@ -64,7 +63,6 @@ std::string g_imeCompUtf8;
 size_t g_imeCompViewOffset = 0;
 size_t g_imeCompViewLen = 0;
 
-#include "TabIconHelper.inl"
 #include "TreeViewHelpers.inl"
 #include "AppMain.inl"
 #include "MinibufferHandler.inl"
