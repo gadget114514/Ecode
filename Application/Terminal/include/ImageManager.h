@@ -11,6 +11,8 @@
 #include <wincodec.h>
 
 #include <cstdint>
+#include <functional>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -32,6 +34,10 @@ public:
                         int requestedHeightPx,
                         bool preserveAspectRatio);
 
+    // Decode sixel data (via libsixel) and store in cache.
+    // Returns a unique imageId, or 0 on failure.
+    uint64_t StoreSixelImage(const std::vector<uint8_t>& sixelData);
+
     // Get (or lazily create) a D2D bitmap for the given imageId.
     // Returns nullptr if imageId is 0 or not found.
     ID2D1Bitmap* GetBitmap(uint64_t imageId, ID2D1RenderTarget* rt);
@@ -48,6 +54,10 @@ public:
     // Re-create all D2D bitmaps (call on D2DERR_RECREATE_TARGET).
     void RecreateAllBitmaps(ID2D1RenderTarget* rt);
 
+    // Optional log callback — receives "[VT]..." strings for ecode Messages buffer.
+    using LogCallback = std::function<void(const std::string&)>;
+    void SetLogCallback(LogCallback cb) { logCallback_ = std::move(cb); }
+
 private:
     struct ImageEntry {
         ID2D1Bitmap* bitmap = nullptr;         // lazily created
@@ -63,6 +73,8 @@ private:
     IWICImagingFactory* wicFactory_ = nullptr;
     std::unordered_map<uint64_t, ImageEntry> cache_;
     uint64_t nextId_ = 1;
+
+    LogCallback logCallback_;
 
     bool EnsureWicFactory();
     ImageEntry* FindEntry(uint64_t imageId);

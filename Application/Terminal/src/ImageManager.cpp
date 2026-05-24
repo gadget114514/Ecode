@@ -1,5 +1,10 @@
 #include "../include/ImageManager.h"
+
+#include "../../libsixel-windows/include/sixel.h"
+
 #include <cassert>
+#include <cstdlib>
+#include <windows.h>
 
 #pragma comment(lib, "windowscodecs.lib")
 
@@ -49,6 +54,18 @@ uint64_t ImageManager::StoreImage(const std::vector<uint8_t>& data,
                                   bool preserveAspectRatio)
 {
     if (data.empty()) return 0;
+
+    // Sixel data starts with ESC P — strip framing and delegate to libsixel decoder
+    // StoreSixelImage expects the DCS body (no ESC P / ESC \ wrapping)
+    if (data.size() >= 2 && data[0] == 0x1b && data[1] == 'P') {
+        size_t start = 2; // skip ESC P
+        size_t end = data.size();
+        // strip trailing ESC \ if present
+        if (end >= 2 && data[end-2] == 0x1b && data[end-1] == '\\')
+            end -= 2;
+        std::vector<uint8_t> body(data.begin() + start, data.begin() + end);
+        return StoreSixelImage(body);
+    }
 
     // Decode to get original dimensions (and validate the image)
     if (!EnsureWicFactory()) return 0;
@@ -150,6 +167,93 @@ uint64_t ImageManager::StoreImage(const std::vector<uint8_t>& data,
     entry.dispWidth   = dispW;
     entry.dispHeight  = dispH;
     entry.rawData     = std::move(pixels);
+    entry.bitmap      = nullptr;
+    cache_[id] = std::move(entry);
+
+    return id;
+}
+
+// ---------------------------------------------------------------------------
+// StoreSixelImage — decode sixel data via libsixel
+// ---------------------------------------------------------------------------
+uint64_t ImageManager::StoreSixelImage(const std::vector<uint8_t>& sixelData) {
+    if (sixelData.empty()) return 0;
+
+    // sixel_decode_raw_impl starts in PS_GROUND and requires ESC P to enter
+    // PS_DCS. The DCS parser strips "ESC P" before handing us the body, so
+    // re-wrap it with the proper DCS introducer and String Terminator.
+    std::vector<uint8_t> wrapped;
+    wrapped.reserve(sixelData.size() + 4);
+    wrapped.push_back(0x1b); // ESC
+    wrapped.push_back('P');  // DCS introducer
+    wrapped.insert(wrapped.end(), sixelData.begin(), sixelData.end());
+    wrapped.push_back(0x1b); // ESC
+    wrapped.push_back('\\'); // ST
+
+    // Decode sixel data to indexed pixels + ARGB palette
+    unsigned char* pixels = nullptr;
+    int width = 0, height = 0;
+    unsigned char* palette = nullptr;
+    int ncolors = 0;
+
+    SIXELSTATUS status = sixel_decode_raw(
+        wrapped.data(),
+        (int)wrapped.size(),
+        &pixels, &width, &height,
+        &palette, &ncolors,
+        nullptr);
+
+    if (logCallback_) {
+        char dbg[128];
+        snprintf(dbg, sizeof(dbg),
+            "[VT][sixel] decode: status=0x%x w=%d h=%d ncolors=%d",
+            status, width, height, ncolors);
+        logCallback_(dbg);
+    }
+
+    if (SIXEL_FAILED(status) || !pixels || width <= 0 || height <= 0 || !palette) {
+        if (pixels)  std::free(pixels);
+        if (palette) std::free(palette);
+        return 0;
+    }
+
+    // Convert indexed + RGB palette → premultiplied BGRA 32bpp
+    // libsixel allocates palette as 3 bytes/color (RGB), despite the "ARGB"
+    // comment in the header. Sixel has no alpha channel; all pixels are opaque.
+    int dispW = width;
+    int dispH = height;
+    UINT stride = ((dispW * 32 + 31) / 32) * 4;
+    UINT bufSize = stride * dispH;
+    std::vector<uint8_t> raw(bufSize);
+
+    for (int y = 0; y < dispH; ++y) {
+        for (int x = 0; x < dispW; ++x) {
+            uint8_t idx = pixels[y * dispW + x];
+            if (idx >= ncolors) idx = 0;
+            uint8_t r = palette[idx * 3 + 0]; // RGB: R
+            uint8_t g = palette[idx * 3 + 1]; // RGB: G
+            uint8_t b = palette[idx * 3 + 2]; // RGB: B
+
+            // Sixel is fully opaque; store as BGRA (premultiplied = same value)
+            size_t off = y * stride + x * 4;
+            raw[off + 0] = b;
+            raw[off + 1] = g;
+            raw[off + 2] = r;
+            raw[off + 3] = 255;
+        }
+    }
+
+    std::free(pixels);
+    std::free(palette);
+
+    // Store in cache
+    uint64_t id = nextId_++;
+    ImageEntry entry;
+    entry.origWidth   = width;
+    entry.origHeight  = height;
+    entry.dispWidth   = dispW;
+    entry.dispHeight  = dispH;
+    entry.rawData     = std::move(raw);
     entry.bitmap      = nullptr;
     cache_[id] = std::move(entry);
 

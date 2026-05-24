@@ -68,6 +68,12 @@ public:
         onFileDownload_ = std::move(cb);
     }
 
+    // --- Sixel DCS callback ---
+    using SixelDataCallback = std::function<void(const std::vector<uint8_t>& data)>;
+    void setSixelDataCallback(SixelDataCallback cb) {
+        onSixelData_ = std::move(cb);
+    }
+
 private:
     // --- parsing state ---
     enum class State {
@@ -76,7 +82,7 @@ private:
         Csi,          // ESC [
         CsiParam,
         Osc,          // ESC ]
-        DcsEntry,     // ESC P  (ignored, consumed)
+        DcsEntry,     // ESC P  (accumulated for sixel)
         CharsetG0,    // ESC (
         CharsetG1,    // ESC )
     };
@@ -110,6 +116,9 @@ private:
 
     void emitResponse(const std::wstring& s) { if (onResponse_) onResponse_(s); }
 
+    // DCS (Sixel) handler
+    void handleDcs(const std::string& data);
+
     // --- state ---
     TerminalBuffer* buffer_ = nullptr;
     State state_            = State::Ground;
@@ -131,6 +140,9 @@ private:
     // active hyperlink URL (OSC 8)
     std::wstring activeHyperlinkUrl_;
 
+    // DCS accumulation buffer
+    std::string dcsBuffer_;
+
     // callbacks
     std::function<void(const std::wstring&)> onResponse_;
     std::function<void(const std::wstring&)> onTitle_;
@@ -138,6 +150,7 @@ private:
     std::function<void(const std::wstring&)> onHyperlinkOpen_;
     ImageDataCallback    onImageData_;
     FileDownloadCallback onFileDownload_;
+    SixelDataCallback    onSixelData_;
 
     // --- OSC 1337 multipart state ---
     bool         multipartActive_ = false;

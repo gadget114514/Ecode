@@ -89,6 +89,11 @@ TerminalView::TerminalView()
                                               const std::wstring& name) {
         OnFileDownload(data, name);
     });
+
+    // Sixel DCS callback
+    emulator_.setSixelDataCallback([this](const std::vector<uint8_t>& data) {
+        OnSixelData(data);
+    });
 }
 
 TerminalView::~TerminalView() {
@@ -377,6 +382,8 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
 
     // Image manager (for OSC 1337)
     imageManager_ = new ImageManager(d2dFactory_);
+    imageManager_->SetLogCallback([this](const std::string& s){ LogMsg(s); });
+    LogMsg("[VT] Terminal OnCreate");
 
     // DWrite factory
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
@@ -481,6 +488,16 @@ void TerminalView::OnSize(int w, int h) {
 // OnTerminalOutput — called on UI thread via PostMessage
 // ---------------------------------------------------------------------------
 void TerminalView::OnTerminalOutput(const char* data, size_t len) {
+    // Log all ESC bytes to trace what sequences arrive
+    for (size_t i = 0; i < len; ++i) {
+        if ((unsigned char)data[i] == 0x1b) {
+            char dbg[80];
+            snprintf(dbg, sizeof(dbg), "[VT] ESC at %zu next=0x%02x (chunk=%zu)",
+                i, i+1 < len ? (unsigned char)data[i+1] : 0, len);
+            LogMsg(dbg);
+        }
+    }
+
     // Decode UTF-8 → UTF-16
     int needed = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, nullptr, 0);
     if (needed <= 0) return;
@@ -593,6 +610,88 @@ void TerminalView::OnImageData(const std::vector<uint8_t>& data,
     widthCells = std::min(widthCells, buffer_.columns());
 
     buffer_.placeImage(imageId, widthCells, heightCells);
+}
+
+// ---------------------------------------------------------------------------
+// LogMsg — send "[VT]..." to ecode's *Messages* buffer via WM_COPYDATA
+// ---------------------------------------------------------------------------
+void TerminalView::LogMsg(const std::string& msg) {
+    // Write to fixed log file for offline debugging
+    {
+        FILE* f = fopen("D:\\ws\\Ecode\\sixel_debug.log", "a");
+        if (f) { fprintf(f, "%s\n", msg.c_str()); fclose(f); }
+    }
+
+    // Also send to ecode's *Messages* buffer via WM_COPYDATA
+    HWND ecodeWnd = FindWindow(L"EcodeWindowClass", nullptr);
+    if (!ecodeWnd) return;
+    COPYDATASTRUCT cds{};
+    cds.dwData = 0x5654;
+    cds.cbData = (DWORD)(msg.size() + 1);
+    cds.lpData = const_cast<char*>(msg.c_str());
+    SendMessage(ecodeWnd, WM_COPYDATA, (WPARAM)hwnd_, (LPARAM)&cds);
+}
+
+// ---------------------------------------------------------------------------
+// Sixel — OnSixelData
+// ---------------------------------------------------------------------------
+void TerminalView::OnSixelData(const std::vector<uint8_t>& data) {
+    {
+        char dbg[128];
+        snprintf(dbg, sizeof(dbg), "[VT][sixel] OnSixelData: %zu bytes", data.size());
+        LogMsg(dbg);
+    }
+    if (data.empty() || !buffer_.rows()) return;
+
+    // Decode sixel data via ImageManager
+    uint64_t imageId = imageManager_
+        ? imageManager_->StoreSixelImage(data)
+        : 0;
+
+    if (imageId == 0) {
+        LogMsg("[VT][sixel] StoreSixelImage failed (imageId=0)");
+        return;
+    }
+
+    // Calculate cell-based display size
+    int cellW = (int)cellWidth_;
+    int cellH = (int)cellHeight_;
+    if (cellW < 1) cellW = 8;
+    if (cellH < 1) cellH = 16;
+
+    int origW = 0, origH = 0;
+    imageManager_->GetDimensions(imageId, origW, origH);
+
+    if (origW <= 0 || origH <= 0) {
+        imageManager_->Remove(imageId);
+        return;
+    }
+
+    // Auto-size: max 80 cells wide, preserve aspect ratio
+    int maxCellsW = std::min(80, buffer_.columns());
+    int autoCellsW = (origW + cellW - 1) / cellW;
+    int autoCellsH = (origH + cellH - 1) / cellH;
+    if (autoCellsW > maxCellsW) {
+        float scale = (float)maxCellsW / autoCellsW;
+        autoCellsW = maxCellsW;
+        autoCellsH = std::max(1, (int)(autoCellsH * scale));
+    }
+
+    int widthCells  = std::max(1, autoCellsW);
+    int heightCells = std::max(1, autoCellsH);
+
+    // Clamp to available columns
+    widthCells = std::min(widthCells, buffer_.columns());
+
+    buffer_.placeImage(imageId, widthCells, heightCells);
+
+    {
+        char dbg[160];
+        snprintf(dbg, sizeof(dbg),
+            "[VT][sixel] placed imageId=%llu orig=%dx%d cells=%dx%d",
+            (unsigned long long)imageId, origW, origH, widthCells, heightCells);
+        LogMsg(dbg);
+    }
 }
 
 // ---------------------------------------------------------------------------
