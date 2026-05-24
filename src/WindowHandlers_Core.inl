@@ -170,11 +170,7 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
     width = rc.right - rc.left;
     height = rc.bottom - rc.top;
   }
-  DebugLog("HandleSize: width=" + std::to_string(width) +
-               " height=" + std::to_string(height) +
-               " g_minibufferVisible=" + std::to_string(g_minibufferVisible),
-           LOG_INFO);
-           
+   
   int treeWidth = g_treeVisible ? 200 : 0;
   if (g_treeVisible) {
       MoveWindow(g_treeHwnd, 0, 0, treeWidth, height, TRUE);
@@ -205,10 +201,6 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
     SetWindowTextW(g_minibufferPromptHwnd, wprompt.c_str());
   }
   int mbTop = height - statusHeight - minibufferHeight;
-  DebugLog("  Minibuffer Layout: mbTop=" + std::to_string(mbTop) +
-               " mbHeight=" + std::to_string(minibufferHeight) +
-               " promptWidth=" + std::to_string(promptWidth),
-           LOG_INFO);
   MoveWindow(g_minibufferPromptHwnd, treeWidth, mbTop, promptWidth, minibufferHeight,
              TRUE);
   ShowWindow(g_minibufferPromptHwnd, g_minibufferVisible ? SW_SHOW : SW_HIDE);

@@ -645,6 +645,99 @@ void TerminalBuffer::eraseCell(int row, int column, const TerminalCell& attrs) {
     line[column] = makeBlank();
 }
 
+// ---------------------------------------------------------------------------
+// OSC 1337 inline image — place at cursor
+// ---------------------------------------------------------------------------
+void TerminalBuffer::placeImage(uint64_t imageId, int widthCells, int heightCells) {
+    if (imageId == 0 || widthCells < 1 || heightCells < 1) return;
+    if (screen_.empty()) return;
+
+    // Handle pending wrap before image
+    if (pendingWrap_) {
+        if (!screen_.empty())
+            screen_[cursorRow_][std::max(0, columns_ - 1)].softWrapped = true;
+        carriageReturn();
+        lineFeed();
+        pendingWrap_ = false;
+    }
+
+    int startCol = cursorColumn_;
+    int startRow = cursorRow_;
+
+    // Clamp to screen
+    widthCells  = std::min(widthCells,  columns_ - startCol);
+    if (widthCells < 1) return;
+
+    // Determine how many rows we need
+    int rowsNeeded = heightCells;
+    int rowsAvail = rows_ - startRow;
+    if (rowsNeeded > rowsAvail) {
+        // Scroll as needed
+        int extra = rowsNeeded - rowsAvail;
+        for (int i = 0; i < extra; ++i) {
+            lineFeed();
+            startRow = cursorRow_; // cursorRow_ may have changed due to scroll
+        }
+    }
+
+    // Adjust height to available screen rows
+    int maxHeight = rows_ - startRow;
+    heightCells = std::min(heightCells, maxHeight);
+    if (heightCells < 1) return;
+
+    uint8_t idx = 0;
+    for (int r = 0; r < heightCells; ++r) {
+        int row = startRow + r;
+        for (int c = 0; c < widthCells; ++c) {
+            int col = startCol + c;
+            TerminalCell cell;
+            if (r == 0 && c == 0) {
+                // Base cell
+                cell.imageId = imageId;
+                cell.imageWidthCells = (int16_t)widthCells;
+                cell.imageHeightCells = (int16_t)heightCells;
+                cell.imagePlaceholderIndex = 0;
+            } else {
+                // Continuation cell
+                cell.imageId = imageId;
+                cell.imagePlaceholderIndex = ++idx;
+            }
+            screen_[row][col] = cell;
+        }
+    }
+
+    // Advance cursor to the row below the image
+    cursorRow_ = startRow + heightCells;
+    cursorColumn_ = 0;
+    if (cursorRow_ >= rows_) {
+        cursorRow_ = rows_ - 1;
+        lineFeed(); // triggers scroll if at bottom
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OSC 1337 inline image — clear from all buffers
+// ---------------------------------------------------------------------------
+void TerminalBuffer::clearImage(uint64_t imageId) {
+    if (imageId == 0) return;
+
+    auto clearImageInLines = [&](std::vector<Line>& lines) {
+        for (auto& line : lines) {
+            for (auto& cell : line) {
+                if (cell.imageId == imageId) {
+                    cell = TerminalCell();
+                }
+            }
+        }
+    };
+
+    clearImageInLines(screen_);
+    clearImageInLines(history_);
+    clearImageInLines(mainScreen_);
+    clearImageInLines(mainHistory_);
+    clearImageInLines(alternateScreen_);
+}
+
 void TerminalBuffer::fillRect(int top, int left, int bottom, int right, wchar_t ch, const TerminalCell& attributes) {
     top    = clamp(top,    0, rows_    - 1);
     left   = clamp(left,   0, columns_ - 1);

@@ -497,6 +497,8 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
 
   std::wstring cmdLine = L"\"" + exePath + L"\" --embedded";
   if (!args.empty()) cmdLine += L" " + args;
+  if (g_editor && exePath.find(L"Terminal.exe") != std::wstring::npos)
+    g_editor->LogMessage("[CreateProcessW] " + WStringToString(cmdLine));
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = {};
   if (!CreateProcessW(nullptr, &cmdLine[0], nullptr, nullptr, FALSE,
@@ -887,14 +889,17 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
       termExe = exeDir + L"\\Terminal.exe";
     if (LOWORD(wParam) == IDM_TOOLS_TERMINAL) {
+      if (g_editor) g_editor->LogMessage("[Launch] Terminal: powershell.exe");
       LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
     } else if (LOWORD(wParam) == IDM_TOOLS_TERMINAL_CMD) {
+      if (g_editor) g_editor->LogMessage("[Launch] Terminal: cmd.exe");
       LaunchApp(hwnd, termExe, L"cmd.exe", L"cmd", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
     } else {
       std::wstring bashDir;
       std::wstring cmd = SettingsManager::Instance().GetBashCommand(&bashDir);
       if (!cmd.empty()) {
         if (!bashDir.empty()) SetCurrentDirectoryW(bashDir.c_str());
+        if (g_editor) g_editor->LogMessage("[Launch] Terminal: " + WStringToString(cmd));
         LaunchApp(hwnd, termExe, cmd, L"bash", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
       }
     }
@@ -1053,7 +1058,7 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           std::wstring bashCmd = SettingsManager::Instance().GetBashCommand(&bashDir);
           if (bashCmd.empty()) break;
           std::wstring localePrefix = (enc == 1) ? L"export LANG=ja_JP.SJIS; " : L"export LANG=en_US.UTF-8; ";
-          shellArgs = bashCmd + L" -c \"" + localePrefix + entries[idx].command + L"; exec bash --login -i\"";
+          shellArgs = bashCmd + L" -c \"" + localePrefix + entries[idx].command + L"\"";
         }
         std::wstring label = entries[idx].label.empty()
           ? cliDir.substr(cliDir.find_last_of(L"\\/") + 1)
@@ -1068,6 +1073,7 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           termExe = exeDir + L"\\Terminal.exe";
         int icn = entries[idx].iconIndex;
         if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
+        if (g_editor) g_editor->LogMessage("[Launch] CLI Terminal: " + WStringToString(shellArgs));
         LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL, icn);
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&

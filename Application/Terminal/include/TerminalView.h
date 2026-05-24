@@ -13,6 +13,7 @@
 #include "TerminalBuffer.h"
 #include "TerminalEmulator.h"
 #include "ConPtySession.h"
+#include "ImageManager.h"
 
 #include <functional>
 #include <memory>
@@ -122,6 +123,14 @@ private:
     void StartCursorTimer();
     void StopCursorTimer();
 
+    // --- OSC 1337 image handlers ---
+    void OnImageData(const std::vector<uint8_t>& data,
+                     int widthPx, int heightPx,
+                     bool preserveAspectRatio,
+                     const std::wstring& name);
+    void OnFileDownload(const std::vector<uint8_t>& data,
+                        const std::wstring& name);
+
     // --- state ---
     HWND hwnd_ = nullptr;
 
@@ -166,4 +175,7 @@ private:
     std::vector<BYTE> imeCompAttr_;     // 各文字の属性（ATTR_INPUT/ATTR_CONVERTED）
     bool             imeActive_ = false;
     int              imeShift_ = 0;     // 編集中の右シフト量（セル単位）
+
+    // OSC 1337 image manager
+    ImageManager* imageManager_ = nullptr;
 };

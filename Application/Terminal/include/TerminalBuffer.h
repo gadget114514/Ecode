@@ -94,6 +94,14 @@ public:
     int  scrollBottom()    const;
     bool hasScrollRegion() const;
 
+    // --- OSC 1337 inline image ---
+    // Place an image at the current cursor position, occupying (widthCells x heightCells).
+    // Cursor advances to the row below the image.
+    void placeImage(uint64_t imageId, int widthCells, int heightCells);
+
+    // Clear all cells belonging to a given imageId from screen and history.
+    void clearImage(uint64_t imageId);
+
     // --- scrollback limit ---
     void setMaxHistoryLines(int n);   // 設定変更（即時トリム）
     int  maxHistoryLines()  const;    // 現在の上限を返す

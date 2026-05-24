@@ -48,6 +48,26 @@ public:
     // Whether bold colours should use the bright palette variants (terminalpp)
     void setBoldIsBright(bool v) { boldIsBright_ = v; }
 
+    // --- OSC 1337 callbacks ---
+
+    // Raw decoded image data for inline display
+    using ImageDataCallback = std::function<void(
+        const std::vector<uint8_t>& data,
+        int width, int height,
+        bool preserveAspectRatio,
+        const std::wstring& name)>;
+    void setImageDataCallback(ImageDataCallback cb) {
+        onImageData_ = std::move(cb);
+    }
+
+    // File download request (inline=0)
+    using FileDownloadCallback = std::function<void(
+        const std::vector<uint8_t>& data,
+        const std::wstring& name)>;
+    void setFileDownloadCallback(FileDownloadCallback cb) {
+        onFileDownload_ = std::move(cb);
+    }
+
 private:
     // --- parsing state ---
     enum class State {
@@ -76,6 +96,13 @@ private:
     void handleKittyKeyboardProtocol(const std::wstring& params);
     void queryKittyKeyboardProtocol();
     wchar_t mapLineDrawingChar(wchar_t ch) const;
+
+    // OSC 1337 handlers
+    void handleOsc1337(const std::wstring& params);
+    void handleOsc1337File(const std::wstring& s);
+    void handleOsc1337MultipartStart(const std::wstring& opts);
+    void handleOsc1337FilePart(const std::wstring& b64chunk);
+    void handleOsc1337FileEnd();
 
     // helper: split wstring by delimiter
     static std::vector<std::wstring> splitParams(const std::wstring& s, wchar_t delim = L';');
@@ -109,4 +136,11 @@ private:
     std::function<void(const std::wstring&)> onTitle_;
     std::function<void(const std::wstring&)> onClipboard_;
     std::function<void(const std::wstring&)> onHyperlinkOpen_;
+    ImageDataCallback    onImageData_;
+    FileDownloadCallback onFileDownload_;
+
+    // --- OSC 1337 multipart state ---
+    bool         multipartActive_ = false;
+    std::wstring multipartOptions_;   // options from MultipartFile=
+    std::string  multipartBuffer_;    // accumulated base64 data
 };
