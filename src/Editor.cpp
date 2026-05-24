@@ -242,7 +242,6 @@ void Editor::FindFile(const std::wstring &pattern, const std::wstring &dir) {
   tab.hwnd = hListView;
   tab.label = L"Files: " + pattern;
   tab.type = 0;
-  tab.iImage = TAB_ICON_GRAY;
   tab.data = nullptr;
   g_appTabs.push_back(std::move(tab));
   int appIdx = static_cast<int>(g_appTabs.size()) - 1;
@@ -527,4 +526,41 @@ Buffer *Editor::GetBufferByName(const std::wstring &name) {
     }
   }
   return nullptr;
+}
+
+SessionBufferState Editor::GetBufferState(size_t index) const {
+  SessionBufferState state;
+  if (index >= m_buffers.size()) return state;
+
+  auto *buf = m_buffers[index].get();
+  state.path = buf->GetPath();
+  state.caretPos = buf->GetCaretPos();
+  state.selectionAnchor = buf->GetSelectionAnchor();
+  state.scrollLine = (int)buf->GetScrollLine();
+  state.scrollX = (int)buf->GetScrollX();
+  state.encoding = (int)buf->GetEncoding();
+  state.isDirty = buf->IsDirty();
+  state.isScratch = buf->IsScratch();
+  state.isShell = buf->IsShell();
+
+  for (auto line : buf->GetFoldedLines())
+    state.foldedLines.push_back((int)line);
+
+  return state;
+}
+
+void Editor::RestoreBufferState(size_t index, const SessionBufferState &state) {
+  if (index >= m_buffers.size()) return;
+
+  auto *buf = m_buffers[index].get();
+  buf->SetCaretPos(state.caretPos);
+  buf->SetSelectionAnchor(state.selectionAnchor);
+  buf->SetScrollLine(state.scrollLine);
+  buf->SetScrollX((float)state.scrollX);
+
+  if (state.isScratch) buf->SetScratch(true);
+  if (state.isShell) buf->SetShell(true);
+
+  for (int line : state.foldedLines)
+    buf->FoldLine((size_t)line);
 }

@@ -219,7 +219,7 @@ struct AppTabInfo {
     HWND hwnd = nullptr;
     std::wstring label;
     int type; // 0 = file search, 1 = grep results, 5 = dired
-    int iImage = -1; // index into g_tabImageList, -1 = none
+
     void *data = nullptr; // type-specific data (e.g. ListView HWND or result list)
     HANDLE hProcess = nullptr; // process handle for killing
 };
@@ -233,24 +233,6 @@ extern int  g_dragTabFrom;
 extern bool g_suppressTabChange;
 extern WNDPROC g_oldTabProc;
 extern UINT g_uFindMsgString;
-
-// Tab icon constants (indices into g_tabImageList)
-constexpr int TAB_ICON_GRAY   = 0;
-constexpr int TAB_ICON_BLUE   = 1;
-constexpr int TAB_ICON_GREEN  = 2;
-constexpr int TAB_ICON_ORANGE = 3;
-constexpr int TAB_ICON_PURPLE = 4;
-constexpr int TAB_ICON_TEAL   = 5;
-constexpr int TAB_ICON_RED    = 6;
-constexpr int TAB_ICON_PINK   = 7;
-constexpr int TAB_ICON_YELLOW = 8;
-constexpr int TAB_ICON_CYAN   = 9;
-constexpr int TAB_ICON_LIME   = 10;
-constexpr int TAB_ICON_BROWN  = 11;
-constexpr int TAB_ICON_COUNT  = 12;
-
-extern HIMAGELIST g_tabImageList;
-extern const wchar_t* g_tabIconNames[TAB_ICON_COUNT];
 
 // IME inline composition state
 extern std::wstring g_imeComposition;   // current composition string (UTF-16)

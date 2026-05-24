@@ -16,6 +16,14 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
+echo Running Session Management Tests...
+..\bin\Debug\test_session_management.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Session Management Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
 echo Running File IO Tests...
 ..\bin\Debug\test_file_io.exe
 if %ERRORLEVEL% NEQ 0 (

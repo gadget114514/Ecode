@@ -276,7 +276,7 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 INT_PTR CALLBACK AiSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                    LPARAM lParam);
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
-               const std::wstring& label, int type, int iImage = -1);
+               const std::wstring& label, int type);
 
 INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                  LPARAM lParam) {
@@ -833,10 +833,6 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hShell, CB_ADDSTRING, 0, (LPARAM)L"powershell");
     SendMessage(hShell, CB_ADDSTRING, 0, (LPARAM)L"bash");
     SendMessage(hShell, CB_SETCURSEL, 2, 0);
-    HWND hIcon = GetDlgItem(hDlg, IDC_CLI_ICON);
-    for (int i = 0; i < TAB_ICON_COUNT; ++i)
-      SendMessage(hIcon, CB_ADDSTRING, 0, (LPARAM)g_tabIconNames[i]);
-    SendMessage(hIcon, CB_SETCURSEL, 0, 0);
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
@@ -852,9 +848,6 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           int st = entries[sel].shellType;
           if (st < 0 || st > 2) st = 2;
           SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_SETCURSEL, st, 0);
-          int icn = entries[sel].iconIndex;
-          if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
-          SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_SETCURSEL, icn, 0);
           SetDlgItemTextW(hDlg, IDC_CLI_LABEL, entries[sel].label.c_str());
         }
       }
@@ -873,10 +866,8 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
       int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
       if (st < 0 || st > 2) st = 2;
-      int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0);
-      if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
       if (wcslen(cmd) > 0 && wcslen(folder) > 0) {
-        SettingsManager::Instance().AddCliEntry(cmd, folder, enc, st, icn, lbl);
+        SettingsManager::Instance().AddCliEntry(cmd, folder, enc, st, 0, lbl);
         SettingsManager::Instance().Save();
         RefreshCliList(hDlg);
       }
@@ -918,15 +909,13 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           if (enc < 0) enc = 0;
           int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
           if (st < 0 || st > 2) st = 2;
-          int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0);
-          if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
-          wchar_t lbl[256];
-          GetDlgItemTextW(hDlg, IDC_CLI_LABEL, lbl, 256);
-          entries[sel].command   = cmd;
-          entries[sel].folder    = folder;
-          entries[sel].encoding  = enc;
-          entries[sel].shellType = st;
-          entries[sel].iconIndex = icn;
+      wchar_t lbl[256];
+      GetDlgItemTextW(hDlg, IDC_CLI_LABEL, lbl, 256);
+      entries[sel].command   = cmd;
+      entries[sel].folder    = folder;
+      entries[sel].encoding  = enc;
+      entries[sel].shellType = st;
+      entries[sel].iconIndex = 0;
           entries[sel].label     = lbl;
           SettingsManager::Instance().SetCliEntries(entries);
           SettingsManager::Instance().Save();
@@ -943,8 +932,6 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
       int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
       if (st < 0 || st > 2) st = 2;
-      int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0);
-      if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
       if (wcslen(cmd) == 0 || wcslen(folder) == 0) {
         HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
         int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
@@ -957,8 +944,8 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
             enc = entries[sel].encoding;
             st = entries[sel].shellType;
             if (st < 0 || st > 2) st = 2;
-            icn = entries[sel].iconIndex;
-            if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
+
+
           }
         }
       }

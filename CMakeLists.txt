@@ -71,6 +71,28 @@ target_link_libraries(test_editor_core
     dwrite
 )
 
+add_executable(test_session_management EXCLUDE_FROM_ALL
+    tests/test_session_management.cpp
+    ${TEST_BASE_SOURCES}
+    src/Editor.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src/FileUtils.cpp
+)
+target_link_libraries(test_session_management 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
 add_executable(test_undoredo_stress EXCLUDE_FROM_ALL
     tests/test_undoredo_stress.cpp
     src/PieceTable.cpp
@@ -306,6 +328,7 @@ set(TEST_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin/tests")
 set_target_properties(test_piecetable PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_piecetable_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_editor_core PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_session_management PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_undoredo_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_search_replace PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_file_io PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
@@ -396,6 +419,13 @@ endforeach()
 find_package(nlohmann_json QUIET)
 if(nlohmann_json_FOUND)
     add_plugin(JYEditor Application/JYEditor)
+    # Copy yaml-cpp.dll alongside JYEditor.exe
+    add_custom_command(TARGET ecode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/Application/JYEditor/vcpkg_installed/vcpkg/blds/yaml-cpp/x64-windows-rel/yaml-cpp.dll"
+        "$<TARGET_FILE_DIR:ecode>/yaml-cpp.dll"
+        COMMENT "Copying yaml-cpp.dll..."
+    )
 else()
     message(STATUS "JYEditor skipped (nlohmann_json not found)")
 endif()

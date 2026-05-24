@@ -65,7 +65,6 @@ void OpenFastFileSearch(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"File Search";
   tab.type = 2;
-  tab.iImage = TAB_ICON_ORANGE;
   if (!IsUserAnAdmin()) {
     tab.hwnd = CreateWindowExW(0, L"STATIC",
                                L"\n\n\n\n\n\n\n\n\n⚠️ Fast File Search requires Administrator privileges.\n\nPlease relaunch Ecode as Administrator (Right-click -> Run as Administrator) to use this tool.",
@@ -158,7 +157,6 @@ void OpenCSVEditor(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"CSV Editor";
   tab.type = 3;
-  tab.iImage = TAB_ICON_RED;
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting CSV Editor...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -242,7 +240,6 @@ void OpenJYEditor(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"JY Editor";
   tab.type = 4;
-  tab.iImage = TAB_ICON_PINK;
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting JY Editor...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -337,7 +334,6 @@ void OpenDired(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"Dired";
   tab.type = 5;
-  tab.iImage = TAB_ICON_TEAL;
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting Dired...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -460,7 +456,7 @@ void ScanPlugins() {
 }
 
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
-                      const std::wstring& label, int type, int iImage = -1) {
+                      const std::wstring& label, int type) {
   if (GetFileAttributesW(exePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
     std::wstring msg = L"Plugin not found:\n" + exePath;
     MessageBoxW(hwnd, msg.c_str(), L"Plugin Not Found", MB_OK | MB_ICONWARNING);
@@ -470,7 +466,6 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   AppTabInfo tab;
   tab.label = label;
   tab.type  = type;
-  tab.iImage = iImage;
   tab.hwnd  = CreateWindowExW(0, L"STATIC", L"Starting...",
                                WS_CHILD | WS_VISIBLE | SS_CENTER,
                                0, 0, 100, 100, hwnd, nullptr,
