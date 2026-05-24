@@ -1011,8 +1011,11 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       GetModuleFileNameW(nullptr, modPath, MAX_PATH);
       std::wstring exeDir = modPath;
       exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
+      std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
+      if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
+        termExe = exeDir + L"\\Terminal.exe";
       if (g_editor) g_editor->LogMessage("[Launch] CLI Dialog: " + WStringToString(shellArgs));
-      LaunchApp(parent, exeDir + L"\\Terminal.exe", shellArgs, label, 10, icn);
+      LaunchApp(parent, termExe, shellArgs, label, 10, icn);
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDCANCEL) {
