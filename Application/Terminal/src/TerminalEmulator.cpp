@@ -12,11 +12,7 @@
 #include <cstdio>
 #include <unordered_map>
 
-static void DbgLog(const char* msg) {
-    if (FILE* f = fopen("D:\\ws\\Ecode\\sixel_debug.log", "a")) {
-        fputs(msg, f); fputc('\n', f); fclose(f);
-    }
-}
+
 
 // ---------------------------------------------------------------------------
 // 16-colour ANSI palette  (Windows Terminal / xterm standard)
@@ -273,7 +269,6 @@ void TerminalEmulator::handleEscape(wchar_t ch) {
         state_ = State::Osc; oscText_.clear();   break;
     case L'P':
         state_ = State::DcsEntry; dcsBuffer_.clear();
-        DbgLog("[emu] ESC P -> DcsEntry");
         break;
     case L'(':
         state_ = State::CharsetG0;               break;
@@ -1096,16 +1091,11 @@ wchar_t TerminalEmulator::mapLineDrawingChar(wchar_t ch) const {
 // DCS — Sixel data handler
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handleDcs(const std::string& data) {
-    char dbg[64];
-    snprintf(dbg, sizeof(dbg), "[emu] handleDcs: %zu bytes", data.size());
-    DbgLog(dbg);
     if (data.empty()) return;
 
     // Pass all accumulated data (including 'q' introducer) to the decoder.
     std::vector<uint8_t> sixelData(data.begin(), data.end());
     if (onSixelData_) {
         onSixelData_(sixelData);
-    } else {
-        DbgLog("[emu] handleDcs: onSixelData_ not set!");
     }
 }
