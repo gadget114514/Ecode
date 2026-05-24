@@ -129,3 +129,7 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 ## License
 
 MIT
+
+## Thirdparty
+
+Microsoft MIT license

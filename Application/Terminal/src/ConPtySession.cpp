@@ -136,25 +136,32 @@ void ConPtySession::Close() {
     CloseHandle_(hThread_);
     CloseHandle_(hProcess_);
     processId_ = 0;
-    closing_   = false;
+
+    if (hConptyDll_) { FreeLibrary(hConptyDll_); hConptyDll_ = nullptr; }
+    fnCreate_ = nullptr; fnResize_ = nullptr; fnClose_ = nullptr;
+
+    closing_ = false;
 }
 
 // ---------------------------------------------------------------------------
-// LoadApi — dynamically resolve ConPTY entry points from kernel32.dll
+// LoadApi — load ConPTY entry points from conpty.dll (Windows Terminal package)
 // ---------------------------------------------------------------------------
 HRESULT ConPtySession::LoadApi() {
-    HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
-    if (!k32) {
-        lastError_ = L"GetModuleHandle(kernel32.dll) failed";
+    // conpty.dll sits in the same directory as Terminal.exe (plugins/)
+    hConptyDll_ = LoadLibraryExW(L"conpty.dll", nullptr, LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
+    if (!hConptyDll_) {
+        lastError_ = L"Failed to load conpty.dll from application directory";
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    fnCreate_ = (FnCreate)GetProcAddress(k32, "CreatePseudoConsole");
-    fnResize_ = (FnResize)GetProcAddress(k32, "ResizePseudoConsole");
-    fnClose_  = (FnClose) GetProcAddress(k32, "ClosePseudoConsole");
+    fnCreate_ = (FnCreate)GetProcAddress(hConptyDll_, "ConptyCreatePseudoConsole");
+    fnResize_ = (FnResize)GetProcAddress(hConptyDll_, "ConptyResizePseudoConsole");
+    fnClose_  = (FnClose) GetProcAddress(hConptyDll_, "ConptyClosePseudoConsole");
 
     if (!fnCreate_ || !fnResize_ || !fnClose_) {
-        lastError_ = L"ConPTY not available — Windows 10 1809 or newer required.";
+        lastError_ = L"ConptyCreatePseudoConsole not found in conpty.dll";
+        FreeLibrary(hConptyDll_);
+        hConptyDll_ = nullptr;
         return E_NOTIMPL;
     }
     return S_OK;
@@ -190,7 +197,7 @@ HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
     };
 
     HRESULT hr = fnCreate_(consoleSize, inputReadSide_, outputWriteSide_,
-                           0 /* no PSEUDOCONSOLE_INHERIT_CURSOR to avoid deadlock */,
+                           0,
                            &hPC_);
     if (FAILED(hr)) {
         wchar_t buf[80];

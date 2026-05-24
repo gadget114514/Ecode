@@ -9,7 +9,14 @@
 #include <algorithm>
 #include <cassert>
 #include <cwchar>
+#include <cstdio>
 #include <unordered_map>
+
+static void DbgLog(const char* msg) {
+    if (FILE* f = fopen("D:\\ws\\Ecode\\sixel_debug.log", "a")) {
+        fputs(msg, f); fputc('\n', f); fclose(f);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // 16-colour ANSI palette  (Windows Terminal / xterm standard)
@@ -115,6 +122,9 @@ void TerminalEmulator::reset(TerminalBuffer* buffer) {
     multipartActive_  = false;
     multipartOptions_.clear();
     multipartBuffer_.clear();
+
+    // Reset DCS buffer
+    dcsBuffer_.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -146,13 +156,25 @@ void TerminalEmulator::process(const std::wstring& text) {
         }
 
         // ----------------------------------------------------------------
-        // DCS accumulation (ignored, consumed until ST)
+        // DCS accumulation (Sixel data)
         // ----------------------------------------------------------------
         if (state_ == State::DcsEntry) {
-            if (ch == L'\x1b' && i + 1 < text.size() && text[i+1] == L'\\') {
-                state_ = State::Ground; ++i;
+            if (ch == L'\x1b') {
+                // ESC always terminates DCS (handles cross-chunk ESC\ splits too)
+                handleDcs(dcsBuffer_);
+                dcsBuffer_.clear();
+                if (i + 1 < text.size() && text[i+1] == L'\\') {
+                    ++i; // consume the ST backslash
+                    state_ = State::Ground;
+                } else {
+                    state_ = State::Escape; // let next char be processed as ESC sequence
+                }
             } else if (ch == L'\a') {
+                handleDcs(dcsBuffer_);
+                dcsBuffer_.clear();
                 state_ = State::Ground;
+            } else if (ch >= 0x20 && ch <= 0x7e) {
+                dcsBuffer_.push_back((char)ch);
             }
             continue;
         }
@@ -250,7 +272,9 @@ void TerminalEmulator::handleEscape(wchar_t ch) {
     case L']':
         state_ = State::Osc; oscText_.clear();   break;
     case L'P':
-        state_ = State::DcsEntry;                break;
+        state_ = State::DcsEntry; dcsBuffer_.clear();
+        DbgLog("[emu] ESC P -> DcsEntry");
+        break;
     case L'(':
         state_ = State::CharsetG0;               break;
     case L')':
@@ -1065,5 +1089,23 @@ wchar_t TerminalEmulator::mapLineDrawingChar(wchar_t ch) const {
     case L'g': return L'±'; // PLUS-MINUS SIGN
     case L'~': return L'·'; // MIDDLE DOT
     default:   return ch;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DCS — Sixel data handler
+// ---------------------------------------------------------------------------
+void TerminalEmulator::handleDcs(const std::string& data) {
+    char dbg[64];
+    snprintf(dbg, sizeof(dbg), "[emu] handleDcs: %zu bytes", data.size());
+    DbgLog(dbg);
+    if (data.empty()) return;
+
+    // Pass all accumulated data (including 'q' introducer) to the decoder.
+    std::vector<uint8_t> sixelData(data.begin(), data.end());
+    if (onSixelData_) {
+        onSixelData_(sixelData);
+    } else {
+        DbgLog("[emu] handleDcs: onSixelData_ not set!");
     }
 }

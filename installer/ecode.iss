@@ -56,6 +56,8 @@ Source: "..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesu
 
 ; Plugins (plugins subdirectory)
 Source: "..\bin\Release\plugins\*.exe"; DestDir: "{app}\plugins"; Flags: ignoreversion recursesubdirs
+Source: "..\Application\Terminal\bin\Release\plugins\*.exe"; DestDir: "{app}\plugins"; Flags: ignoreversion
+Source: "..\Application\Terminal\bin\Release\plugins\*.dll"; DestDir: "{app}\plugins"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
