@@ -54,10 +54,6 @@ public:
     // Re-create all D2D bitmaps (call on D2DERR_RECREATE_TARGET).
     void RecreateAllBitmaps(ID2D1RenderTarget* rt);
 
-    // Optional log callback — receives "[VT]..." strings for ecode Messages buffer.
-    using LogCallback = std::function<void(const std::string&)>;
-    void SetLogCallback(LogCallback cb) { logCallback_ = std::move(cb); }
-
 private:
     struct ImageEntry {
         ID2D1Bitmap* bitmap = nullptr;         // lazily created
@@ -73,8 +69,6 @@ private:
     IWICImagingFactory* wicFactory_ = nullptr;
     std::unordered_map<uint64_t, ImageEntry> cache_;
     uint64_t nextId_ = 1;
-
-    LogCallback logCallback_;
 
     bool EnsureWicFactory();
     ImageEntry* FindEntry(uint64_t imageId);

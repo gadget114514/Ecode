@@ -382,8 +382,6 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
 
     // Image manager (for OSC 1337)
     imageManager_ = new ImageManager(d2dFactory_);
-    imageManager_->SetLogCallback([this](const std::string& s){ LogMsg(s); });
-    LogMsg("[VT] Terminal OnCreate");
 
     // DWrite factory
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
@@ -488,16 +486,6 @@ void TerminalView::OnSize(int w, int h) {
 // OnTerminalOutput — called on UI thread via PostMessage
 // ---------------------------------------------------------------------------
 void TerminalView::OnTerminalOutput(const char* data, size_t len) {
-    // Log all ESC bytes to trace what sequences arrive
-    for (size_t i = 0; i < len; ++i) {
-        if ((unsigned char)data[i] == 0x1b) {
-            char dbg[80];
-            snprintf(dbg, sizeof(dbg), "[VT] ESC at %zu next=0x%02x (chunk=%zu)",
-                i, i+1 < len ? (unsigned char)data[i+1] : 0, len);
-            LogMsg(dbg);
-        }
-    }
-
     // Decode UTF-8 → UTF-16
     int needed = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, nullptr, 0);
     if (needed <= 0) return;
@@ -613,34 +601,9 @@ void TerminalView::OnImageData(const std::vector<uint8_t>& data,
 }
 
 // ---------------------------------------------------------------------------
-// LogMsg — send "[VT]..." to ecode's *Messages* buffer via WM_COPYDATA
-// ---------------------------------------------------------------------------
-void TerminalView::LogMsg(const std::string& msg) {
-    // Write to fixed log file for offline debugging
-    {
-        FILE* f = fopen("D:\\ws\\Ecode\\sixel_debug.log", "a");
-        if (f) { fprintf(f, "%s\n", msg.c_str()); fclose(f); }
-    }
-
-    // Also send to ecode's *Messages* buffer via WM_COPYDATA
-    HWND ecodeWnd = FindWindow(L"EcodeWindowClass", nullptr);
-    if (!ecodeWnd) return;
-    COPYDATASTRUCT cds{};
-    cds.dwData = 0x5654;
-    cds.cbData = (DWORD)(msg.size() + 1);
-    cds.lpData = const_cast<char*>(msg.c_str());
-    SendMessage(ecodeWnd, WM_COPYDATA, (WPARAM)hwnd_, (LPARAM)&cds);
-}
-
-// ---------------------------------------------------------------------------
 // Sixel — OnSixelData
 // ---------------------------------------------------------------------------
 void TerminalView::OnSixelData(const std::vector<uint8_t>& data) {
-    {
-        char dbg[128];
-        snprintf(dbg, sizeof(dbg), "[VT][sixel] OnSixelData: %zu bytes", data.size());
-        LogMsg(dbg);
-    }
     if (data.empty() || !buffer_.rows()) return;
 
     // Decode sixel data via ImageManager
@@ -648,10 +611,7 @@ void TerminalView::OnSixelData(const std::vector<uint8_t>& data) {
         ? imageManager_->StoreSixelImage(data)
         : 0;
 
-    if (imageId == 0) {
-        LogMsg("[VT][sixel] StoreSixelImage failed (imageId=0)");
-        return;
-    }
+    if (imageId == 0) return;
 
     // Calculate cell-based display size
     int cellW = (int)cellWidth_;
@@ -684,14 +644,6 @@ void TerminalView::OnSixelData(const std::vector<uint8_t>& data) {
     widthCells = std::min(widthCells, buffer_.columns());
 
     buffer_.placeImage(imageId, widthCells, heightCells);
-
-    {
-        char dbg[160];
-        snprintf(dbg, sizeof(dbg),
-            "[VT][sixel] placed imageId=%llu orig=%dx%d cells=%dx%d",
-            (unsigned long long)imageId, origW, origH, widthCells, heightCells);
-        LogMsg(dbg);
-    }
 }
 
 // ---------------------------------------------------------------------------

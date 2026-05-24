@@ -134,9 +134,6 @@ private:
     // --- Sixel handler ---
     void OnSixelData(const std::vector<uint8_t>& data);
 
-    // Send "[VT]..." log message to ecode's *Messages* buffer via WM_COPYDATA.
-    void LogMsg(const std::string& msg);
-
     // --- state ---
     HWND hwnd_ = nullptr;
 

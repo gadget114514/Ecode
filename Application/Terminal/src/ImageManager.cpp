@@ -203,14 +203,6 @@ uint64_t ImageManager::StoreSixelImage(const std::vector<uint8_t>& sixelData) {
         &palette, &ncolors,
         nullptr);
 
-    if (logCallback_) {
-        char dbg[128];
-        snprintf(dbg, sizeof(dbg),
-            "[VT][sixel] decode: status=0x%x w=%d h=%d ncolors=%d",
-            status, width, height, ncolors);
-        logCallback_(dbg);
-    }
-
     if (SIXEL_FAILED(status) || !pixels || width <= 0 || height <= 0 || !palette) {
         if (pixels)  std::free(pixels);
         if (palette) std::free(palette);
