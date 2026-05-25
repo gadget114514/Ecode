@@ -129,6 +129,8 @@ static LRESULT HandleCreate(HWND hwnd) {
   if (g_noTitleBar) {
     MARGINS margins = { 1, 1, 1, 1 };
     DwmExtendFrameIntoClientArea(hwnd, &margins);
+    SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
   }
   g_renderer->SetFont(settings.GetFontFamily(), settings.GetFontSize());
   g_renderer->SetWordWrap(settings.IsWordWrap());

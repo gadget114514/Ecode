@@ -57,13 +57,6 @@ bool g_compileAllScripts = false;
 volatile LONG g_grepCancelFlag = 0;
 bool g_grepSearchActive = false;
 HIMAGELIST g_tabImageList = nullptr;
-std::wstring g_imeComposition;
-std::vector<BYTE> g_imeCompAttr;
-bool g_imeComposing = false;
-std::string g_imeCompUtf8;
-size_t g_imeCompViewOffset = 0;
-size_t g_imeCompViewLen = 0;
-
 // Top bar / no-title-bar mode
 bool g_noTitleBar = false;
 int g_topBarHeight = 32;
@@ -72,6 +65,7 @@ RECT g_minButtonRect  = {0};
 RECT g_maxButtonRect  = {0};
 RECT g_closeButtonRect = {0};
 bool g_isActive = true;
+bool g_menuTracking = false;
 std::wstring g_windowTitle;
 HMENU g_hSysMenu = nullptr;
 int g_topBarButtonPushed = 0;

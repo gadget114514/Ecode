@@ -12,6 +12,11 @@ extern bool g_imeComposing;
 extern size_t g_imeCompViewOffset;
 extern size_t g_imeCompViewLen;
 
+extern bool g_noTitleBar;
+extern bool g_isActive;
+extern int g_topBarHeight;
+extern void DrawTopBar(HDC hdc, HWND hwnd);
+
 void EditorBufferRenderer::DrawEditorLines(
     const std::string &text, size_t caretPos,
     const std::vector<Buffer::SelectionRange> *selectionRanges,
@@ -22,6 +27,15 @@ void EditorBufferRenderer::DrawEditorLines(
     return;
 
   this->m_renderTarget->BeginDraw();
+  D2D1_SIZE_F sz = this->m_renderTarget->GetSize();
+
+  bool clipped = false;
+  if (this->val_TopPadding > 0) {
+    D2D1_RECT_F clipRect = {0, this->val_TopPadding, sz.width, sz.height};
+    this->m_renderTarget->PushAxisAlignedClip(&clipRect, D2D1_ANTIALIAS_MODE_ALIASED);
+    clipped = true;
+  }
+
   this->m_renderTarget->Clear(this->m_theme.background);
 
   // OPTIMIZATION #6: Cache UTF-8 to UTF-16 conversion
@@ -349,6 +363,23 @@ void EditorBufferRenderer::DrawEditorLines(
                 m_caretBrush.Get(), 1.0f);
           }
         }
+      }
+    }
+  }
+
+  if (clipped)
+    this->m_renderTarget->PopAxisAlignedClip();
+
+  // Draw topbar via GDI interop so it lands in the same D2D frame (no flicker).
+  if (g_noTitleBar) {
+    ComPtr<ID2D1GdiInteropRenderTarget> gdiInterop;
+    if (SUCCEEDED(m_renderTarget->QueryInterface(
+            __uuidof(ID2D1GdiInteropRenderTarget),
+            reinterpret_cast<void **>(gdiInterop.GetAddressOf())))) {
+      HDC dc = NULL;
+      if (SUCCEEDED(gdiInterop->GetDC(D2D1_DC_INITIALIZE_MODE_COPY, &dc))) {
+        DrawTopBar(dc, m_hwnd);
+        gdiInterop->ReleaseDC(NULL);
       }
     }
   }

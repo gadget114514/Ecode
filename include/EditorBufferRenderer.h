@@ -85,6 +85,7 @@ public:
     return true;
   }
   void SetTheme(const Theme &theme);
+  const Theme &GetTheme() const { return m_theme; }
 
   // Viewport rendering support for large files
   size_t CalculateVisibleLineCount() const;

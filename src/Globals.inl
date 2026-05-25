@@ -245,6 +245,7 @@ extern RECT g_minButtonRect;
 extern RECT g_maxButtonRect;
 extern RECT g_closeButtonRect;
 extern bool g_isActive;
+extern bool g_menuTracking; // true while TrackPopupMenu is running (suppresses WM_NCACTIVATE flicker)
 extern std::wstring g_windowTitle;
 extern HMENU g_hSysMenu;
 extern int g_topBarButtonPushed; // 0=none, 1=min, 2=max, 3=close
