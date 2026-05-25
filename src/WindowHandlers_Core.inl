@@ -92,8 +92,10 @@ static LRESULT HandleCreate(HWND hwnd) {
 
   // Create tab icon image list
   g_tabImageList = ImageList_Create(16, 16, ILC_COLOR32, 16, 16);
-  if (g_tabImageList)
+  if (g_tabImageList) {
     TabCtrl_SetImageList(g_tabHwnd, g_tabImageList);
+    InitTabIcons(g_tabImageList);
+  }
 
   // Subclass tab control for drag-reorder support
   g_oldTabProc = (WNDPROC)SetWindowLongPtr(
