@@ -350,6 +350,52 @@ target_link_libraries(test_cursor_move
     dwrite
 )
 
+add_executable(test_memorymappedfile EXCLUDE_FROM_ALL
+    tests/test_memorymappedfile.cpp
+    src/MemoryMappedFile.cpp
+)
+
+add_executable(test_fileutils EXCLUDE_FROM_ALL
+    tests/test_fileutils.cpp
+    tests/FileUtilsTestGlobals.cpp
+    src/FileUtils.cpp
+)
+target_link_libraries(test_fileutils
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+)
+
+add_executable(test_editor_buffer_ops EXCLUDE_FROM_ALL
+    tests/test_editor_buffer_ops.cpp
+    ${TEST_BASE_SOURCES}
+    src/Editor.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src/FileUtils.cpp
+)
+target_link_libraries(test_editor_buffer_ops
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+    d2d1
+    dwrite
+)
+
+add_executable(test_piecetable_advanced EXCLUDE_FROM_ALL
+    tests/test_piecetable_advanced.cpp
+    src/PieceTable.cpp
+)
+
 # Libraries to link
 target_link_libraries(ecode
     user32
@@ -396,6 +442,11 @@ set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY 
 set_target_properties(test_string_helpers PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_localization PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_buffer_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_cursor_move PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_memorymappedfile PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_fileutils PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_editor_buffer_ops PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_piecetable_advanced PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 
 # Copy scripts directory to output
 add_custom_command(TARGET ecode POST_BUILD
