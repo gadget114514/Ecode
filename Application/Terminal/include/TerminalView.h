@@ -193,4 +193,5 @@ private:
 
     // Progress callback (OSC 9;4)
     std::function<void(float)> onProgress_;
+
 };
