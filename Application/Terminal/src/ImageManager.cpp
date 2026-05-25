@@ -1,6 +1,8 @@
 #include "../include/ImageManager.h"
 
+#ifdef ECODE_ENABLE_SIXEL
 #include "../../libsixel-windows/include/sixel.h"
+#endif
 
 #include <cassert>
 #include <cstdlib>
@@ -57,6 +59,7 @@ uint64_t ImageManager::StoreImage(const std::vector<uint8_t>& data,
 
     // Sixel data starts with ESC P — strip framing and delegate to libsixel decoder
     // StoreSixelImage expects the DCS body (no ESC P / ESC \ wrapping)
+#ifdef ECODE_ENABLE_SIXEL
     if (data.size() >= 2 && data[0] == 0x1b && data[1] == 'P') {
         size_t start = 2; // skip ESC P
         size_t end = data.size();
@@ -66,6 +69,7 @@ uint64_t ImageManager::StoreImage(const std::vector<uint8_t>& data,
         std::vector<uint8_t> body(data.begin() + start, data.begin() + end);
         return StoreSixelImage(body);
     }
+#endif
 
     // Decode to get original dimensions (and validate the image)
     if (!EnsureWicFactory()) return 0;
