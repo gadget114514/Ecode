@@ -15,6 +15,7 @@ SettingsManager::SettingsManager()
       m_enableLigatures(true), m_showStatusBar(true), m_logLevel(1),
       m_caretBlinking(true), m_shellEncoding(0) {
   m_windowRect = {100, 100, 900, 700};
+  m_noTitleBar = false;
   m_bashPath = DetectBashPath();
 }
 
@@ -55,6 +56,8 @@ void SettingsManager::Load() {
       GetPrivateProfileIntW(L"Window", L"Bottom", 700, path.c_str());
   m_maximized =
       GetPrivateProfileIntW(L"Window", L"Maximized", 0, path.c_str()) != 0;
+  m_noTitleBar =
+      GetPrivateProfileIntW(L"Window", L"NoTitleBar", 0, path.c_str()) != 0;
 
   wchar_t fontBuf[256];
   GetPrivateProfileStringW(L"Editor", L"FontFamily", L"Consolas", fontBuf, 256,
@@ -346,6 +349,7 @@ void SettingsManager::Save() {
   WriteInt(L"Window", L"Right", m_windowRect.right);
   WriteInt(L"Window", L"Bottom", m_windowRect.bottom);
   WriteInt(L"Window", L"Maximized", m_maximized ? 1 : 0);
+  WriteInt(L"Window", L"NoTitleBar", m_noTitleBar ? 1 : 0);
 
   WritePrivateProfileStringW(L"Editor", L"FontFamily", m_fontFamily.c_str(),
                              path.c_str());
