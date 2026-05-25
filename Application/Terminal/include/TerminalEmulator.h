@@ -74,6 +74,12 @@ public:
         onSixelData_ = std::move(cb);
     }
 
+    // Taskbar / progress indicator (OSC 9;4).  Called with progress [0..1]
+    // or with a negative value when the indicator should be cleared.
+    void setProgressCallback(std::function<void(float)> cb) {
+        onProgress_ = std::move(cb);
+    }
+
 private:
     // --- parsing state ---
     enum class State {
@@ -151,6 +157,7 @@ private:
     ImageDataCallback    onImageData_;
     FileDownloadCallback onFileDownload_;
     SixelDataCallback    onSixelData_;
+    std::function<void(float)> onProgress_;
 
     // --- OSC 1337 multipart state ---
     bool         multipartActive_ = false;

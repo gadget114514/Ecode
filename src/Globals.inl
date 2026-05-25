@@ -179,6 +179,7 @@ void HandleDestroy(HWND hwnd);
 #define WM_GREP_COMPLETE (WM_USER + 204)
 #define WM_DEFERRED_FOCUS (WM_USER + 205)
 #define WM_SET_PROCESS_HANDLE (WM_USER + 206)
+#define WM_TERMINAL_PROGRESS (WM_USER + 299)
 
 struct GrepSearchParams {
     std::wstring dir;
