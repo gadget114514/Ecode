@@ -94,6 +94,16 @@ TerminalView::TerminalView()
     emulator_.setSixelDataCallback([this](const std::vector<uint8_t>& data) {
         OnSixelData(data);
     });
+
+    // OSC 9;4 taskbar progress – forward to parent via window message
+    emulator_.setProgressCallback([this](float progress) {
+        HWND parent = GetParent(hwnd_);
+        if (parent) {
+            // scale [0..1] → 0–10000, negative → -1 (clear)
+            int scaled = progress < 0.0f ? -1 : (int)(progress * 10000.0f);
+            PostMessage(parent, WM_TERMINAL_PROGRESS, 0, scaled);
+        }
+    });
 }
 
 TerminalView::~TerminalView() {
@@ -999,6 +1009,20 @@ bool TerminalView::IsSelected(int logRow, int col) const {
 }
 
 void TerminalView::OnLButtonDown(int px, int py) {
+    // Ctrl+click opens hyperlink
+    if (GetKeyState(VK_CONTROL) & 0x8000) {
+        int row, col;
+        BufferCoordFromPoint(px, py, row, col);
+        if (row >= 0 && col >= 0) {
+            const auto& line = buffer_.lineAt(row);
+            if (col < (int)line.size() && !line[col].hyperlinkUrl.empty()) {
+                ShellExecuteW(nullptr, L"open", line[col].hyperlinkUrl.c_str(),
+                              nullptr, nullptr, SW_SHOWNORMAL);
+                return;
+            }
+        }
+    }
+
     // Click clears existing selection
     selAnchorRow_ = -1;
     selAnchorCol_ = -1;
