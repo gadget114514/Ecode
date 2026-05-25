@@ -721,6 +721,32 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
         break;
     }
 
+    case 9: { // Windows taskbar progress (OSC 9;4;state(;value))
+        // Format: "4;state[;value]"
+        const size_t sep2 = arg1.find(L';');
+        if (sep2 != std::wstring::npos) {
+            int subCmd = 0;
+            try { subCmd = std::stoi(arg1.substr(0, sep2)); } catch(...) { subCmd = 0; }
+            if (subCmd == 4) {
+                std::wstring rest = arg1.substr(sep2 + 1);
+                const size_t sep3 = rest.find(L';');
+                int state = 0;
+                try { state = std::stoi(sep3 == std::wstring::npos ? rest : rest.substr(0, sep3)); } catch(...) { state = 0; }
+                if (state == 0 && sep3 != std::wstring::npos) {
+                    int pct = 0;
+                    try { pct = std::stoi(rest.substr(sep3 + 1)); } catch(...) { pct = 0; }
+                    if (onProgress_) onProgress_(std::min(100, std::max(0, pct)) / 100.0f);
+                } else if (state == 3 || state == 4) {
+                    if (onProgress_) onProgress_(-1.0f);
+                } else if (state == 1 || state == 2) {
+                    // error / pause – treat as indeterminate
+                    if (onProgress_) onProgress_(-1.0f);
+                }
+            }
+        }
+        break;
+    }
+
     case 112: // reset cursor colour
         buffer_->setCursorBlink(true);
         break;

@@ -534,7 +534,6 @@ foreach(PLUGIN ${CUSTOM_PLUGINS})
     )
 endforeach()
 
-# JYEditor uses local header-only nlohmann_json, always build it
 add_plugin(JYEditor Application/JYEditor)
 message(STATUS "JYEditor enabled (local nlohmann_json)")
 

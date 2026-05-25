@@ -94,6 +94,16 @@ TerminalView::TerminalView()
     emulator_.setSixelDataCallback([this](const std::vector<uint8_t>& data) {
         OnSixelData(data);
     });
+
+    // OSC 9;4 taskbar progress – forward to parent via window message
+    emulator_.setProgressCallback([this](float progress) {
+        HWND parent = GetParent(hwnd_);
+        if (parent) {
+            // scale [0..1] → 0–10000, negative → -1 (clear)
+            int scaled = progress < 0.0f ? -1 : (int)(progress * 10000.0f);
+            PostMessage(parent, WM_TERMINAL_PROGRESS, 0, scaled);
+        }
+    });
 }
 
 TerminalView::~TerminalView() {
@@ -493,6 +503,46 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
     MultiByteToWideChar(CP_UTF8, 0, data, (int)len, ws.data(), needed);
 
     emulator_.process(ws);
+
+    // VT debug: send raw ESC sequences to parent's *Messages* buffer
+    bool vtDebug = false;
+    {
+        wchar_t appdata[MAX_PATH] = {};
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
+            std::wstring iniPath = std::wstring(appdata) + L"\\Ecode\\settings.ini";
+            vtDebug = GetPrivateProfileIntW(
+                L"Editor", L"VTDebug", 0, iniPath.c_str()) != 0;
+        }
+    }
+    if (vtDebug) {
+        std::string escaped;
+        escaped.reserve(len + 32);
+        for (size_t i = 0; i < len; ++i) {
+            unsigned char c = (unsigned char)data[i];
+            if (c == 0x1b) {
+                escaped += "ESC";
+            } else if (c == 0x0d) {
+                escaped += "\\r";
+            } else if (c == 0x0a) {
+                escaped += "\\n";
+            } else if (c == 0x09) {
+                escaped += "\\t";
+            } else if (c < 0x20 || c > 0x7e) {
+                char buf[8];
+                snprintf(buf, sizeof(buf), "\\x%02x", c);
+                escaped += buf;
+            } else {
+                escaped += (char)c;
+            }
+        }
+        std::string msg = "[VT] " + escaped;
+        COPYDATASTRUCT cds;
+        cds.dwData = 0x5654;
+        cds.cbData = (DWORD)msg.size() + 1;
+        cds.lpData = (void*)msg.c_str();
+        SendMessage(GetAncestor(hwnd_, GA_ROOT), WM_COPYDATA, (WPARAM)hwnd_, (LPARAM)&cds);
+    }
+
     // スクロールバック中は位置をクランプ（履歴が減った場合）、底にいれば維持
     if (scrollOffset_ > 0) {
         const int maxScroll = std::max(0, buffer_.historyLineCount());
@@ -999,6 +1049,20 @@ bool TerminalView::IsSelected(int logRow, int col) const {
 }
 
 void TerminalView::OnLButtonDown(int px, int py) {
+    // Ctrl+click opens hyperlink
+    if (GetKeyState(VK_CONTROL) & 0x8000) {
+        int row, col;
+        BufferCoordFromPoint(px, py, row, col);
+        if (row >= 0 && col >= 0) {
+            const auto& line = buffer_.lineAt(row);
+            if (col < (int)line.size() && !line[col].hyperlinkUrl.empty()) {
+                ShellExecuteW(nullptr, L"open", line[col].hyperlinkUrl.c_str(),
+                              nullptr, nullptr, SW_SHOWNORMAL);
+                return;
+            }
+        }
+    }
+
     // Click clears existing selection
     selAnchorRow_ = -1;
     selAnchorCol_ = -1;

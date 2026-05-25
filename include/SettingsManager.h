@@ -4,6 +4,11 @@
 #include <vector>
 #include <windows.h>
 
+struct AppEntry {
+  std::wstring path;
+  std::wstring label;
+};
+
 struct CliEntry {
   std::wstring command;
   std::wstring folder;
@@ -91,6 +96,8 @@ public:
   void SetShellEncoding(int encoding) { m_shellEncoding = encoding; }
   bool IsShowAI() const { return m_showAI; }
   void SetShowAI(bool show) { m_showAI = show; }
+  bool IsVTDebug() const { return m_vtDebug; }
+  void SetVTDebug(bool debug) { m_vtDebug = debug; }
 
   bool IsSessionManagementEnabled() const { return m_enableSessionManagement; }
   void SetSessionManagementEnabled(bool enabled) { m_enableSessionManagement = enabled; }
@@ -164,6 +171,12 @@ public:
   void RemoveCliEntry(size_t index);
   void SaveCliEntries();
 
+  // App entries
+  const std::vector<AppEntry> &GetAppEntries() const { return m_appEntries; }
+  void AddAppEntry(const std::wstring &path, const std::wstring &label);
+  void RemoveAppEntry(size_t index);
+  void SaveAppEntries();
+
   // Dired pairs
   const std::vector<DiredPair> &GetDiredPairs() const { return m_diredPairs; }
   void AddDiredPair(const std::wstring &label, const std::wstring &leftDir, const std::wstring &rightDir);
@@ -215,8 +228,10 @@ private:
   bool m_tabGridRefreshEnabled = false;
   int m_tabGridRefreshIntervalMs = 1000;
   bool m_showAI = false;
+  bool m_vtDebug = false;
   bool m_enableSessionManagement = false;
   std::vector<CliEntry> m_cliEntries;
+  std::vector<AppEntry> m_appEntries;
   std::vector<DiredPair> m_diredPairs;
 
   std::wstring m_aiVendor;

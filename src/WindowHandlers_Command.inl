@@ -1002,6 +1002,11 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     UpdateMenu(hwnd);
     break;
   }
+  case IDM_APPS_CONFIGURE: {
+    ShowAppEntriesDialog(hwnd);
+    UpdateMenu(hwnd);
+    break;
+  }
   case IDM_DIRED_CONFIGURE: {
     Dialogs::ShowDiredPairsDialog(hwnd);
     UpdateMenu(hwnd);
@@ -1122,6 +1127,29 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           termExe = exeDir + L"\\Terminal.exe";
         if (g_editor) g_editor->LogMessage("[Launch] CLI Terminal: " + WStringToString(shellArgs));
         LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL, entries[idx].iconIndex);
+      }
+    } else if (LOWORD(wParam) >= IDM_APPS_START && LOWORD(wParam) < IDM_APPS_START + 100) {
+      size_t idx = LOWORD(wParam) - IDM_APPS_START;
+      const auto &entries = SettingsManager::Instance().GetAppEntries();
+      if (idx < entries.size()) {
+        std::wstring path = entries[idx].path;
+        std::wstring label = entries[idx].label.empty()
+          ? path.substr(path.find_last_of(L"\\/") + 1)
+          : entries[idx].label;
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+        sei.lpVerb = L"open";
+        sei.lpFile = path.c_str();
+        sei.nShow = SW_SHOW;
+        if (ShellExecuteExW(&sei)) {
+          AppTabInfo tab;
+          tab.label = label;
+          tab.type = 0;
+          tab.hProcess = sei.hProcess;
+          g_appTabs.push_back(tab);
+          if (g_activeAppTab < 0) g_activeAppTab = (int)g_appTabs.size() - 1;
+          UpdateMenu(hwnd);
+        }
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&
                LOWORD(wParam) < IDM_BUFFERS_START + 100) {

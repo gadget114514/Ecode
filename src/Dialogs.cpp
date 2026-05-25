@@ -364,6 +364,10 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hLog, CB_ADDSTRING, 0, (LPARAM)L"ERROR");
     SendMessage(hLog, CB_SETCURSEL, (WPARAM)g_currentLogLevel, 0);
 
+    CheckDlgButton(hDlg, IDC_VT_DEBUG,
+                   SettingsManager::Instance().IsVTDebug() ? BST_CHECKED
+                                                           : BST_UNCHECKED);
+
     HWND hCombo = GetDlgItem(hDlg, IDC_LANGUAGE);
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"English");
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Japanese");
@@ -442,6 +446,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       SettingsManager::Instance().SetLogLevel(logLevel);
       SettingsManager::Instance().SetCaretBlinking(caretBlinking ==
                                                    BST_CHECKED);
+      SettingsManager::Instance().SetVTDebug(
+          IsDlgButtonChecked(hDlg, IDC_VT_DEBUG) == BST_CHECKED);
 
       wchar_t bashPath[MAX_PATH];
       GetDlgItemTextW(hDlg, IDC_BASH_PATH, bashPath, MAX_PATH);
@@ -817,6 +823,92 @@ void Dialogs::ShowFindFileDialog(HWND hwnd) {
 }
 
 static const wchar_t* kShellNames[] = { L"cmd", L"powershell", L"bash" };
+
+static void RefreshAppList(HWND hDlg) {
+  HWND hList = GetDlgItem(hDlg, IDC_AE_LIST);
+  SendMessage(hList, LB_RESETCONTENT, 0, 0);
+  const auto &entries = SettingsManager::Instance().GetAppEntries();
+  for (size_t i = 0; i < entries.size(); ++i) {
+    std::wstring text = entries[i].label + L"  \u2192  " + entries[i].path;
+    SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)text.c_str());
+  }
+}
+
+INT_PTR CALLBACK AppEntriesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                   LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    RefreshAppList(hDlg);
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_AE_LIST && HIWORD(wParam) == LBN_SELCHANGE) {
+      HWND hList = GetDlgItem(hDlg, IDC_AE_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        const auto &entries = SettingsManager::Instance().GetAppEntries();
+        if (sel >= 0 && sel < (int)entries.size()) {
+          SetDlgItemTextW(hDlg, IDC_AE_PATH, entries[sel].path.c_str());
+          SetDlgItemTextW(hDlg, IDC_AE_LABEL, entries[sel].label.c_str());
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_AE_BROWSE) {
+      wchar_t path[MAX_PATH];
+      path[0] = 0;
+      OPENFILENAMEW ofn = { sizeof(ofn) };
+      ofn.hwndOwner = hDlg;
+      ofn.lpstrFilter = L"Executables\0*.exe\0Shortcuts\0*.lnk\0All Files\0*.*\0";
+      ofn.nFilterIndex = 1;
+      ofn.lpstrFile = path;
+      ofn.nMaxFile = MAX_PATH;
+      ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+      if (GetOpenFileNameW(&ofn)) {
+        SetDlgItemTextW(hDlg, IDC_AE_PATH, path);
+        std::wstring label = path;
+        size_t pos = label.find_last_of(L"\\/");
+        if (pos != std::wstring::npos) label = label.substr(pos + 1);
+        pos = label.find_last_of(L'.');
+        if (pos != std::wstring::npos) label = label.substr(0, pos);
+        SetDlgItemTextW(hDlg, IDC_AE_LABEL, label.c_str());
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_AE_ADD) {
+      wchar_t path[MAX_PATH], label[256];
+      GetDlgItemTextW(hDlg, IDC_AE_PATH, path, MAX_PATH);
+      GetDlgItemTextW(hDlg, IDC_AE_LABEL, label, 256);
+      if (wcslen(path) > 0) {
+        SettingsManager::Instance().AddAppEntry(path, label);
+        SettingsManager::Instance().Save();
+        RefreshAppList(hDlg);
+        SetDlgItemTextW(hDlg, IDC_AE_PATH, L"");
+        SetDlgItemTextW(hDlg, IDC_AE_LABEL, L"");
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_AE_REMOVE) {
+      HWND hList = GetDlgItem(hDlg, IDC_AE_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        SettingsManager::Instance().RemoveAppEntry(sel);
+        SettingsManager::Instance().Save();
+        RefreshAppList(hDlg);
+        SetDlgItemTextW(hDlg, IDC_AE_PATH, L"");
+        SetDlgItemTextW(hDlg, IDC_AE_LABEL, L"");
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void ShowAppEntriesDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_APP_ENTRIES), hwnd,
+             AppEntriesDlgProc);
+}
 
 static void RefreshCliList(HWND hDlg) {
   HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
