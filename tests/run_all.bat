@@ -176,4 +176,68 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
+echo Running Buffer Stress Tests...
+..\bin\Debug\test_buffer_stress.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Buffer Stress Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Shortcuts Tests...
+..\bin\Debug\test_shortcuts.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Shortcuts Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Find In Files Tests...
+..\bin\Debug\test_find_in_files.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Find In Files Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Cursor Move Tests...
+..\bin\Debug\test_cursor_move.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Cursor Move Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Memory Mapped File Tests...
+..\bin\Debug\test_memorymappedfile.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Memory Mapped File Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running File Utils Tests...
+..\bin\Debug\test_fileutils.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo File Utils Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Editor Buffer Operations Tests...
+..\bin\Debug\test_editor_buffer_ops.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Editor Buffer Operations Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running Advanced PieceTable Tests...
+..\bin\Debug\test_piecetable_advanced.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Advanced PieceTable Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
 echo === ALL TESTS PASSED ===
