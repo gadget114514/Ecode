@@ -51,3 +51,5 @@ opencode.config
 references
 build
 Application/SmallUV/
+src/generated/
+debug_init.log

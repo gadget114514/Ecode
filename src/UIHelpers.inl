@@ -134,16 +134,18 @@ void UpdateTabs(HWND hwnd) {
     }
 
     TCITEMW tie = {0};
-    tie.mask = TCIF_TEXT;
+    tie.mask = TCIF_TEXT | TCIF_IMAGE;
     tie.pszText = (LPWSTR)name.c_str();
+    tie.iImage = buffers[i]->GetPath().empty() ? -1 : AddFileTypeIcon(g_tabImageList, buffers[i]->GetPath());
     TabCtrl_InsertItem(g_tabHwnd, static_cast<int>(i), &tie);
   }
   // Append all app tabs after buffer tabs
   int appStart = static_cast<int>(buffers.size());
   for (size_t i = 0; i < g_appTabs.size(); ++i) {
     TCITEMW tci = {0};
-    tci.mask = TCIF_TEXT;
+    tci.mask = TCIF_TEXT | TCIF_IMAGE;
     tci.pszText = (LPWSTR)g_appTabs[i].label.c_str();
+    tci.iImage = g_appTabs[i].iImage;
     TabCtrl_InsertItem(g_tabHwnd, appStart + static_cast<int>(i), &tci);
   }
 
@@ -312,6 +314,7 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hHelp, MF_STRING, IDM_HELP_KEYBINDINGS,
              L10N("menu_help_keybindings"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_ABOUT, L10N("menu_help_about"));
+  AppendMenu(hHelp, MF_STRING, IDM_HELP_COPYRIGHT, L10N("menu_help_copyright"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_MESSAGES, L"Show Messages");
 
   // AI Menu (hidden by default, only shown when IsShowAI)

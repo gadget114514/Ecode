@@ -137,6 +137,7 @@ static void SwRebuildItems() {
                 size_t sep = path.find_last_of(L"\\/");
                 it.label = (sep != std::wstring::npos) ? path.substr(sep + 1) : path;
             }
+            it.iImage = AddFileTypeIcon(g_tabImageList, path);
             if (!g_switcherTermOnly || it.isTerminal) {
                 g_switcherItems.push_back(it);
             }
@@ -149,6 +150,7 @@ static void SwRebuildItems() {
         it.index      = i;
         it.isTerminal = (g_appTabs[i].type == TAB_TYPE_TERMINAL);
         it.label      = g_appTabs[i].label;
+        it.iImage     = g_appTabs[i].iImage;
         if (!g_switcherTermOnly || it.isTerminal)
             g_switcherItems.push_back(it);
     }
@@ -619,11 +621,22 @@ static void SwPaint(HWND hwnd) {
                       DT_SINGLELINE | DT_VCENTER | DT_RIGHT | DT_NOPREFIX);
             SelectObject(hdc, old);
         }
+        // Icon
+        if (item.iImage >= 0 && g_tabImageList) {
+            HICON hIcon = ImageList_GetIcon(g_tabImageList, item.iImage, ILD_TRANSPARENT);
+            if (hIcon) {
+                int iconSize = 14;
+                int iconX = label.left + 4;
+                int iconY = label.top + (label.bottom - label.top - iconSize) / 2;
+                DrawIconEx(hdc, iconX, iconY, hIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+                DestroyIcon(hIcon);
+            }
+        }
         // Label text
         {
             HFONT old = (HFONT)SelectObject(hdc, hNormal);
             SetTextColor(hdc, sel ? RGB(255, 255, 255) : RGB(190, 200, 230));
-            int iconPad = 6;
+            int iconPad = (item.iImage >= 0 && g_tabImageList) ? 22 : 6;
             RECT lr = { label.left + iconPad, label.top,
                         label.right - 50, label.bottom };
             DrawTextW(hdc, item.label.c_str(), -1, &lr,

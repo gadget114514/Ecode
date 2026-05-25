@@ -1134,8 +1134,11 @@ void EditorWindow::LoadSettings() {
     i >> j;
 
     // Load language
-    if (j.contains("language")) {
-      m_localization.SetLanguage(j["language"].get<std::string>());
+    extern std::string g_langOverride;
+    std::string lang = g_langOverride.empty() && j.contains("language")
+        ? j["language"].get<std::string>() : g_langOverride;
+    if (!lang.empty()) {
+      m_localization.SetLanguage(lang);
       UpdateMenus();
     }
 

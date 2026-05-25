@@ -1,3 +1,17 @@
+extern "C" const char* g_copyrightText;
+
+static std::wstring GetLangArg() {
+    Language lang = Localization::Instance().GetCurrentLanguage();
+    switch (lang) {
+    case Language::English:   return L"--lang en";
+    case Language::Japanese:  return L"--lang jp";
+    case Language::Spanish:   return L"--lang es";
+    case Language::French:    return L"--lang fr";
+    case Language::German:    return L"--lang de";
+    }
+    return L"--lang en";
+}
+
 struct EnumData {
   DWORD processId;
   HWND hwnd;
@@ -38,7 +52,7 @@ static DWORD WINAPI FastFileSearchThread(LPVOID lpParam) {
 
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"" + exePath + L"\" --embedded";
+  std::wstring cmd = L"\"" + exePath + L"\" --embedded " + GetLangArg();
   if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
@@ -61,10 +75,22 @@ static DWORD WINAPI FastFileSearchThread(LPVOID lpParam) {
   return 0;
 }
 
+std::wstring GetPluginPath(const std::wstring &name) {
+    wchar_t modPath[MAX_PATH];
+    GetModuleFileNameW(nullptr, modPath, MAX_PATH);
+    std::wstring exeDir = modPath;
+    exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
+    std::wstring path = exeDir + L"\\plugins\\" + name;
+    if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+        path = exeDir + L"\\" + name;
+    return path;
+}
+
 void OpenFastFileSearch(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"File Search";
   tab.type = 2;
+  tab.iImage = AddFileTypeIcon(g_tabImageList, L"");
   if (!IsUserAnAdmin()) {
     tab.hwnd = CreateWindowExW(0, L"STATIC",
                                L"\n\n\n\n\n\n\n\n\n⚠️ Fast File Search requires Administrator privileges.\n\nPlease relaunch Ecode as Administrator (Right-click -> Run as Administrator) to use this tool.",
@@ -130,7 +156,7 @@ static DWORD WINAPI CSVEditorThread(LPVOID lpParam) {
 
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"" + exePath + L"\" --embedded";
+  std::wstring cmd = L"\"" + exePath + L"\" --embedded " + GetLangArg();
   if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
@@ -157,6 +183,7 @@ void OpenCSVEditor(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"CSV Editor";
   tab.type = 3;
+  tab.iImage = AddExeIcon(g_tabImageList, GetPluginPath(L"CSVEditor.exe"));
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting CSV Editor...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -213,7 +240,7 @@ static DWORD WINAPI JYEditorThread(LPVOID lpParam) {
 
   STARTUPINFOW si = { sizeof(si) };
   PROCESS_INFORMATION pi = { 0 };
-  std::wstring cmd = L"\"" + exePath + L"\" --embedded";
+  std::wstring cmd = L"\"" + exePath + L"\" --embedded " + GetLangArg();
   if (CreateProcessW(NULL, &cmd[0], NULL, NULL, FALSE, 0, NULL, &workDir[0], &si, &pi)) {
     HWND foundHwnd = NULL;
     for (int i = 0; i < 50; ++i) {
@@ -240,6 +267,7 @@ void OpenJYEditor(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"JY Editor";
   tab.type = 4;
+  tab.iImage = AddExeIcon(g_tabImageList, GetPluginPath(L"JYEditor.exe"));
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting JY Editor...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -306,7 +334,7 @@ static DWORD WINAPI DiredThread(LPVOID lpParam) {
     diredPath = L"plugins\\Dired.exe";
   }
 
-  std::wstring cmd = L"\"" + diredPath + L"\" --embedded \"" + curDir + L"\"";
+  std::wstring cmd = L"\"" + diredPath + L"\" --embedded " + GetLangArg() + L" \"" + curDir + L"\"";
   if (CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0,
                      nullptr, nullptr, &si, &pi)) {
     HWND foundHwnd = nullptr;
@@ -334,6 +362,7 @@ void OpenDired(HWND hwnd) {
   AppTabInfo tab;
   tab.label = L"Dired";
   tab.type = 5;
+  tab.iImage = AddExeIcon(g_tabImageList, GetPluginPath(L"Dired.exe"));
   tab.hwnd = CreateWindowExW(0, L"STATIC", L"Starting Dired...",
                              WS_CHILD | WS_VISIBLE | SS_CENTER,
                              0, 0, 100, 100, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -456,7 +485,7 @@ void ScanPlugins() {
 }
 
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
-                      const std::wstring& label, int type) {
+                      const std::wstring& label, int type, int iImage = -1) {
   if (GetFileAttributesW(exePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
     std::wstring msg = L"Plugin not found:\n" + exePath;
     MessageBoxW(hwnd, msg.c_str(), L"Plugin Not Found", MB_OK | MB_ICONWARNING);
@@ -466,6 +495,7 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   AppTabInfo tab;
   tab.label = label;
   tab.type  = type;
+  tab.iImage = iImage >= 0 ? iImage : AddExeIcon(g_tabImageList, exePath);
   tab.hwnd  = CreateWindowExW(0, L"STATIC", L"Starting...",
                                WS_CHILD | WS_VISIBLE | SS_CENTER,
                                0, 0, 100, 100, hwnd, nullptr,
@@ -491,6 +521,8 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   InvalidateRect(hwnd, NULL, FALSE);
 
   std::wstring cmdLine = L"\"" + exePath + L"\" --embedded";
+  if (exePath.find(L"Terminal.exe") == std::wstring::npos)
+    cmdLine += L" " + GetLangArg();
   if (!args.empty()) cmdLine += L" " + args;
   if (g_editor && exePath.find(L"Terminal.exe") != std::wstring::npos)
     g_editor->LogMessage("[CreateProcessW] " + WStringToString(cmdLine));
@@ -570,6 +602,24 @@ INT_PTR CALLBACK PluginConfigDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 void ShowPluginConfigDialog(HWND hwnd) {
   DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_PLUGIN_CONFIG), hwnd,
              PluginConfigDlgProc);
+}
+
+static INT_PTR CALLBACK CopyrightDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+  switch (msg) {
+  case WM_INITDIALOG: {
+    wchar_t wbuf[4096];
+    MultiByteToWideChar(CP_UTF8, 0, g_copyrightText, -1, wbuf, 4096);
+    SetDlgItemTextW(hDlg, IDC_COPYRIGHT_TEXT, wbuf);
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, LOWORD(wParam));
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
 }
 
 static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
@@ -696,6 +746,10 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
   case IDM_HELP_ABOUT:
     Dialogs::ShowAboutDialog(hwnd);
+    break;
+
+  case IDM_HELP_COPYRIGHT:
+    DialogBoxW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_COPYRIGHT), hwnd, CopyrightDlgProc);
     break;
 
   case IDM_HELP_KEYBINDINGS: {
@@ -885,17 +939,17 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       termExe = exeDir + L"\\Terminal.exe";
     if (LOWORD(wParam) == IDM_TOOLS_TERMINAL) {
       if (g_editor) g_editor->LogMessage("[Launch] Terminal: powershell.exe");
-      LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
+      LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL);
     } else if (LOWORD(wParam) == IDM_TOOLS_TERMINAL_CMD) {
       if (g_editor) g_editor->LogMessage("[Launch] Terminal: cmd.exe");
-      LaunchApp(hwnd, termExe, L"cmd.exe", L"cmd", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
+      LaunchApp(hwnd, termExe, L"cmd.exe", L"cmd", TAB_TYPE_TERMINAL);
     } else {
       std::wstring bashDir;
       std::wstring cmd = SettingsManager::Instance().GetBashCommand(&bashDir);
       if (!cmd.empty()) {
         if (!bashDir.empty()) SetCurrentDirectoryW(bashDir.c_str());
         if (g_editor) g_editor->LogMessage("[Launch] Terminal: " + WStringToString(cmd));
-        LaunchApp(hwnd, termExe, cmd, L"bash", TAB_TYPE_TERMINAL, TAB_ICON_GREEN);
+        LaunchApp(hwnd, termExe, cmd, L"bash", TAB_TYPE_TERMINAL);
       }
     }
     break;
@@ -986,7 +1040,7 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           diredPath = L"plugins\\Dired.exe";
         }
 
-        std::wstring cmd = L"\"" + diredPath + L"\" \"" + pairs[idx].leftDir + L"\"";
+        std::wstring cmd = L"\"" + diredPath + L"\" " + GetLangArg() + L" \"" + pairs[idx].leftDir + L"\"";
         if (!pairs[idx].rightDir.empty()) cmd += L" \"" + pairs[idx].rightDir + L"\"";
 
         STARTUPINFOW si = { sizeof(si) };
@@ -1066,10 +1120,8 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
         if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
           termExe = exeDir + L"\\Terminal.exe";
-        int icn = entries[idx].iconIndex;
-        if (icn < 0 || icn >= TAB_ICON_COUNT) icn = 0;
         if (g_editor) g_editor->LogMessage("[Launch] CLI Terminal: " + WStringToString(shellArgs));
-        LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL, icn);
+        LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL, entries[idx].iconIndex);
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&
                LOWORD(wParam) < IDM_BUFFERS_START + 100) {

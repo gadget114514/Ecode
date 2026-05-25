@@ -166,6 +166,7 @@ void HandleDestroy(HWND hwnd);
 #define IDM_HELP_ABOUT 802
 #define IDM_HELP_MESSAGES 803
 #define IDM_HELP_KEYBINDINGS 804
+#define IDM_HELP_COPYRIGHT 805
 
 #define WM_SHELL_OUTPUT (WM_USER + 101)
 #define WM_EMBED_APP (WM_USER + 200)
@@ -215,10 +216,28 @@ struct PluginEntry {
 };
 extern std::vector<PluginEntry> g_plugins;
 
+constexpr int TAB_ICON_GRAY   = 0;
+constexpr int TAB_ICON_BLUE   = 1;
+constexpr int TAB_ICON_GREEN  = 2;
+constexpr int TAB_ICON_ORANGE = 3;
+constexpr int TAB_ICON_PURPLE = 4;
+constexpr int TAB_ICON_TEAL   = 5;
+constexpr int TAB_ICON_RED    = 6;
+constexpr int TAB_ICON_PINK   = 7;
+constexpr int TAB_ICON_YELLOW = 8;
+constexpr int TAB_ICON_CYAN   = 9;
+constexpr int TAB_ICON_LIME   = 10;
+constexpr int TAB_ICON_BROWN  = 11;
+constexpr int TAB_ICON_COUNT  = 12;
+
+extern HIMAGELIST g_tabImageList;
+extern const wchar_t* g_tabIconNames[TAB_ICON_COUNT];
+
 struct AppTabInfo {
     HWND hwnd = nullptr;
     std::wstring label;
     int type; // 0 = file search, 1 = grep results, 5 = dired
+    int iImage = -1;
 
     void *data = nullptr; // type-specific data (e.g. ListView HWND or result list)
     HANDLE hProcess = nullptr; // process handle for killing

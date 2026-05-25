@@ -2,6 +2,42 @@ cmake_minimum_required(VERSION 3.10)
 project(Ecode LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
+
+# Git-based version auto-detection
+execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_DESCRIBE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT GIT_DESCRIBE)
+    set(GIT_DESCRIBE "v1.0")
+endif()
+# Parse into string and numeric components
+# Strip leading 'v' or 'V' if present
+string(REGEX MATCH "^[vV]" HAS_PREFIX "${GIT_DESCRIBE}")
+if(HAS_PREFIX)
+    string(REGEX REPLACE "^[vV]" "" GIT_CLEAN "${GIT_DESCRIBE}")
+else()
+    set(GIT_CLEAN "${GIT_DESCRIBE}")
+endif()
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" VERSION_MATCH "${GIT_CLEAN}")
+if(VERSION_MATCH)
+    set(ECODE_VERSION_STRING "${GIT_DESCRIBE}")
+    set(ECODE_VERSION_MAJOR "${CMAKE_MATCH_1}")
+    set(ECODE_VERSION_MINOR "${CMAKE_MATCH_2}")
+    set(ECODE_VERSION_PATCH "${CMAKE_MATCH_3}")
+else()
+    set(ECODE_VERSION_STRING "${GIT_DESCRIBE}")
+    set(ECODE_VERSION_MAJOR "1")
+    set(ECODE_VERSION_MINOR "0")
+    set(ECODE_VERSION_PATCH "0")
+endif()
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/version_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/version_config.h"
+)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Define Unicode for Win32
@@ -14,16 +50,37 @@ endif()
 
 # Include directories
 include_directories(include)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 include_directories(FastFileSearch/src)
 
 # Source files
 file(GLOB SOURCES "src/*.cpp")
+list(APPEND SOURCES "src/copyright.c")
 list(APPEND SOURCES "Application/Terminal/src/TerminalGridView.cpp")
 file(GLOB FASTFS_SOURCES "FastFileSearch/src/MFTReader.cpp" "FastFileSearch/src/FatReader.cpp" "FastFileSearch/src/exFatReader.cpp")
 list(APPEND SOURCES ${FASTFS_SOURCES})
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/test_piecetable.cpp")
 set(DUKTAPE_SOURCES "src-duktape/duktape.c")
+
+# Generate icon resource file from 24x24 icon set (output in source tree for RC compiler)
+set(ICONS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/images/24x24-free-application-icons/24x24-free-application-icons/ico")
+set(GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/generated")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${GEN_DIR}"
+)
+execute_process(
+    COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_icons_rc.py"
+            "${ICONS_DIR}"
+            "${GEN_DIR}/icons.rc"
+            "${GEN_DIR}/icons.h"
+            "11000"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/icons.rc")
+    file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/icons.rc" "")
+endif()
 set(RESOURCES "src/Ecode.rc")
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/generated)
 
 # Executable (GUI)
 add_executable(ecode WIN32 ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
