@@ -503,6 +503,46 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
     MultiByteToWideChar(CP_UTF8, 0, data, (int)len, ws.data(), needed);
 
     emulator_.process(ws);
+
+    // VT debug: send raw ESC sequences to parent's *Messages* buffer
+    bool vtDebug = false;
+    {
+        wchar_t appdata[MAX_PATH] = {};
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
+            std::wstring iniPath = std::wstring(appdata) + L"\\Ecode\\settings.ini";
+            vtDebug = GetPrivateProfileIntW(
+                L"Editor", L"VTDebug", 0, iniPath.c_str()) != 0;
+        }
+    }
+    if (vtDebug) {
+        std::string escaped;
+        escaped.reserve(len + 32);
+        for (size_t i = 0; i < len; ++i) {
+            unsigned char c = (unsigned char)data[i];
+            if (c == 0x1b) {
+                escaped += "ESC";
+            } else if (c == 0x0d) {
+                escaped += "\\r";
+            } else if (c == 0x0a) {
+                escaped += "\\n";
+            } else if (c == 0x09) {
+                escaped += "\\t";
+            } else if (c < 0x20 || c > 0x7e) {
+                char buf[8];
+                snprintf(buf, sizeof(buf), "\\x%02x", c);
+                escaped += buf;
+            } else {
+                escaped += (char)c;
+            }
+        }
+        std::string msg = "[VT] " + escaped;
+        COPYDATASTRUCT cds;
+        cds.dwData = 0x5654;
+        cds.cbData = (DWORD)msg.size() + 1;
+        cds.lpData = (void*)msg.c_str();
+        SendMessage(GetAncestor(hwnd_, GA_ROOT), WM_COPYDATA, (WPARAM)hwnd_, (LPARAM)&cds);
+    }
+
     // スクロールバック中は位置をクランプ（履歴が減った場合）、底にいれば維持
     if (scrollOffset_ > 0) {
         const int maxScroll = std::max(0, buffer_.historyLineCount());

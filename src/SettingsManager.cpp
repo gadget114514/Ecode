@@ -86,6 +86,8 @@ void SettingsManager::Load() {
       GetPrivateProfileIntW(L"Editor", L"ShellEncoding", 0, path.c_str());
   m_showAI =
       GetPrivateProfileIntW(L"Editor", L"ShowAI", 0, path.c_str()) != 0;
+  m_vtDebug =
+      GetPrivateProfileIntW(L"Editor", L"VTDebug", 0, path.c_str()) != 0;
   m_tabGridCellW =
       GetPrivateProfileIntW(L"TabGrid", L"CellWidth",  240, path.c_str());
   m_tabGridCellH =
@@ -373,6 +375,7 @@ void SettingsManager::Save() {
   WriteInt(L"Editor", L"CaretStyle", m_caretStyle);
   WriteInt(L"Editor", L"ShellEncoding", m_shellEncoding);
   WriteInt(L"Editor", L"ShowAI", m_showAI ? 1 : 0);
+  WriteInt(L"Editor", L"VTDebug", m_vtDebug ? 1 : 0);
   WriteInt(L"TabGrid", L"CellWidth",  m_tabGridCellW);
   WriteInt(L"TabGrid", L"CellHeight", m_tabGridCellH);
   WriteInt(L"TabGrid", L"RefreshEnabled",    m_tabGridRefreshEnabled ? 1 : 0);

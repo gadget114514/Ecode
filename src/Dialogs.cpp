@@ -364,6 +364,10 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hLog, CB_ADDSTRING, 0, (LPARAM)L"ERROR");
     SendMessage(hLog, CB_SETCURSEL, (WPARAM)g_currentLogLevel, 0);
 
+    CheckDlgButton(hDlg, IDC_VT_DEBUG,
+                   SettingsManager::Instance().IsVTDebug() ? BST_CHECKED
+                                                           : BST_UNCHECKED);
+
     HWND hCombo = GetDlgItem(hDlg, IDC_LANGUAGE);
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"English");
     SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Japanese");
@@ -442,6 +446,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       SettingsManager::Instance().SetLogLevel(logLevel);
       SettingsManager::Instance().SetCaretBlinking(caretBlinking ==
                                                    BST_CHECKED);
+      SettingsManager::Instance().SetVTDebug(
+          IsDlgButtonChecked(hDlg, IDC_VT_DEBUG) == BST_CHECKED);
 
       wchar_t bashPath[MAX_PATH];
       GetDlgItemTextW(hDlg, IDC_BASH_PATH, bashPath, MAX_PATH);
