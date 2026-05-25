@@ -422,7 +422,7 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
     }
 
     // ---------------------------------------------------------------------------
-    // %APPDATA%\Ecode\settings.ini の [Terminal] セクションからスクロールバック行数を読む
+    // %APPDATA%\Ecode\settings.ini の [Terminal] セクションから設定を読む
     {
         wchar_t appdata[MAX_PATH] = {};
         if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
@@ -430,6 +430,15 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
             int lines = (int)GetPrivateProfileIntW(
                 L"Terminal", L"ScrollbackLines", 10000, iniPath.c_str());
             buffer_.setMaxHistoryLines(lines);
+
+            clickToOpenHyperlink_ = GetPrivateProfileIntW(
+                L"Terminal", L"ClickToOpenHyperlink", 1, iniPath.c_str()) != 0;
+            hyperlinkModifier_ = (int)GetPrivateProfileIntW(
+                L"Terminal", L"HyperlinkClickModifier", 3, iniPath.c_str());
+            wchar_t buf[1024] = {};
+            GetPrivateProfileStringW(L"Terminal", L"HyperlinkOpenCommand",
+                L"", buf, 1024, iniPath.c_str());
+            hyperlinkOpenCommand_ = buf;
         }
     }
 
@@ -969,6 +978,11 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
         fg.b = (uint8_t)std::min(255, (int)fg.b + 60);
     }
 
+    // Hyperlink: apply blue color if foreground is default
+    bool hasHyperlink = !cell.hyperlinkUrl.empty();
+    if (hasHyperlink && cell.foreground.isDefault)
+        fg = TermColor::fromRgb(50, 140, 230);
+
     // Draw text
     if (!cell.text.empty() && cell.text != L" ") {
         TermColor drawFg = drawBlock ? bg : fg;
@@ -994,6 +1008,15 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
         if (auto* b = GetBrush(dc)) {
             float sy = y + baseline_ * 0.5f;
             rt->DrawLine({x, sy}, {x + w, sy}, b, 1.0f);
+        }
+    }
+
+    // Hyperlink underline (OSC 8)
+    if (hasHyperlink) {
+        TermColor hc = TermColor::fromRgb(50, 140, 230);
+        if (auto* b = GetBrush(hc)) {
+            float uy = y + baseline_ + 1.5f;
+            rt->DrawLine({x, uy}, {x + w, uy}, b, 1.0f);
         }
     }
 
@@ -1048,7 +1071,18 @@ bool TerminalView::IsSelected(int logRow, int col) const {
     return logRow >= r1 && logRow <= r2 && col >= c1 && col <= c2;
 }
 
+bool TerminalView::IsHyperlinkAt(int px, int py) const {
+    RECT rc; GetClientRect(hwnd_, &rc);
+    if (px < 0 || py < 0 || px >= rc.right || py >= rc.bottom)
+        return false;
+    int row, col;
+    BufferCoordFromPoint(px, py, row, col);
+    const auto& line = buffer_.lineAt(row);
+    return col >= 0 && col < (int)line.size() && !line[col].hyperlinkUrl.empty();
+}
+
 void TerminalView::OnLButtonDown(int px, int py) {
+<<<<<<< Updated upstream
     // Ctrl+click opens hyperlink
     if (GetKeyState(VK_CONTROL) & 0x8000) {
         int row, col;
@@ -1059,6 +1093,35 @@ void TerminalView::OnLButtonDown(int px, int py) {
                 ShellExecuteW(nullptr, L"open", line[col].hyperlinkUrl.c_str(),
                               nullptr, nullptr, SW_SHOWNORMAL);
                 return;
+    // Ctrl+Click / modifier+Click: open hyperlink if present
+    if (clickToOpenHyperlink_) {
+        bool modHeld = false;
+        switch (hyperlinkModifier_) {
+            case 0: modHeld = (GetKeyState(VK_CONTROL) & 0x8000) != 0; break;
+            case 1: modHeld = (GetKeyState(VK_MENU)    & 0x8000) != 0; break;
+            case 2: modHeld = (GetKeyState(VK_SHIFT)   & 0x8000) != 0; break;
+            case 3: modHeld = true; break; // no modifier required
+        }
+        if (modHeld) {
+            int row, col;
+            BufferCoordFromPoint(px, py, row, col);
+            auto& line = buffer_.lineAt(row);
+            if (col >= 0 && col < (int)line.size()) {
+                const auto& url = line[col].hyperlinkUrl;
+                if (!url.empty()) {
+                    if (hyperlinkOpenCommand_.empty()) {
+                        ShellExecuteW(nullptr, L"open", url.c_str(),
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+                    } else {
+                        std::wstring cmd = hyperlinkOpenCommand_;
+                        size_t pos = cmd.find(L"{url}");
+                        if (pos != std::wstring::npos)
+                            cmd.replace(pos, 5, url);
+                        ShellExecuteW(nullptr, L"open", cmd.c_str(),
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+                    }
+                    return;
+                }
             }
         }
     }
