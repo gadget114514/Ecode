@@ -31,7 +31,7 @@ target_link_libraries(Terminal
     d2d1
     dwrite
     windowscodecs
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../libsixel-windows/build/Release/libsixel.lib
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../libsixel-windows/libsixel.lib
 )
 
 set(OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
