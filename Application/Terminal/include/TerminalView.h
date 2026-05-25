@@ -25,6 +25,9 @@
 // Posted by the ConPTY reader thread to deliver output on the UI thread.
 #define WM_TERMINAL_OUTPUT (WM_USER + 200)
 
+// Sent to parent window to report taskbar progress (lParam = 0–10000, or -1 to clear).
+#define WM_TERMINAL_PROGRESS (WM_USER + 299)
+
 // ---------------------------------------------------------------------------
 // TerminalView
 //
@@ -53,6 +56,12 @@ public:
     HWND Hwnd()      const { return hwnd_; }
     HANDLE GetProcessHandle() const { return session_.GetProcessHandle(); }
     std::wstring LastError()  const { return session_.LastError(); }
+
+    // Taskbar progress via ITaskbarList3 (requires CoInitializeEx).
+    void setProgressCallback(std::function<void(float)> cb) {
+        onProgress_ = std::move(cb);
+        emulator_.setProgressCallback(onProgress_);
+    }
 
     // Called from parent's WM_SIZE handler.
     void MoveAndResize(int x, int y, int w, int h);
@@ -181,4 +190,8 @@ private:
 
     // OSC 1337 image manager
     ImageManager* imageManager_ = nullptr;
+
+    // Progress callback (OSC 9;4)
+    std::function<void(float)> onProgress_;
+
 };

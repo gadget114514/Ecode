@@ -233,6 +233,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
+  case WM_TERMINAL_PROGRESS: {
+    int scaled = (int)lParam; // 0–10000 or -1 to clear
+    if (g_progressHwnd) {
+      if (scaled < 0) {
+        SendMessage(g_progressHwnd, PBM_SETPOS, 0, 0);
+      } else {
+        SendMessage(g_progressHwnd, PBM_SETPOS, scaled / 100, 0);
+      }
+      UpdateWindow(g_statusHwnd);
+    }
+    return 0;
+  }
   case WM_EMBED_APP: {
     HWND childHwnd = (HWND)wParam;
     int appIdx = (int)lParam;

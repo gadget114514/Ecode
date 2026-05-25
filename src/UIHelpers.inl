@@ -232,6 +232,24 @@ void UpdateMenu(HWND hwnd) {
   HMENU hConfig = CreatePopupMenu();
   AppendMenu(hConfig, MF_STRING, IDM_CONFIG_SETTINGS,
              L10N("menu_config_settings"));
+  AppendMenu(hConfig, MF_SEPARATOR, 0, NULL);
+
+  // Language submenu
+  {
+    HMENU hLang = CreatePopupMenu();
+    Language curLang = Localization::Instance().GetCurrentLanguage();
+    auto addLang = [&](Language lang, UINT id, const wchar_t* name) {
+      UINT flags = MF_STRING;
+      if (lang == curLang) flags |= MF_CHECKED;
+      AppendMenu(hLang, flags, id, name);
+    };
+    addLang(Language::English,   IDM_LANG_EN, L"English");
+    addLang(Language::Japanese,  IDM_LANG_JP, L"Japanese");
+    addLang(Language::Spanish,   IDM_LANG_ES, L"Spanish");
+    addLang(Language::French,    IDM_LANG_FR, L"French");
+    addLang(Language::German,    IDM_LANG_DE, L"German");
+    AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hLang, L"Language");
+  }
 
   // Themes submenu
   HMENU hThemes = CreatePopupMenu();
@@ -273,14 +291,6 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
-  // Language Menu
-  HMENU hLang = CreatePopupMenu();
-  AppendMenu(hLang, MF_STRING, IDM_LANG_EN, L10N("menu_language_en"));
-  AppendMenu(hLang, MF_STRING, IDM_LANG_JP, L10N("menu_language_jp"));
-  AppendMenu(hLang, MF_STRING, IDM_LANG_ES, L10N("menu_language_es"));
-  AppendMenu(hLang, MF_STRING, IDM_LANG_FR, L10N("menu_language_fr"));
-  AppendMenu(hLang, MF_STRING, IDM_LANG_DE, L10N("menu_language_de"));
-
   // Buffers Menu - integrated buffer/app tabs with type indicators
   HMENU hBuffers = CreatePopupMenu();
   const auto &buffers = g_editor->GetBuffers();
@@ -361,9 +371,23 @@ void UpdateMenu(HWND hwnd) {
     AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hAi, L"AI");
   else
     DestroyMenu(hAi);
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
+
+  // Apps Menu
+  HMENU hApps = CreatePopupMenu();
+  {
+    const auto &appEntries = SettingsManager::Instance().GetAppEntries();
+    for (size_t i = 0; i < appEntries.size(); ++i) {
+      std::wstring text = appEntries[i].label + L"  \u2192  " + appEntries[i].path;
+      AppendMenu(hApps, MF_STRING, IDM_APPS_START + i, text.c_str());
+    }
+    if (!appEntries.empty())
+      AppendMenu(hApps, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hApps, MF_STRING, IDM_APPS_CONFIGURE, L"Configure App Entries...");
+  }
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hApps, L"Apps");
+
   // Process Menu - kill process-bound apps and terminals
   HMENU hProcess = CreatePopupMenu();
   bool hasProcesses = false;
