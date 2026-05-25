@@ -16,22 +16,29 @@ void DrawTopBar(HDC hdc, HWND hwnd) {
   RECT clientRect;
   GetClientRect(hwnd, &clientRect);
   RECT barRect = { clientRect.left, clientRect.top, clientRect.right, g_topBarHeight };
+  int width = barRect.right - barRect.left;
+  int height = g_topBarHeight;
+
+  // Create compatible off-screen DC and Bitmap for double buffering
+  HDC memDC = CreateCompatibleDC(hdc);
+  HBITMAP memBitmap = CreateCompatibleBitmap(hdc, width, height);
+  HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
 
   int border = GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
 
   COLORREF bgCol, textCol, btnBg;
   if (g_isActive) {
     bgCol = RGB(45, 45, 48);
-    textCol = RGB(200, 200, 200);
+    textCol = RGB(255, 255, 255);
     btnBg = RGB(45, 45, 48);
   } else {
     bgCol = RGB(35, 35, 38);
-    textCol = RGB(140, 140, 140);
+    textCol = RGB(180, 180, 180);
     btnBg = RGB(35, 35, 38);
   }
 
   HBRUSH bgBrush = CreateSolidBrush(bgCol);
-  FillRect(hdc, &barRect, bgBrush);
+  FillRect(memDC, &barRect, bgBrush);
   DeleteObject(bgBrush);
 
   bool isMaximized = IsZoomed(hwnd);
@@ -43,18 +50,18 @@ void DrawTopBar(HDC hdc, HWND hwnd) {
   g_minButtonRect   = { g_maxButtonRect.left - btnW, btnTop, g_maxButtonRect.left, btnTop + btnH };
 
   HFONT hFont = CreateTopBarFont();
-  HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-  SetBkMode(hdc, TRANSPARENT);
-  SetTextColor(hdc, textCol);
+  HFONT hOldFont = (HFONT)SelectObject(memDC, hFont);
+  SetBkMode(memDC, TRANSPARENT);
+  SetTextColor(memDC, textCol);
 
   int x = 8;
   for (auto &ml : g_menuLabels) {
     if (ml.label.empty()) continue;
     SIZE sz;
-    GetTextExtentPoint32W(hdc, ml.label.c_str(), (int)ml.label.size(), &sz);
+    GetTextExtentPoint32W(memDC, ml.label.c_str(), (int)ml.label.size(), &sz);
     ml.rect = { x, 0, x + sz.cx + 16, g_topBarHeight };
     RECT textRect = { x + 8, 0, x + sz.cx + 8, g_topBarHeight };
-    DrawTextW(hdc, ml.label.c_str(), (int)ml.label.size(), &textRect,
+    DrawTextW(memDC, ml.label.c_str(), (int)ml.label.size(), &textRect,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     x += sz.cx + 16;
   }
@@ -64,25 +71,25 @@ void DrawTopBar(HDC hdc, HWND hwnd) {
     std::wstring title = g_windowTitle;
     if (!title.empty()) {
       SIZE titleSz;
-      GetTextExtentPoint32W(hdc, title.c_str(), (int)title.size(), &titleSz);
+      GetTextExtentPoint32W(memDC, title.c_str(), (int)title.size(), &titleSz);
       int titleX = x + 10;
       int titleMaxW = rightEdge - titleX - 10;
       if (titleSz.cx > titleMaxW) {
         while (title.size() > 1 && titleSz.cx > titleMaxW) {
           title.pop_back();
-          GetTextExtentPoint32W(hdc, title.c_str(), (int)title.size(), &titleSz);
+          GetTextExtentPoint32W(memDC, title.c_str(), (int)title.size(), &titleSz);
         }
         title += L"…";
       }
       if (!title.empty()) {
         RECT titleRect = { titleX, 0, titleX + titleMaxW, g_topBarHeight };
-        DrawTextW(hdc, title.c_str(), (int)title.size(), &titleRect,
+        DrawTextW(memDC, title.c_str(), (int)title.size(), &titleRect,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
       }
     }
   }
 
-  SelectObject(hdc, hOldFont);
+  SelectObject(memDC, hOldFont);
   DeleteObject(hFont);
 
   int btnIdx = 0;
@@ -94,8 +101,16 @@ void DrawTopBar(HDC hdc, HWND hwnd) {
     if (btnRect == &g_closeButtonRect) state = DFCS_CAPTIONCLOSE;
     else if (btnRect == &g_maxButtonRect) state = isMaximized ? DFCS_CAPTIONRESTORE : DFCS_CAPTIONMAX;
     if (g_topBarButtonPushed == btnIdx) state |= DFCS_PUSHED;
-    DrawFrameControl(hdc, &r, DFC_CAPTION, state);
+    DrawFrameControl(memDC, &r, DFC_CAPTION, state);
   }
+
+  // Blit the memory buffer onto the window's screen DC
+  BitBlt(hdc, barRect.left, barRect.top, width, height, memDC, 0, 0, SRCCOPY);
+
+  // Clean up resources
+  SelectObject(memDC, oldBitmap);
+  DeleteObject(memBitmap);
+  DeleteDC(memDC);
 }
 
 void HandleTopBarClick(HWND hwnd, int x, int y) {
@@ -103,8 +118,10 @@ void HandleTopBarClick(HWND hwnd, int x, int y) {
     if (x >= ml.rect.left && x <= ml.rect.right && ml.popup) {
       POINT pt = { ml.rect.left, ml.rect.bottom };
       ClientToScreen(hwnd, &pt);
+      g_menuTracking = true;
       TrackPopupMenu(ml.popup, TPM_LEFTALIGN | TPM_TOPALIGN,
                      pt.x, pt.y, 0, hwnd, NULL);
+      g_menuTracking = false;
       return;
     }
   }
@@ -120,8 +137,10 @@ void HandleTopBarDoubleClick(HWND hwnd) {
 void HandleTopBarRightClick(HWND hwnd, int screenX, int screenY) {
   HMENU hSysMenu = GetSystemMenu(hwnd, FALSE);
   if (!hSysMenu) return;
+  g_menuTracking = true;
   TrackPopupMenu(hSysMenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RIGHTBUTTON,
                  screenX, screenY, 0, hwnd, NULL);
+  g_menuTracking = false;
 }
 
 bool HandleTopBarButtonDown(HWND hwnd, int x, int y) {
@@ -170,8 +189,10 @@ bool HandleTopBarSysKeyDown(HWND hwnd, WPARAM wParam) {
     GetWindowRect(hwnd, &rc);
     HMENU hSysMenu = GetSystemMenu(hwnd, FALSE);
     if (hSysMenu) {
+      g_menuTracking = true;
       TrackPopupMenu(hSysMenu, TPM_LEFTALIGN | TPM_TOPALIGN,
                      rc.left, rc.top + g_topBarHeight, 0, hwnd, NULL);
+      g_menuTracking = false;
     }
     return true;
   }
@@ -184,8 +205,10 @@ bool HandleTopBarSysKeyDown(HWND hwnd, WPARAM wParam) {
     if (accel == ch && ml.popup) {
       POINT pt = { ml.rect.left, ml.rect.bottom };
       ClientToScreen(hwnd, &pt);
+      g_menuTracking = true;
       TrackPopupMenu(ml.popup, TPM_LEFTALIGN | TPM_TOPALIGN,
                      pt.x, pt.y, 0, hwnd, NULL);
+      g_menuTracking = false;
       return true;
     }
   }

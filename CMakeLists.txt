@@ -108,6 +108,7 @@ add_executable(test_piecetable_stress EXCLUDE_FROM_ALL
 add_executable(test_editor_core EXCLUDE_FROM_ALL
     tests/test_editor_core.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -168,6 +169,7 @@ target_link_libraries(test_undoredo_stress
 add_executable(test_search_replace EXCLUDE_FROM_ALL
     tests/test_search_replace.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -190,6 +192,7 @@ target_link_libraries(test_search_replace
 add_executable(test_file_io EXCLUDE_FROM_ALL
     tests/test_file_io.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -210,6 +213,7 @@ target_link_libraries(test_file_io
 add_executable(performance_benchmark EXCLUDE_FROM_ALL
     tests/performance_benchmark.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/PieceTable.cpp
     src/Buffer.cpp
     src/MemoryMappedFile.cpp
@@ -230,6 +234,7 @@ target_link_libraries(performance_benchmark
 add_executable(test_visual_wrap EXCLUDE_FROM_ALL
     tests/test_visual_wrap.cpp
     ${TEST_BASE_SOURCES}
+    src/IMEState.cpp
     src/EditorBufferRenderer.cpp
     src/EditorBufferRenderer_Draw.cpp
     src/Buffer.cpp
@@ -276,6 +281,7 @@ target_link_libraries(test_find_in_files
 add_executable(test_shortcuts EXCLUDE_FROM_ALL
     tests/test_shortcuts.cpp
     ${TEST_BASE_SOURCES}
+    src/IMEState.cpp
     src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
@@ -309,6 +315,7 @@ add_executable(test_localization EXCLUDE_FROM_ALL
 add_executable(test_buffer_stress EXCLUDE_FROM_ALL
     tests/test_buffer_stress.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -330,6 +337,7 @@ target_link_libraries(test_buffer_stress
 add_executable(test_cursor_move EXCLUDE_FROM_ALL
     tests/test_cursor_move.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp

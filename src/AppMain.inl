@@ -31,13 +31,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         if (pt.x >= ml.rect.left && pt.x <= ml.rect.right)
           return HTCLIENT;
       }
+      POINT clientPt = pt;
+      if (PtInRect(&g_minButtonRect, clientPt) ||
+          PtInRect(&g_maxButtonRect, clientPt) ||
+          PtInRect(&g_closeButtonRect, clientPt))
+        return HTCLIENT;
       return HTCAPTION;
     }
     return HTCLIENT;
   }
   if (uMsg == WM_NCACTIVATE && g_noTitleBar) {
+    if (!wParam && g_menuTracking)
+      return TRUE; // suppress deactivation flicker while our own menu is open
     g_isActive = (wParam != FALSE);
-    InvalidateRect(hwnd, NULL, TRUE);
+    InvalidateRect(hwnd, NULL, FALSE);
+    return TRUE;
+  }
+  if (uMsg == WM_NCPAINT && g_noTitleBar) {
+    return 0;
+  }
+  if (uMsg == WM_ERASEBKGND) {
     return TRUE;
   }
   if (uMsg == WM_GETMINMAXINFO && g_noTitleBar) {
@@ -570,7 +583,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   HWND hwnd = CreateWindowEx(0, CLASS_NAME, L"Ecode",
                              WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL |
-                                 WS_CLIPCHILDREN,
+                                 WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
                              CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                              CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
   if (!hwnd)

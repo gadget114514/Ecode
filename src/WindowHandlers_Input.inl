@@ -116,9 +116,6 @@ static LRESULT HandlePaint(HWND hwnd) {
         &viewportHighlights, scrollLine + 1, activeBuffer->GetScrollX(),
         &physicalLineNumbers, activeBuffer->GetTotalLines());
   }
-  if (g_noTitleBar) {
-    DrawTopBar(ps.hdc, hwnd);
-  }
   EndPaint(hwnd, &ps);
   return 0;
 }
