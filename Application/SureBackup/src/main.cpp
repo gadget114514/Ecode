@@ -2074,15 +2074,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam,
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
   hInst = hInstance;
 
-  // Check for --embedded flag (host requests hidden window for embedding)
+  // Check for --embedded and --lang flags
   {
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv) {
       for (int i = 1; i < argc; ++i) {
-        if (wcscmp(argv[i], L"--embedded") == 0) {
+        if (wcscmp(argv[i], L"--embedded") == 0)
           nCmdShow = SW_HIDE;
-          break;
+        else if (wcscmp(argv[i], L"--lang") == 0 && i + 1 < argc) {
+          if (wcscmp(argv[i + 1], L"jp") == 0)
+            Localization::SetLang(1);
+          else if (wcscmp(argv[i + 1], L"es") == 0)
+            Localization::SetLang(2);
+          else if (wcscmp(argv[i + 1], L"fr") == 0)
+            Localization::SetLang(3);
+          else if (wcscmp(argv[i + 1], L"de") == 0)
+            Localization::SetLang(4);
+          else
+            Localization::SetLang(0); // en
         }
       }
       LocalFree(argv);
