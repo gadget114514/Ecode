@@ -534,19 +534,9 @@ foreach(PLUGIN ${CUSTOM_PLUGINS})
     )
 endforeach()
 
-find_package(nlohmann_json QUIET)
-if(nlohmann_json_FOUND)
-    add_plugin(JYEditor Application/JYEditor)
-    # Copy yaml-cpp.dll alongside JYEditor.exe
-    add_custom_command(TARGET ecode POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/Application/JYEditor/vcpkg_installed/vcpkg/blds/yaml-cpp/x64-windows-rel/yaml-cpp.dll"
-        "$<TARGET_FILE_DIR:ecode>/yaml-cpp.dll"
-        COMMENT "Copying yaml-cpp.dll..."
-    )
-else()
-    message(STATUS "JYEditor skipped (nlohmann_json not found)")
-endif()
+# JYEditor uses local header-only nlohmann_json, always build it
+add_plugin(JYEditor Application/JYEditor)
+message(STATUS "JYEditor enabled (local nlohmann_json)")
 
 
 
