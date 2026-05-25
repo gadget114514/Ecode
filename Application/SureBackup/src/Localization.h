@@ -111,16 +111,19 @@ enum class StrId {
 class Localization {
 public:
   static std::map<StrId, std::wstring> s_strings;
+  static int s_overrideLang; // -1 = auto-detect, 0 = en, 1 = jp, 2 = es, 3 = fr, 4 = de
+
+  static void SetLang(int lang) { s_overrideLang = lang; }
 
   static void Init() {
     LANGID langId = GetUserDefaultUILanguage();
     WORD primaryLang = langId & 0xFF;
 
-    // Detect language
-    bool isJapanese = (primaryLang == LANG_JAPANESE);
-    bool isSpanish = (primaryLang == LANG_SPANISH);
-    bool isFrench = (primaryLang == LANG_FRENCH);
-    bool isGerman = (primaryLang == LANG_GERMAN);
+    // Detect language (unless overridden via --lang)
+    bool isJapanese  = (s_overrideLang == 1) || (s_overrideLang < 0 && primaryLang == LANG_JAPANESE);
+    bool isSpanish   = (s_overrideLang == 2) || (s_overrideLang < 0 && primaryLang == LANG_SPANISH);
+    bool isFrench    = (s_overrideLang == 3) || (s_overrideLang < 0 && primaryLang == LANG_FRENCH);
+    bool isGerman    = (s_overrideLang == 4) || (s_overrideLang < 0 && primaryLang == LANG_GERMAN);
 
     if (isJapanese) {
       // Japanese (日本語)
@@ -709,3 +712,4 @@ public:
 };
 
 inline std::map<StrId, std::wstring> Localization::s_strings;
+inline int Localization::s_overrideLang = -1;
