@@ -364,6 +364,21 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
+
+  // Apps Menu
+  HMENU hApps = CreatePopupMenu();
+  {
+    const auto &appEntries = SettingsManager::Instance().GetAppEntries();
+    for (size_t i = 0; i < appEntries.size(); ++i) {
+      std::wstring text = appEntries[i].label + L"  \u2192  " + appEntries[i].path;
+      AppendMenu(hApps, MF_STRING, IDM_APPS_START + i, text.c_str());
+    }
+    if (!appEntries.empty())
+      AppendMenu(hApps, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hApps, MF_STRING, IDM_APPS_CONFIGURE, L"Configure App Entries...");
+  }
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hApps, L"Apps");
+
   // Process Menu - kill process-bound apps and terminals
   HMENU hProcess = CreatePopupMenu();
   bool hasProcesses = false;

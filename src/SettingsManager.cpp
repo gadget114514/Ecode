@@ -165,6 +165,18 @@ void SettingsManager::Load() {
     }
   }
 
+  // Load app entries
+  m_appEntries.clear();
+  for (int i = 0; i < 50; ++i) {
+    std::wstring keyPath = L"App_Path_" + std::to_wstring(i);
+    std::wstring keyLbl = L"App_Lbl_" + std::to_wstring(i);
+    wchar_t pathBuf[MAX_PATH], lblBuf[256];
+    if (GetPrivateProfileStringW(L"AppEntries", keyPath.c_str(), L"", pathBuf, MAX_PATH, path.c_str()) > 0) {
+      GetPrivateProfileStringW(L"AppEntries", keyLbl.c_str(), L"", lblBuf, 256, path.c_str());
+      m_appEntries.push_back({pathBuf, lblBuf});
+    }
+  }
+
   // Load CLI entries
   m_cliEntries.clear();
   for (int i = 0; i < 50; ++i) {
@@ -404,6 +416,7 @@ void SettingsManager::Save() {
   WriteInt(L"Session", L"EnableSessionManagement", m_enableSessionManagement ? 1 : 0);
 
   SaveCliEntries();
+  SaveAppEntries();
   SaveHiddenPlugins();
   SaveThemes();
 }
@@ -565,6 +578,27 @@ void SettingsManager::SaveCliEntries() {
     WritePrivateProfileStringW(L"CLI", keyIcn.c_str(), std::to_wstring(m_cliEntries[i].iconIndex).c_str(), path.c_str());
     std::wstring keyLbl = L"CLI_Lbl_" + std::to_wstring(i);
     WritePrivateProfileStringW(L"CLI", keyLbl.c_str(), m_cliEntries[i].label.c_str(), path.c_str());
+  }
+}
+
+void SettingsManager::AddAppEntry(const std::wstring &path, const std::wstring &label) {
+  m_appEntries.push_back({path, label});
+}
+
+void SettingsManager::RemoveAppEntry(size_t index) {
+  if (index < m_appEntries.size()) {
+    m_appEntries.erase(m_appEntries.begin() + index);
+  }
+}
+
+void SettingsManager::SaveAppEntries() {
+  std::wstring path = GetSettingsPath();
+  WritePrivateProfileStringW(L"AppEntries", NULL, NULL, path.c_str());
+  for (size_t i = 0; i < m_appEntries.size(); ++i) {
+    std::wstring keyPath = L"App_Path_" + std::to_wstring(i);
+    std::wstring keyLbl = L"App_Lbl_" + std::to_wstring(i);
+    WritePrivateProfileStringW(L"AppEntries", keyPath.c_str(), m_appEntries[i].path.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"AppEntries", keyLbl.c_str(), m_appEntries[i].label.c_str(), path.c_str());
   }
 }
 
