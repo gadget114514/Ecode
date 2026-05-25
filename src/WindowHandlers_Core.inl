@@ -33,6 +33,13 @@ static LRESULT HandleCreate(HWND hwnd) {
   g_tabHwnd = CreateWindowEx(0, WC_TABCONTROL, NULL,
                              WS_CHILD | WS_VISIBLE | TCS_TABS | TCS_TOOLTIPS, 0, 0, 0, 0, hwnd,
                              (HMENU)2002, GetModuleHandle(NULL), NULL);
+  {
+    NONCLIENTMETRICSW ncm = {0};
+    ncm.cbSize = sizeof(ncm);
+    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
+    HFONT hTabFont = CreateFontIndirectW(&ncm.lfMenuFont);
+    SendMessage(g_tabHwnd, WM_SETFONT, (WPARAM)hTabFont, TRUE);
+  }
   
   g_treeHwnd = CreateWindowEx(0, WC_TREEVIEW, NULL,
                               WS_CHILD | TVS_HASLINES | TVS_LINESATROOT | TVS_HASBUTTONS | TVS_SHOWSELALWAYS,
@@ -118,6 +125,11 @@ static LRESULT HandleCreate(HWND hwnd) {
   if (settings.IsWindowMaximized())
     ShowWindow(hwnd, SW_MAXIMIZE);
   ShowWindow(g_statusHwnd, settings.IsShowStatusBar() ? SW_SHOW : SW_HIDE);
+  g_noTitleBar = settings.IsNoTitleBar();
+  if (g_noTitleBar) {
+    MARGINS margins = { 1, 1, 1, 1 };
+    DwmExtendFrameIntoClientArea(hwnd, &margins);
+  }
   g_renderer->SetFont(settings.GetFontFamily(), settings.GetFontSize());
   g_renderer->SetWordWrap(settings.IsWordWrap());
   g_renderer->SetCaretStyle((EditorBufferRenderer::CaretStyle)settings.GetCaretStyle());
@@ -171,12 +183,13 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
     height = rc.bottom - rc.top;
   }
    
+  int topBarOffset = g_noTitleBar ? g_topBarHeight : 0;
   int treeWidth = g_treeVisible ? 200 : 0;
   if (g_treeVisible) {
       MoveWindow(g_treeHwnd, 0, 0, treeWidth, height, TRUE);
   }
-           
-  MoveWindow(g_tabHwnd, treeWidth, 0, width - treeWidth, 25, TRUE);
+            
+  MoveWindow(g_tabHwnd, treeWidth, topBarOffset, width - treeWidth, 25, TRUE);
   int tabHeight = 25;
   if (IsWindowVisible(g_statusHwnd))
     SendMessage(g_statusHwnd, WM_SIZE, 0, 0);
@@ -216,11 +229,11 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
                rcStatus.bottom - rcStatus.top - 4, TRUE);
   }
   int safetyMargin  = 50;
-  int contentTop    = tabHeight;
-  int contentHeight = (int)height - tabHeight - statusHeight - minibufferHeight - safetyMargin;
+  int contentTop    = topBarOffset + tabHeight;
+  int contentHeight = (int)height - contentTop - statusHeight - minibufferHeight - safetyMargin;
   int contentWidth  = (int)width  - treeWidth;
 
-  g_renderer->SetTopOffset((float)tabHeight);
+  g_renderer->SetTopOffset((float)(topBarOffset + tabHeight));
   g_renderer->SetLeftOffset((float)treeWidth);
   g_renderer->Resize(width, height);
 
@@ -230,6 +243,7 @@ static LRESULT HandleSize(HWND hwnd, LPARAM lParam) {
       MoveWindow(t.hwnd, treeWidth, contentTop,
                  contentWidth, contentHeight + safetyMargin, TRUE);
   }
+  InvalidateRect(hwnd, NULL, FALSE);
 
   UpdateScrollbars(hwnd);
   InvalidateRect(hwnd, NULL, FALSE);

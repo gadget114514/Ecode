@@ -64,6 +64,18 @@ std::string g_imeCompUtf8;
 size_t g_imeCompViewOffset = 0;
 size_t g_imeCompViewLen = 0;
 
+// Top bar / no-title-bar mode
+bool g_noTitleBar = false;
+int g_topBarHeight = 32;
+std::vector<MenuLabel> g_menuLabels;
+RECT g_minButtonRect  = {0};
+RECT g_maxButtonRect  = {0};
+RECT g_closeButtonRect = {0};
+bool g_isActive = true;
+std::wstring g_windowTitle;
+HMENU g_hSysMenu = nullptr;
+int g_topBarButtonPushed = 0;
+
 #include "TabIconHelper.inl"
 #include "TreeViewHelpers.inl"
 #include "AppMain.inl"
@@ -73,4 +85,5 @@ size_t g_imeCompViewLen = 0;
 #include "TabDragHandler.inl"
 #include "WindowHandlers_Core.inl"
 #include "WindowHandlers_Input.inl"
+#include "TopBar.inl"
 #include "TabSwitcherView.inl"

@@ -24,6 +24,13 @@
 #include <commctrl.h>
 #include <filesystem>
 #include <fstream>
+#include <dwmapi.h>
+#ifndef HTMINBUTTON
+#define HTMINBUTTON 8
+#endif
+#ifndef HTMAXBUTTON
+#define HTMAXBUTTON 9
+#endif
 #include <imm.h>
 #include <iostream>
 #include <memory>
@@ -65,6 +72,15 @@ extern int g_currentLogLevel;
 typedef void (*LogCallback)(const std::string &msg, LogLevel level);
 extern LogCallback g_logCallback;
 void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
+
+// Top bar functions (defined in TopBar.inl)
+void DrawTopBar(HDC hdc, HWND hwnd);
+void HandleTopBarClick(HWND hwnd, int x, int y);
+bool HandleTopBarButtonDown(HWND hwnd, int x, int y);
+void HandleTopBarButtonUp(HWND hwnd);
+void HandleTopBarDoubleClick(HWND hwnd);
+void HandleTopBarRightClick(HWND hwnd, int x, int y);
+bool HandleTopBarSysKeyDown(HWND hwnd, WPARAM wParam);
 
 // Window handlers
 LRESULT HandleCreate(HWND hwnd);
@@ -215,6 +231,23 @@ struct PluginEntry {
     bool hidden;
 };
 extern std::vector<PluginEntry> g_plugins;
+
+// Top bar / no-title-bar mode
+extern bool g_noTitleBar;
+extern int g_topBarHeight;
+struct MenuLabel {
+    std::wstring label;
+    HMENU        popup;
+    RECT         rect; // client-relative
+};
+extern std::vector<MenuLabel> g_menuLabels;
+extern RECT g_minButtonRect;
+extern RECT g_maxButtonRect;
+extern RECT g_closeButtonRect;
+extern bool g_isActive;
+extern std::wstring g_windowTitle;
+extern HMENU g_hSysMenu;
+extern int g_topBarButtonPushed; // 0=none, 1=min, 2=max, 3=close
 
 constexpr int TAB_ICON_GRAY   = 0;
 constexpr int TAB_ICON_BLUE   = 1;

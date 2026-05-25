@@ -383,7 +383,32 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hProcess, L"Process");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hHelp, L10N("menu_help"));
 
-  SetMenu(hwnd, hMenu);
+  if (g_noTitleBar) {
+    g_menuLabels.clear();
+    struct NamePopup { std::wstring name; HMENU popup; };
+    NamePopup defs[] = {
+      { L10N("menu_file"), hFile }, { L10N("menu_edit"), hEdit },
+      { L10N("menu_view"), hView }, { L10N("menu_config"), hConfig },
+      { L10N("menu_tools"), hTools }, { L"Plugins", hPlugins },
+    };
+    for (auto &d : defs)
+      g_menuLabels.push_back({ d.name, d.popup, {0,0,0,0} });
+    if (SettingsManager::Instance().IsShowAI())
+      g_menuLabels.push_back({ L"AI", hAi, {0,0,0,0} });
+    else
+      DestroyMenu(hAi);
+    g_menuLabels.push_back({ L10N("menu_language"), hLang, {0,0,0,0} });
+    g_menuLabels.push_back({ L10N("menu_buffers"), hBuffers, {0,0,0,0} });
+    g_menuLabels.push_back({ L"CLI", hCli, {0,0,0,0} });
+    g_menuLabels.push_back({ L"Process", hProcess, {0,0,0,0} });
+    g_menuLabels.push_back({ L10N("menu_help"), hHelp, {0,0,0,0} });
+    static HMENU s_prevMenuBar = NULL;
+    if (s_prevMenuBar) DestroyMenu(s_prevMenuBar);
+    s_prevMenuBar = hMenu;
+  } else {
+    SetMenu(hwnd, hMenu);
+  }
+
   // Set window title: "Ecode - {full file path / tab name}"
   std::wstring title = L"Ecode";
   if (g_activeAppTab >= 0 && static_cast<size_t>(g_activeAppTab) < g_appTabs.size()) {
@@ -397,6 +422,7 @@ void UpdateMenu(HWND hwnd) {
       title = L"Ecode - " + name;
     }
   }
+  g_windowTitle = title;
   SetWindowText(hwnd, title.c_str());
   UpdateScrollbars(hwnd);
   UpdateTabs(hwnd);

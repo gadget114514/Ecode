@@ -162,12 +162,21 @@ static duk_ret_t js_editor_show_status_bar(duk_context *ctx) {
 
 static duk_ret_t js_editor_show_menu_bar(duk_context *ctx) {
   bool show = duk_get_boolean(ctx, 0);
-  bool old = GetMenu(g_mainHwnd) != NULL;
-  if (show) {
-    UpdateMenu(g_mainHwnd);
+  bool old;
+  if (g_noTitleBar) {
+    old = !g_menuLabels.empty();
+    if (show)
+      UpdateMenu(g_mainHwnd);
+    else
+      g_menuLabels.clear();
   } else {
-    SetMenu(g_mainHwnd, NULL);
+    old = GetMenu(g_mainHwnd) != NULL;
+    if (show)
+      UpdateMenu(g_mainHwnd);
+    else
+      SetMenu(g_mainHwnd, NULL);
   }
+  InvalidateRect(g_mainHwnd, NULL, TRUE);
   duk_push_boolean(ctx, old);
   return 1;
 }

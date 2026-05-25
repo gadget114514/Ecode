@@ -147,6 +147,9 @@ public:
   void SetAutoSaveSessionIndex(int index);
   void ClearAutoSaveSession();
 
+  bool IsNoTitleBar() const { return m_noTitleBar; }
+  void SetNoTitleBar(bool v) { m_noTitleBar = v; }
+
   // Returns bash exe path (--cd stripped), sets workingDir to the directory from --cd if present
   std::wstring GetBashCommand(std::wstring *workingDir = nullptr) const;
 
@@ -189,6 +192,7 @@ private:
 
   RECT m_windowRect;
   bool m_maximized;
+  bool m_noTitleBar = false;
   std::wstring m_fontFamily;
   float m_fontSize;
   int m_language;

@@ -375,14 +375,14 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 
     SetDlgItemTextW(hDlg, IDC_BASH_PATH,
                     SettingsManager::Instance().GetBashPath().c_str());
-    // Hide Show AI checkbox (AI is managed separately)
-    ShowWindow(GetDlgItem(hDlg, IDC_SHOW_AI), SW_HIDE);
-
     SetDlgItemTextW(hDlg, IDC_DEFAULT_EXT,
                     SettingsManager::Instance().GetDefaultExtension().c_str());
 
     SetDlgItemTextW(hDlg, IDC_PLUGINS_DIR,
                     SettingsManager::Instance().GetPluginsDirectory().c_str());
+
+    CheckDlgButton(hDlg, IDC_NO_TITLE_BAR,
+                   SettingsManager::Instance().IsNoTitleBar() ? BST_CHECKED : BST_UNCHECKED);
 
     return (INT_PTR)TRUE;
   }
@@ -455,7 +455,17 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       GetDlgItemTextW(hDlg, IDC_PLUGINS_DIR, pluginDir, MAX_PATH);
       SettingsManager::Instance().SetPluginsDirectory(pluginDir);
 
+      bool newNoTitleBar = IsDlgButtonChecked(hDlg, IDC_NO_TITLE_BAR) == BST_CHECKED;
+      bool changed = newNoTitleBar != SettingsManager::Instance().IsNoTitleBar();
+      SettingsManager::Instance().SetNoTitleBar(newNoTitleBar);
+
       SettingsManager::Instance().Save();
+
+      if (changed) {
+        MessageBoxW(hDlg,
+          L"Changes to the title bar setting will take effect after restarting Ecode.",
+          L"Restart Required", MB_OK | MB_ICONINFORMATION);
+      }
     }
     break;
   }

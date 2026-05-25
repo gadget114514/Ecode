@@ -9,6 +9,49 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   if (uMsg == g_uFindMsgString)
     return HandleFindReplace(hwnd, lParam);
 
+  if (uMsg == WM_NCCALCSIZE && g_noTitleBar) {
+    return 0;
+  }
+  if (uMsg == WM_NCHITTEST && g_noTitleBar) {
+    POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+    ScreenToClient(hwnd, &pt);
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    int border = GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+    if (pt.y < border && pt.x < border) return HTTOPLEFT;
+    if (pt.y < border && pt.x > rc.right - border) return HTTOPRIGHT;
+    if (pt.y > rc.bottom - border && pt.x < border) return HTBOTTOMLEFT;
+    if (pt.y > rc.bottom - border && pt.x > rc.right - border) return HTBOTTOMRIGHT;
+    if (pt.x < border) return HTLEFT;
+    if (pt.x > rc.right - border) return HTRIGHT;
+    if (pt.y < border) return HTTOP;
+    if (pt.y > rc.bottom - border) return HTBOTTOM;
+    if (pt.y < g_topBarHeight) {
+      for (auto &ml : g_menuLabels) {
+        if (pt.x >= ml.rect.left && pt.x <= ml.rect.right)
+          return HTCLIENT;
+      }
+      return HTCAPTION;
+    }
+    return HTCLIENT;
+  }
+  if (uMsg == WM_NCACTIVATE && g_noTitleBar) {
+    g_isActive = (wParam != FALSE);
+    InvalidateRect(hwnd, NULL, TRUE);
+    return TRUE;
+  }
+  if (uMsg == WM_GETMINMAXINFO && g_noTitleBar) {
+    MINMAXINFO *mmi = (MINMAXINFO *)lParam;
+    RECT workArea;
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
+    int border = GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+    mmi->ptMaxPosition.x = workArea.left - border;
+    mmi->ptMaxPosition.y = workArea.top - border;
+    mmi->ptMaxSize.x = (workArea.right - workArea.left) + border * 2;
+    mmi->ptMaxSize.y = (workArea.bottom - workArea.top) + border * 2;
+    return 0;
+  }
+
   switch (uMsg) {
   case WM_CREATE:
     return HandleCreate(hwnd);
@@ -40,19 +83,45 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     return HandleCommand(hwnd, wParam, lParam);
   case WM_KEYDOWN:
   case WM_SYSKEYDOWN:
+    if (g_noTitleBar && HandleTopBarSysKeyDown(hwnd, wParam))
+      return 0;
     if (HandleKeyDown(hwnd, wParam, lParam) == 0)
       return 0;
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
   case WM_CHAR:
     return HandleChar(hwnd, wParam);
-  case WM_LBUTTONDOWN:
+  case WM_LBUTTONDOWN: {
+    if (g_noTitleBar) {
+      int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+      if (y >= 0 && y < g_topBarHeight) {
+        if (!HandleTopBarButtonDown(hwnd, x, y))
+          HandleTopBarClick(hwnd, x, y);
+        return 0;
+      }
+    }
     return HandleMouseDown(hwnd, lParam);
-  case WM_MOUSEMOVE:
-    return HandleMouseMove(hwnd, lParam);
-  case WM_LBUTTONUP:
+  }
+  case WM_LBUTTONUP: {
+    if (g_noTitleBar && g_topBarButtonPushed) {
+      HandleTopBarButtonUp(hwnd);
+      return 0;
+    }
     g_isDragging = false;
     ReleaseCapture();
     return 0;
+  }
+  case WM_LBUTTONDBLCLK: {
+    if (g_noTitleBar) {
+      int y = GET_Y_LPARAM(lParam);
+      if (y >= 0 && y < g_topBarHeight) {
+        HandleTopBarDoubleClick(hwnd);
+        return 0;
+      }
+    }
+    break;
+  }
+  case WM_MOUSEMOVE:
+    return HandleMouseMove(hwnd, lParam);
   case WM_VSCROLL:
     return HandleVScroll(hwnd, wParam);
   case WM_HSCROLL:
@@ -72,6 +141,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   case WM_CONTEXTMENU: {
     if ((HWND)wParam == g_tabHwnd) {
       return 0; // Handled by NM_RCLICK in WM_NOTIFY
+    }
+    if (g_noTitleBar) {
+      int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+      POINT pt = { x, y };
+      ScreenToClient(hwnd, &pt);
+      if (pt.y >= 0 && pt.y < g_topBarHeight) {
+        HandleTopBarRightClick(hwnd, x, y);
+        return 0;
+      }
     }
     HMENU hMenu = CreatePopupMenu();
     AppendMenu(hMenu, MF_STRING, IDM_EDIT_UNDO, L10N("menu_edit_undo"));
