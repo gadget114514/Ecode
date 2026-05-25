@@ -498,6 +498,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   if (!hwnd)
     return 0;
 
+  SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)LoadIcon(hInstance, MAKEINTRESOURCE(101)));
+  SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)LoadIcon(hInstance, MAKEINTRESOURCE(101)));
+
   if (argv) {
     for (int i = 1; i < argc; ++i) {
       if (wcscmp(argv[i], L"-headless") == 0 ||

@@ -1308,12 +1308,28 @@ INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam,
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPSTR lpCmdLine,
                    int nShowCmd) {
-  // Check for --embedded flag (host requests hidden window for embedding)
+  // Check for --embedded and --lang flags
   {
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (argv && argc >= 2 && wcscmp(argv[1], L"--embedded") == 0)
-      g_embedded = true;
+    if (argv) {
+      for (int i = 1; i < argc; ++i) {
+        if (wcscmp(argv[i], L"--embedded") == 0)
+          g_embedded = true;
+        else if (wcscmp(argv[i], L"--lang") == 0 && i + 1 < argc) {
+          if (wcscmp(argv[i + 1], L"en") == 0)
+            Localization::SetLanguage(APP_LANG_ENGLISH);
+          else if (wcscmp(argv[i + 1], L"jp") == 0)
+            Localization::SetLanguage(APP_LANG_JAPANESE);
+          else if (wcscmp(argv[i + 1], L"es") == 0)
+            Localization::SetLanguage(APP_LANG_SPANISH);
+          else if (wcscmp(argv[i + 1], L"fr") == 0)
+            Localization::SetLanguage(APP_LANG_FRENCH);
+          else if (wcscmp(argv[i + 1], L"de") == 0)
+            Localization::SetLanguage(APP_LANG_GERMAN);
+        }
+      }
+    }
     if (argv) LocalFree(argv);
   }
 

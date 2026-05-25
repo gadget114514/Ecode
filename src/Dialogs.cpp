@@ -5,6 +5,8 @@
 #include "../include/ScriptEngine.h"
 #include "../include/SettingsManager.h"
 #include "../include/resource.h"
+#include "version_config.h"
+#include "icons.h"
 #include <commdlg.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -263,8 +265,10 @@ std::wstring Dialogs::SaveFileDialog(HWND hwnd) {
 
 void Dialogs::ShowAboutDialog(HWND hwnd) {
   std::wstring title = L10N("title");
+  wchar_t version[64];
+  MultiByteToWideChar(CP_UTF8, 0, ECODE_VERSION, -1, version, 64);
   std::wstring message =
-      title + L"\nVersion 1.0\nBuilt with DirectWrite and Duktape JS.";
+      title + L"\nVersion " + version + L"\nBuilt with DirectWrite and Duktape JS.";
   MessageBoxW(hwnd, message.c_str(), L"About Ecode",
               MB_OK | MB_ICONINFORMATION);
 }
@@ -276,7 +280,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 INT_PTR CALLBACK AiSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                    LPARAM lParam);
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
-               const std::wstring& label, int type);
+               const std::wstring& label, int type, int iImage = -1);
+std::wstring GetPluginPath(const std::wstring &name);
 
 INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                  LPARAM lParam) {
@@ -833,6 +838,13 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hShell, CB_ADDSTRING, 0, (LPARAM)L"powershell");
     SendMessage(hShell, CB_ADDSTRING, 0, (LPARAM)L"bash");
     SendMessage(hShell, CB_SETCURSEL, 2, 0);
+    HWND hIcon = GetDlgItem(hDlg, IDC_CLI_ICON);
+    SendMessage(hIcon, CB_ADDSTRING, 0, (LPARAM)L"From exe");
+    for (int i = 0; i < TAB_ICON_COUNT; ++i)
+      SendMessage(hIcon, CB_ADDSTRING, 0, (LPARAM)g_tabIconNames[i]);
+    for (int i = 0; i < IDI_ICON_COUNT; ++i)
+      SendMessage(hIcon, CB_ADDSTRING, 0, (LPARAM)g_iconNames[i]);
+    SendMessage(hIcon, CB_SETCURSEL, 0, 0);
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
@@ -848,6 +860,8 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           int st = entries[sel].shellType;
           if (st < 0 || st > 2) st = 2;
           SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_SETCURSEL, st, 0);
+          int icn = entries[sel].iconIndex;
+          SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_SETCURSEL, icn < 0 ? 0 : icn + 1, 0);
           SetDlgItemTextW(hDlg, IDC_CLI_LABEL, entries[sel].label.c_str());
         }
       }
@@ -866,8 +880,9 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
       int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
       if (st < 0 || st > 2) st = 2;
+      int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0) - 1;
       if (wcslen(cmd) > 0 && wcslen(folder) > 0) {
-        SettingsManager::Instance().AddCliEntry(cmd, folder, enc, st, 0, lbl);
+        SettingsManager::Instance().AddCliEntry(cmd, folder, enc, st, icn, lbl);
         SettingsManager::Instance().Save();
         RefreshCliList(hDlg);
       }
@@ -909,14 +924,15 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           if (enc < 0) enc = 0;
           int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
           if (st < 0 || st > 2) st = 2;
+          int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0) - 1;
       wchar_t lbl[256];
       GetDlgItemTextW(hDlg, IDC_CLI_LABEL, lbl, 256);
       entries[sel].command   = cmd;
       entries[sel].folder    = folder;
       entries[sel].encoding  = enc;
       entries[sel].shellType = st;
-      entries[sel].iconIndex = 0;
-          entries[sel].label     = lbl;
+      entries[sel].iconIndex = icn;
+      entries[sel].label     = lbl;
           SettingsManager::Instance().SetCliEntries(entries);
           SettingsManager::Instance().Save();
           RefreshCliList(hDlg);
@@ -994,15 +1010,9 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         if (pos != std::wstring::npos) label = label.substr(pos + 1);
       }
       if (label.empty()) label = L"CLI";
-      wchar_t modPath[MAX_PATH];
-      GetModuleFileNameW(nullptr, modPath, MAX_PATH);
-      std::wstring exeDir = modPath;
-      exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
-      std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
-      if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
-        termExe = exeDir + L"\\Terminal.exe";
+      std::wstring termExe = GetPluginPath(L"Terminal.exe");
       if (g_editor) g_editor->LogMessage("[Launch] CLI Dialog: " + WStringToString(shellArgs));
-      LaunchApp(parent, termExe, shellArgs, label, 10, icn);
+      LaunchApp(parent, termExe, shellArgs, label, 10);
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDCANCEL) {

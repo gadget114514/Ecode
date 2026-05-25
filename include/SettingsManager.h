@@ -9,7 +9,7 @@ struct CliEntry {
   std::wstring folder;
   int encoding; // 0=UTF8, 1=ShiftJIS
   int shellType; // 0=cmd, 1=powershell, 2=bash
-  int iconIndex = 0; // 0=Gray, 1=Blue, ...
+  int iconIndex = -1; // -1 = auto (from exe), 0-11 = colored square
   std::wstring label; // custom tab label (empty = auto from folder)
 };
 
@@ -157,7 +157,7 @@ public:
   // CLI entries
   const std::vector<CliEntry> &GetCliEntries() const { return m_cliEntries; }
   void SetCliEntries(const std::vector<CliEntry> &entries) { m_cliEntries = entries; }
-  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding = 0, int shellType = 2, int iconIndex = 0, const std::wstring &label = L"");
+  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding = 0, int shellType = 2, int iconIndex = -1, const std::wstring &label = L"");
   void RemoveCliEntry(size_t index);
   void SaveCliEntries();
 

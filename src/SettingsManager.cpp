@@ -1,4 +1,6 @@
 #include "../include/SettingsManager.h"
+#include "../include/Buffer.h"
+#include "../include/Editor.h"
 #include <shlobj.h>
 #include "../include/StringHelpers.h"
 
@@ -177,7 +179,7 @@ void SettingsManager::Load() {
       GetPrivateProfileStringW(L"CLI", keyDir.c_str(), L"", dirBuf, MAX_PATH, path.c_str());
       int enc = GetPrivateProfileIntW(L"CLI", keyEnc.c_str(), 0, path.c_str());
       int st = GetPrivateProfileIntW(L"CLI", keyShl.c_str(), 2, path.c_str());
-      int icn = GetPrivateProfileIntW(L"CLI", keyIcn.c_str(), 0, path.c_str());
+      int icn = GetPrivateProfileIntW(L"CLI", keyIcn.c_str(), -1, path.c_str());
       GetPrivateProfileStringW(L"CLI", keyLbl.c_str(), L"", lblBuf, 256, path.c_str());
       m_cliEntries.push_back({cmdBuf, dirBuf, enc, st, icn, lblBuf});
     }
@@ -555,11 +557,11 @@ void SettingsManager::SaveCliEntries() {
     std::wstring keyDir = L"CLI_Dir_" + std::to_wstring(i);
     std::wstring keyEnc = L"CLI_Enc_" + std::to_wstring(i);
     std::wstring keyShl = L"CLI_Shell_" + std::to_wstring(i);
-    std::wstring keyIcn = L"CLI_Icon_" + std::to_wstring(i);
     WritePrivateProfileStringW(L"CLI", keyCmd.c_str(), m_cliEntries[i].command.c_str(), path.c_str());
     WritePrivateProfileStringW(L"CLI", keyDir.c_str(), m_cliEntries[i].folder.c_str(), path.c_str());
     WritePrivateProfileStringW(L"CLI", keyEnc.c_str(), std::to_wstring(m_cliEntries[i].encoding).c_str(), path.c_str());
     WritePrivateProfileStringW(L"CLI", keyShl.c_str(), std::to_wstring(m_cliEntries[i].shellType).c_str(), path.c_str());
+    std::wstring keyIcn = L"CLI_Icon_" + std::to_wstring(i);
     WritePrivateProfileStringW(L"CLI", keyIcn.c_str(), std::to_wstring(m_cliEntries[i].iconIndex).c_str(), path.c_str());
     std::wstring keyLbl = L"CLI_Lbl_" + std::to_wstring(i);
     WritePrivateProfileStringW(L"CLI", keyLbl.c_str(), m_cliEntries[i].label.c_str(), path.c_str());
@@ -677,6 +679,11 @@ int SettingsManager::SaveSession(const std::wstring &name) {
 
   // Write session metadata
   std::wstring iniPath = sessionDir + L"\\session.ini";
+
+  auto WriteInt = [&](const wchar_t *sect, const wchar_t *key, int val) {
+    WritePrivateProfileStringW(sect, key, std::to_wstring(val).c_str(), iniPath.c_str());
+  };
+
   WritePrivateProfileStringW(L"Session", L"Name", name.c_str(), iniPath.c_str());
 
   SYSTEMTIME st;
@@ -769,7 +776,7 @@ bool SettingsManager::LoadSession(int index) {
     if (!path.empty() && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
       bufIdx = g_editor->OpenFile(path);
     } else if (!contentFile.empty()) {
-      g_editor->NewFile(L"Restored");
+      g_editor->NewFile("Restored");
       bufIdx = g_editor->GetBuffers().size() - 1;
       std::wstring contentPath = sessionDir + L"\\" + contentFile;
       FILE *f = _wfopen(contentPath.c_str(), L"rb");
