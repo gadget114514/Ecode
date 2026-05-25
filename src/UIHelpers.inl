@@ -421,7 +421,6 @@ void UpdateMenu(HWND hwnd) {
       g_menuLabels.push_back({ L"AI", hAi, {0,0,0,0} });
     else
       DestroyMenu(hAi);
-    g_menuLabels.push_back({ L10N("menu_language"), hLang, {0,0,0,0} });
     g_menuLabels.push_back({ L10N("menu_buffers"), hBuffers, {0,0,0,0} });
     g_menuLabels.push_back({ L"CLI", hCli, {0,0,0,0} });
     g_menuLabels.push_back({ L"Process", hProcess, {0,0,0,0} });
