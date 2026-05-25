@@ -1,30 +1,30 @@
 // Emacs-style Key Bindings
 console.log("Loading Emacs key bindings...");
-Editor.setGlobalKeyBinding("Ctrl+N", "emacs_next_line");
-Editor.setGlobalKeyBinding("Ctrl+P", "emacs_prev_line");
-Editor.setGlobalKeyBinding("Ctrl+F", "emacs_forward_char");
-Editor.setGlobalKeyBinding("Ctrl+B", "emacs_backward_char");
-Editor.setGlobalKeyBinding("Ctrl+A", "emacs_line_start");
-Editor.setGlobalKeyBinding("Ctrl+E", "emacs_line_end");
-Editor.setGlobalKeyBinding("Ctrl+D", "emacs_delete_char");
-Editor.setGlobalKeyBinding("Ctrl+H", "emacs_backspace");
-Editor.setGlobalKeyBinding("Ctrl+K", "emacs_kill_line");
-Editor.setGlobalKeyBinding("Ctrl+Y", "emacs_yank");
-Editor.setGlobalKeyBinding("Ctrl+Space", "emacs_set_mark");
-Editor.setGlobalKeyBinding("Ctrl+V", "emacs_scroll_down");
-Editor.setGlobalKeyBinding("Alt+V", "emacs_scroll_up");
-Editor.setGlobalKeyBinding("Ctrl+T", "emacs_transpose_chars");
-Editor.setGlobalKeyBinding("Ctrl+S", "emacs_isearch_forward");
-Editor.setGlobalKeyBinding("Ctrl+R", "emacs_isearch_backward");
-Editor.setGlobalKeyBinding("Ctrl+G", "emacs_quit");
-Editor.setGlobalKeyBinding("Ctrl+W", "emacs_kill_region");
-Editor.setGlobalKeyBinding("Alt+<", "emacs_beginning_of_buffer");
-Editor.setGlobalKeyBinding("Alt+>", "emacs_end_of_buffer");
-Editor.setGlobalKeyBinding("Alt+Y", "emacs_yank_pop");
-Editor.setGlobalKeyBinding("Alt+W", "emacs_copy_region");
-Editor.setGlobalKeyBinding("Alt+X", "emacs_execute_extended_command");
-Editor.setGlobalKeyBinding("Alt+Z", "emacs_redo");
-Editor.setGlobalKeyBinding("F12", "tag_jump");
+Editor.setKeyBinding("Ctrl+N", "emacs_next_line");
+Editor.setKeyBinding("Ctrl+P", "emacs_prev_line");
+Editor.setKeyBinding("Ctrl+F", "emacs_forward_char");
+Editor.setKeyBinding("Ctrl+B", "emacs_backward_char");
+Editor.setKeyBinding("Ctrl+A", "emacs_line_start");
+Editor.setKeyBinding("Ctrl+E", "emacs_line_end");
+Editor.setKeyBinding("Ctrl+D", "emacs_delete_char");
+Editor.setKeyBinding("Ctrl+H", "emacs_backspace");
+Editor.setKeyBinding("Ctrl+K", "emacs_kill_line");
+Editor.setKeyBinding("Ctrl+Y", "emacs_yank");
+Editor.setKeyBinding("Ctrl+Space", "emacs_set_mark");
+Editor.setKeyBinding("Ctrl+V", "emacs_scroll_down");
+Editor.setKeyBinding("Alt+V", "emacs_scroll_up");
+Editor.setKeyBinding("Ctrl+T", "emacs_transpose_chars");
+Editor.setKeyBinding("Ctrl+S", "emacs_isearch_forward");
+Editor.setKeyBinding("Ctrl+R", "emacs_isearch_backward");
+Editor.setKeyBinding("Ctrl+G", "emacs_quit");
+Editor.setKeyBinding("Ctrl+W", "emacs_kill_region");
+Editor.setKeyBinding("Alt+<", "emacs_beginning_of_buffer");
+Editor.setKeyBinding("Alt+>", "emacs_end_of_buffer");
+Editor.setKeyBinding("Alt+Y", "emacs_yank_pop");
+Editor.setKeyBinding("Alt+W", "emacs_copy_region");
+Editor.setKeyBinding("Alt+X", "emacs_execute_extended_command");
+Editor.setKeyBinding("Alt+Z", "emacs_redo");
+Editor.setKeyBinding("F12", "tag_jump");
 
 // Kill ring implementation (Emacs-style kill/yank system)
 var killRing = [];
@@ -309,9 +309,9 @@ function emacs_execute_extended_command() {
 // Standard Windows CUA (Common User Access) keybindings
 // Ctrl+V and Ctrl+Y are preserved as Emacs bindings (scroll down and yank)
 console.log("Adding Windows CUA keybindings...");
-Editor.setGlobalKeyBinding("Ctrl+X", "cua_cut");
-Editor.setGlobalKeyBinding("Ctrl+C", "cua_copy");
-Editor.setGlobalKeyBinding("Ctrl+Z", "cua_undo");
+Editor.setKeyBinding("Ctrl+X", "cua_cut");
+Editor.setKeyBinding("Ctrl+C", "cua_copy");
+Editor.setKeyBinding("Ctrl+Z", "cua_undo");
 
 function cua_cut() { Editor.cut(); }
 function cua_copy() { Editor.copy(); }
@@ -360,8 +360,8 @@ function emacs_eval_line_or_selection() {
     }
 }
 
-Editor.setGlobalKeyBinding("Ctrl+Enter", "emacs_eval_line_or_selection");
-Editor.setGlobalKeyBinding("Ctrl+/", "emacs_redo");
+Editor.setKeyBinding("Ctrl+Enter", "emacs_eval_line_or_selection");
+Editor.setKeyBinding("Ctrl+/", "emacs_redo");
 
 // Shell mode
 var emacs_shell_cmd = "cmd.exe";
@@ -370,7 +370,7 @@ function emacs_shell() {
     lastCommandWasYank = false;
 }
 
-Editor.setGlobalKeyBinding("Alt+X", "emacs_execute_command");
+Editor.setKeyBinding("Alt+X", "emacs_execute_command");
 
 // M-x command registry
 var emacs_mx_commands = {
@@ -387,7 +387,7 @@ function emacs_execute_command() {
 }
 
 // C-x prefix implementation
-Editor.setGlobalKeyBinding("Ctrl+X", "emacs_ctrl_x_prefix");
+Editor.setKeyBinding("Ctrl+X", "emacs_ctrl_x_prefix");
 
 function emacs_ctrl_x_prefix() {
     Editor.setCaptureKeyboard(true);
@@ -487,7 +487,7 @@ function emacs_kill_buffer() {
 }
 
 // Goto line M-g g
-Editor.setGlobalKeyBinding("Alt+G", "emacs_goto_line_prefix");
+Editor.setKeyBinding("Alt+G", "emacs_goto_line_prefix");
 function emacs_goto_line_prefix() {
     Editor.setCaptureKeyboard(true);
     Editor.setStatusText("M-g-");
@@ -511,7 +511,7 @@ function on_goto_line_input(input) {
 }
 
 // M-! shell-command
-Editor.setGlobalKeyBinding("Alt+Shift+1", "emacs_shell_command"); // Alt+!
+Editor.setKeyBinding("Alt+Shift+1", "emacs_shell_command"); // Alt+!
 function emacs_shell_command() {
     Editor.showMinibuffer("Shell command: ", "callback", "on_shell_command_input");
 }

@@ -30,9 +30,8 @@ if(MSVC)
 endif()
 
 
-# nlohmann_json via vcpkg
-find_package(nlohmann_json CONFIG REQUIRED)
-target_link_libraries(JYEditor PRIVATE nlohmann_json::nlohmann_json)
+# nlohmann_json (header-only, local copy)
+target_include_directories(JYEditor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # yaml-cpp built from source via FetchContent
 include(FetchContent)

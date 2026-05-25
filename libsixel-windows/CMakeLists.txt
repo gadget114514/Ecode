@@ -7,32 +7,33 @@ set(CMAKE_CXX_STANDARD 11)
 option(BUILD_WIC "Build WIC (Windows Imaging Component) codec DLL" OFF)
 
 # --- libsixel static library ---
+set(LIBSIXEL_SRC_DIR "${PROJECT_SOURCE_DIR}/libsixel-master/libsixel-master/src")
 add_library(libsixel STATIC
-    ${PROJECT_SOURCE_DIR}/../src/output.c
-    ${PROJECT_SOURCE_DIR}/../src/fromsixel.c
-    ${PROJECT_SOURCE_DIR}/../src/tosixel.c
-    ${PROJECT_SOURCE_DIR}/../src/quant.c
-    ${PROJECT_SOURCE_DIR}/../src/dither.c
-    ${PROJECT_SOURCE_DIR}/../src/frame.c
-    ${PROJECT_SOURCE_DIR}/../src/pixelformat.c
-    ${PROJECT_SOURCE_DIR}/../src/scale.c
-    ${PROJECT_SOURCE_DIR}/../src/chunk.c
-    ${PROJECT_SOURCE_DIR}/../src/loader.c
-    ${PROJECT_SOURCE_DIR}/../src/frompnm.c
-    ${PROJECT_SOURCE_DIR}/../src/fromgif.c
-    ${PROJECT_SOURCE_DIR}/../src/encoder.c
-    ${PROJECT_SOURCE_DIR}/../src/decoder.c
-    ${PROJECT_SOURCE_DIR}/../src/stb_image_write.c
-    ${PROJECT_SOURCE_DIR}/../src/writer.c
-    ${PROJECT_SOURCE_DIR}/../src/status.c
-    ${PROJECT_SOURCE_DIR}/../src/malloc_stub.c
-    ${PROJECT_SOURCE_DIR}/../src/allocator.c
+    ${LIBSIXEL_SRC_DIR}/output.c
+    ${LIBSIXEL_SRC_DIR}/fromsixel.c
+    ${LIBSIXEL_SRC_DIR}/tosixel.c
+    ${LIBSIXEL_SRC_DIR}/quant.c
+    ${LIBSIXEL_SRC_DIR}/dither.c
+    ${LIBSIXEL_SRC_DIR}/frame.c
+    ${LIBSIXEL_SRC_DIR}/pixelformat.c
+    ${LIBSIXEL_SRC_DIR}/scale.c
+    ${LIBSIXEL_SRC_DIR}/chunk.c
+    ${LIBSIXEL_SRC_DIR}/loader.c
+    ${LIBSIXEL_SRC_DIR}/frompnm.c
+    ${LIBSIXEL_SRC_DIR}/fromgif.c
+    ${LIBSIXEL_SRC_DIR}/encoder.c
+    ${LIBSIXEL_SRC_DIR}/decoder.c
+    ${LIBSIXEL_SRC_DIR}/stb_image_write.c
+    ${LIBSIXEL_SRC_DIR}/writer.c
+    ${LIBSIXEL_SRC_DIR}/status.c
+    ${LIBSIXEL_SRC_DIR}/malloc_stub.c
+    ${LIBSIXEL_SRC_DIR}/allocator.c
     ${PROJECT_SOURCE_DIR}/tty.c
 )
 
 target_include_directories(libsixel
     PRIVATE
-        ${PROJECT_SOURCE_DIR}/../src
+        ${LIBSIXEL_SRC_DIR}
         ${PROJECT_SOURCE_DIR}
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
