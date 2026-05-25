@@ -448,6 +448,7 @@ add_plugin(CSVEditor Application/CSVEditor)
 add_plugin(FastFileSearch Application/FastFileSearch)
 add_plugin(FastFD Application/FastFD)
 add_plugin(Terminal  Application/Terminal)
+add_plugin(SureBackup Application/SureBackup)
 
 # Copy FastFileSearch to apps/ directory for app launcher
 set(plugin_out "$<TARGET_FILE_DIR:ecode>")
