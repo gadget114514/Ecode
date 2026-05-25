@@ -172,8 +172,13 @@ private:
     // but we need one for the chunk pointer lifetime)
     std::mutex outputMutex_;
 
-    // Pending hyperlink URL (for Ctrl+click)
-    std::wstring pendingHyperlinkUrl_;
+    // Hyperlink config (from settings.ini [Terminal] section)
+    bool clickToOpenHyperlink_ = true;
+    int  hyperlinkModifier_    = 3;     // 0=Ctrl, 1=Alt, 2=Shift, 3=no modifier
+    std::wstring hyperlinkOpenCommand_; // empty = ShellExecuteW, else {url} template
+
+    // Is there a hyperlink at the given client-area point?
+    bool IsHyperlinkAt(int px, int py) const;
 
     // Selection state
     bool selecting_    = false;
