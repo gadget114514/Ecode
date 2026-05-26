@@ -409,6 +409,7 @@ void Editor::Paste(HWND hwnd) {
           } else {
             active->Insert(active->GetCaretPos(), text.data());
             active->MoveCaret(static_cast<int>(strlen(text.data())));
+            active->SetSelectionAnchor(active->GetCaretPos());
           }
         }
       }
@@ -526,4 +527,41 @@ Buffer *Editor::GetBufferByName(const std::wstring &name) {
     }
   }
   return nullptr;
+}
+
+SessionBufferState Editor::GetBufferState(size_t index) const {
+  SessionBufferState state;
+  if (index >= m_buffers.size()) return state;
+
+  auto *buf = m_buffers[index].get();
+  state.path = buf->GetPath();
+  state.caretPos = buf->GetCaretPos();
+  state.selectionAnchor = buf->GetSelectionAnchor();
+  state.scrollLine = (int)buf->GetScrollLine();
+  state.scrollX = (int)buf->GetScrollX();
+  state.encoding = (int)buf->GetEncoding();
+  state.isDirty = buf->IsDirty();
+  state.isScratch = buf->IsScratch();
+  state.isShell = buf->IsShell();
+
+  for (auto line : buf->GetFoldedLines())
+    state.foldedLines.push_back((int)line);
+
+  return state;
+}
+
+void Editor::RestoreBufferState(size_t index, const SessionBufferState &state) {
+  if (index >= m_buffers.size()) return;
+
+  auto *buf = m_buffers[index].get();
+  buf->SetCaretPos(state.caretPos);
+  buf->SetSelectionAnchor(state.selectionAnchor);
+  buf->SetScrollLine(state.scrollLine);
+  buf->SetScrollX((float)state.scrollX);
+
+  if (state.isScratch) buf->SetScratch(true);
+  if (state.isShell) buf->SetShell(true);
+
+  for (int line : state.foldedLines)
+    buf->FoldLine((size_t)line);
 }

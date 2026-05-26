@@ -1,0 +1,17 @@
+:Path : 用語 ':Path' は、コマンドレット、関数、スクリプト ファイル、または操作可能なプログラムの名前として認識されません。名
+前が正しく記述されていることを確認し、パスが含まれている場合はそのパスが正しいことを確認してから、再試行してください。
+発生場所 行:1 文字:5
++ & { :Path = [System.Environment]::GetEnvironmentVariable('Path','Mach ...
++     ~~~~~
+    + CategoryInfo          : ObjectNotFound: (:Path:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+msbuild : 用語 'msbuild' は、コマンドレット、関数、スクリプト ファイル、または操作可能なプログラムの名前として認識されませ
+ん。名前が正しく記述されていることを確認し、パスが含まれている場合はそのパスが正しいことを確認してから、再試行してください
+。
+発生場所 行:1 文字:226
++ ... ft Visual Studio\2022\Community\MSBuild\Current\Bin'; msbuild build/E ...
++                                                           ~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (msbuild:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

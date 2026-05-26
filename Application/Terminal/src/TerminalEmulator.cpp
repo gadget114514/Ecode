@@ -9,6 +9,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cwchar>
+#include <cstdio>
+#include <unordered_map>
+
+
 
 // ---------------------------------------------------------------------------
 // 16-colour ANSI palette  (Windows Terminal / xterm standard)
@@ -34,16 +38,16 @@ static const TermColor kAnsiPalette[16] = {
     TermColor::fromRgb(242, 242, 242),  // 15 Bright White
 };
 
-static TermColor ansiColor(int index) {
+static TermColor ansiColor(int index, const TerminalBuffer* buffer) {
     if (index < 0 || index > 15) index = 0;
-    return kAnsiPalette[index];
+    return buffer ? buffer->paletteColor(index) : kAnsiPalette[index];
 }
 
 // xterm 256-colour palette
-static TermColor color256(int index) {
+static TermColor color256(int index, const TerminalBuffer* buffer) {
     if (index < 0)   index = 0;
     if (index > 255) index = 255;
-    if (index < 16)  return kAnsiPalette[index];
+    if (index < 16)  return ansiColor(index, buffer);
     if (index >= 232) {
         int v = 8 + (index - 232) * 10;
         return TermColor::fromRgb((uint8_t)v, (uint8_t)v, (uint8_t)v);
@@ -109,6 +113,14 @@ void TerminalEmulator::reset(TerminalBuffer* buffer) {
     isInverseMode_    = false;
     lineDrawingG0_    = false;
     activeHyperlinkUrl_.clear();
+
+    // Reset multipart state
+    multipartActive_  = false;
+    multipartOptions_.clear();
+    multipartBuffer_.clear();
+
+    // Reset DCS buffer
+    dcsBuffer_.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -140,13 +152,25 @@ void TerminalEmulator::process(const std::wstring& text) {
         }
 
         // ----------------------------------------------------------------
-        // DCS accumulation (ignored, consumed until ST)
+        // DCS accumulation (Sixel data)
         // ----------------------------------------------------------------
         if (state_ == State::DcsEntry) {
-            if (ch == L'\x1b' && i + 1 < text.size() && text[i+1] == L'\\') {
-                state_ = State::Ground; ++i;
+            if (ch == L'\x1b') {
+                // ESC always terminates DCS (handles cross-chunk ESC\ splits too)
+                handleDcs(dcsBuffer_);
+                dcsBuffer_.clear();
+                if (i + 1 < text.size() && text[i+1] == L'\\') {
+                    ++i; // consume the ST backslash
+                    state_ = State::Ground;
+                } else {
+                    state_ = State::Escape; // let next char be processed as ESC sequence
+                }
             } else if (ch == L'\a') {
+                handleDcs(dcsBuffer_);
+                dcsBuffer_.clear();
                 state_ = State::Ground;
+            } else if (ch >= 0x20 && ch <= 0x7e) {
+                dcsBuffer_.push_back((char)ch);
             }
             continue;
         }
@@ -238,50 +262,35 @@ void TerminalEmulator::process(const std::wstring& text) {
 // ESC X handling
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handleEscape(wchar_t ch) {
-    wchar_t buf[128];
     switch (ch) {
     case L'[':
-        logDebug(L"[VT] ESC [ (CSI)");
         state_ = State::Csi; csiParams_.clear(); break;
     case L']':
-        logDebug(L"[VT] ESC ] (OSC)");
         state_ = State::Osc; oscText_.clear();   break;
     case L'P':
-        logDebug(L"[VT] ESC P (DCS)");
-        state_ = State::DcsEntry;                break;
+        state_ = State::DcsEntry; dcsBuffer_.clear();
+        break;
     case L'(':
-        swprintf_s(buf, L"[VT] ESC ( (charset G0)\n");
-        logDebug(buf);
         state_ = State::CharsetG0;               break;
     case L')':
-        logDebug(L"[VT] ESC ) (charset G1)");
         state_ = State::CharsetG1;               break;
     case L'7':
-        logDebug(L"[VT] ESC 7 (save cursor)");
         buffer_->saveCursor();                   break;
     case L'8':
-        logDebug(L"[VT] ESC 8 (restore cursor)");
         buffer_->restoreCursor();                break;
     case L'D':
-        logDebug(L"[VT] ESC D (line feed / IND)");
         buffer_->lineFeed();                     break;
     case L'E':
-        logDebug(L"[VT] ESC E (CR+LF / NEL)");
         buffer_->carriageReturn(); buffer_->lineFeed(); break;
     case L'M':
-        logDebug(L"[VT] ESC M (reverse index / RI)");
         buffer_->reverseIndex();                 break;
     case L'c': // RIS – full reset
-        logDebug(L"[VT] ESC c (RIS – full reset)");
         buffer_->clearScreen();
         buffer_->resetScrollRegion();
         reset(buffer_);
         break;
-    default: {
-        swprintf_s(buf, L"[VT] unknown ESC %c (0x%02x)\n", ch, (unsigned)ch);
-        logDebug(buf);
+    default:
         break;
-    }
     }
 }
 
@@ -289,11 +298,6 @@ void TerminalEmulator::handleEscape(wchar_t ch) {
 // CSI dispatch
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
-    {
-        wchar_t buf[256];
-        swprintf_s(buf, L"[VT] CSI %s%c\n", raw.c_str(), fin);
-        logDebug(buf);
-    }
     // strip leading parameter bytes that aren't digits/semicolons
     std::wstring params;
     for (wchar_t c : raw)
@@ -301,15 +305,16 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             params += c;
 
     // --- private / extended first-byte prefixes ---
+    wchar_t prefix = 0;
     if (!params.empty() && (params[0] == L'?' || params[0] == L'>')) {
-        wchar_t prefix = params[0];
+        prefix = params[0];
         std::wstring rest = params.substr(1);
         if (prefix == L'?' && (fin == L'h' || fin == L'l')) {
             handlePrivateMode(rest, fin == L'h');
             return;
         }
         if (prefix == L'?' && (fin == L's' || fin == L'r')) {
-            // save/restore private modes — ignored
+            handlePrivateModeSaveRestore(rest, fin == L's');
             return;
         }
         if (prefix == L'>' && fin == L'c') {
@@ -328,7 +333,18 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             queryKittyKeyboardProtocol();
             return;
         }
-        // fall through for unrecognised prefixes
+        if (prefix == L'?' && fin == L'J') {
+            // DECSED: Selective Erase in Display — treat as ED (DECSCA not implemented)
+            buffer_->clearScreenMode(paramInt(splitParams(rest), 0, 0), currentAttrs_);
+            return;
+        }
+        if (prefix == L'?' && fin == L'K') {
+            // DECSEL: Selective Erase in Line — treat as EL (DECSCA not implemented)
+            buffer_->clearLine(paramInt(splitParams(rest), 0, 0), currentAttrs_);
+            return;
+        }
+        // fall through for unrecognised prefixes — strip prefix so numeric params parse correctly
+        params = rest;
     }
 
     auto parts = splitParams(params);
@@ -389,9 +405,44 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             buffer_->reverseRectAttr(RP(0,1)-1, RP(1,1)-1, RP(2,1)-1, RP(3,1)-1);
             return;
         }
-        wchar_t buf[256];
-        swprintf_s(buf, L"[VT] unknown CSI $ %s%c\n", clean.c_str(), fin);
-        logDebug(buf);
+        if (fin == L'p') {
+            if (prefix == L'?') {
+                // DECRPM: Report Mode — respond with mode state
+                int ps = 0;
+                if (!rparts.empty()) { try { ps = std::stoi(rparts[0]); } catch(...) {} }
+                bool enabled = false;
+                switch (ps) {
+                case 1:    enabled = buffer_->applicationCursorMode();       break;
+                case 6:    enabled = buffer_->originMode();                   break;
+                case 7:    enabled = buffer_->autoWrapEnabled();              break;
+                case 12:   enabled = buffer_->cursorBlink();                  break;
+                case 25:   enabled = buffer_->cursorVisible();                break;
+                case 1000: enabled = buffer_->mouseTrackingMode() == 1000;    break;
+                case 1002: enabled = buffer_->mouseTrackingMode() == 1002;    break;
+                case 1003: enabled = buffer_->mouseTrackingMode() == 1003;    break;
+                case 1004: enabled = buffer_->focusEventReportingEnabled();   break;
+                case 1006: enabled = buffer_->sgrMouseEnabled();              break;
+                case 47:
+                case 1047:
+                case 1049: enabled = buffer_->alternateScreenActive();       break;
+                case 2004: enabled = buffer_->bracketedPasteEnabled();        break;
+                case 2026: enabled = buffer_->syncOutputEnabled();            break;
+                }
+                wchar_t buf[64];
+                swprintf(buf, 64, L"\x1b[?%d;%d$y", ps, enabled ? 1 : 2);
+                emitResponse(buf);
+            } else {
+                // DECRQSS: Request Status String — respond with $y
+                int q = 0;
+                if (!rparts.empty()) { try { q = std::stoi(rparts[0]); } catch(...) {} }
+                if (q == 1) {
+                    emitResponse(L"\x1b[1;61;1$y"); // DECSCL
+                } else if (q == 2) {
+                    emitResponse(L"\x1b[2;0$y");     // DECSCA
+                }
+            }
+            return;
+        }
         return;
     }
 
@@ -465,12 +516,8 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             handleCursorStyle(P(0,0));
         break;
 
-    default: {
-        wchar_t buf[256];
-        swprintf_s(buf, L"[VT] unknown CSI %s%c\n", params.c_str(), fin);
-        logDebug(buf);
+    default:
         break;
-    }
     }
 }
 
@@ -490,40 +537,48 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
         case 25:   buffer_->setCursorVisible(enabled);                break;
         case 1000: buffer_->setMouseTrackingMode(enabled ? 1000 : 0); break;
         case 1001: /* highlight mouse — not supported */
-            logDebug(L"[VT] private mode 1001 (highlight mouse) not supported");
             break;
         case 1002: buffer_->setMouseTrackingMode(enabled ? 1002 : 0); break;
         case 1003: buffer_->setMouseTrackingMode(enabled ? 1003 : 0); break;
         case 1004: buffer_->setFocusEventReportingEnabled(enabled);   break;
         case 1005: /* UTF-8 mouse encoding — not supported */
-            logDebug(L"[VT] private mode 1005 (UTF-8 mouse) not supported");
             break;
         case 1006: buffer_->setSgrMouseEnabled(enabled);              break; // SGR mouse (terminalpp)
         case 47:
         case 1047:
         case 1049: buffer_->useAlternateScreen(enabled);              break;
+        case 1048:
+            if (enabled) buffer_->saveCursor();
+            else         buffer_->restoreCursor();
+            break;
         case 2004: buffer_->setBracketedPasteEnabled(enabled);        break;
-        // Windows Terminal extensions – not implemented
-        case 2026:
-            logDebug(L"[VT] private mode 2026 (win32-input-mode) not implemented");
+        // Windows Terminal extensions – 2026 implemented, rest no-op
+        case 2026: // synchronised output
+            buffer_->setSyncOutputEnabled(enabled);
             break;
         case 2027:
-            logDebug(L"[VT] private mode 2027 (win32-keyboard-mode) not implemented");
             break;
         case 2031:
-            logDebug(L"[VT] private mode 2031 not implemented");
             break;
         case 9001:
-            logDebug(L"[VT] private mode 9001 not implemented");
             break;
-    default: {
-        wchar_t buf[128];
-        swprintf_s(buf, L"[VT] unknown %s mode %d\n", enabled ? L"SET" : L"RST", value);
-        logDebug(buf);
+    default:
         break;
     }
-    }
 }
+}
+
+void TerminalEmulator::handlePrivateModeSaveRestore(const std::wstring& params, bool save) {
+    auto modes = splitParams(params);
+    for (auto& m : modes) {
+        int value = 0;
+        try { value = std::stoi(m); } catch(...) { continue; }
+        if (save) {
+            buffer_->savePrivateMode(value);
+        } else {
+            buffer_->restorePrivateMode(value);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -620,19 +675,15 @@ void TerminalEmulator::handleSgr(const std::vector<std::wstring>& parts) {
             if (v >= 30 && v <= 37) {
                 int idx = v - 30;
                 if (boldIsBright_ && isBold_) idx += 8;
-                currentAttrs_.foreground = ansiColor(idx);
+                currentAttrs_.foreground = ansiColor(idx, buffer_);
                 currentAttrs_.decorColor = currentAttrs_.foreground;
             } else if (v >= 40 && v <= 47) {
-                currentAttrs_.background = ansiColor(v - 40);
+                currentAttrs_.background = ansiColor(v - 40, buffer_);
             } else if (v >= 90 && v <= 97) {
-                currentAttrs_.foreground = ansiColor(v - 82); // 90-97 → 8-15
+                currentAttrs_.foreground = ansiColor(v - 82, buffer_); // 90-97 → 8-15
                 currentAttrs_.decorColor = currentAttrs_.foreground;
             } else if (v >= 100 && v <= 107) {
-                currentAttrs_.background = ansiColor(v - 92);
-            } else {
-                wchar_t buf[128];
-                swprintf_s(buf, L"[VT] unknown SGR %d\n", v);
-                logDebug(buf);
+                currentAttrs_.background = ansiColor(v - 92, buffer_);
             }
             break;
         }
@@ -650,7 +701,7 @@ TermColor TerminalEmulator::parseSgrExtendedColor(const std::vector<std::wstring
         if (i >= parts.size()) return DefaultFg();
         int idx = 0;
         try { idx = std::stoi(parts[i]); } catch(...) {}
-        return color256(idx);
+        return color256(idx, buffer_);
     }
     if (mode == 2) { // truecolor
         if (i + 3 >= parts.size()) { i += 3; return DefaultFg(); }
@@ -662,6 +713,33 @@ TermColor TerminalEmulator::parseSgrExtendedColor(const std::vector<std::wstring
         return TermColor::fromRgb((uint8_t)r, (uint8_t)g, (uint8_t)b);
     }
     return DefaultFg();
+}
+
+// ---------------------------------------------------------------------------
+// Parse #RRGGBB or rgb:RR/GG/BB colour specification
+// ---------------------------------------------------------------------------
+static bool parseRgbColor(const std::wstring& s, uint8_t& r, uint8_t& g, uint8_t& b) {
+    auto hexVal = [](wchar_t c) -> int {
+        if (c >= L'0' && c <= L'9') return c - L'0';
+        if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+        if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+        return -1;
+    };
+    auto hex2 = [&](size_t i) -> int {
+        int hi = hexVal(s[i]), lo = hexVal(s[i+1]);
+        return (hi < 0 || lo < 0) ? -1 : (hi << 4) | lo;
+    };
+    // #RRGGBB
+    if (s.size() == 7 && s[0] == L'#') {
+        int ri = hex2(1), gi = hex2(3), bi = hex2(5);
+        if (ri >= 0 && gi >= 0 && bi >= 0) { r = (uint8_t)ri; g = (uint8_t)gi; b = (uint8_t)bi; return true; }
+    }
+    // rgb:RR/GG/BB  (12 chars: "rgb:" + 2 hex + '/' + 2 hex + '/' + 2 hex)
+    if (s.size() >= 12 && s.substr(0, 4) == L"rgb:" && s[6] == L'/') {
+        int ri = hex2(4), gi = hex2(7), bi = hex2(10);
+        if (ri >= 0 && gi >= 0 && bi >= 0) { r = (uint8_t)ri; g = (uint8_t)gi; b = (uint8_t)bi; return true; }
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -677,9 +755,10 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
 
     switch (num) {
     case 0:
-    case 2: // window/tab title
+    case 2: { // window/tab title
         if (onTitle_) onTitle_(arg1);
         break;
+    }
 
     case 8: { // OSC 8 hyperlink (terminalpp)
         // format: params ; url  (params ignored)
@@ -709,17 +788,315 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
         break;
     }
 
+    case 9: { // Windows taskbar progress (OSC 9;4;state(;value))
+        // Format: "4;state[;value]"
+        const size_t sep2 = arg1.find(L';');
+        if (sep2 != std::wstring::npos) {
+            int subCmd = 0;
+            try { subCmd = std::stoi(arg1.substr(0, sep2)); } catch(...) { subCmd = 0; }
+            if (subCmd == 4) {
+                std::wstring rest = arg1.substr(sep2 + 1);
+                const size_t sep3 = rest.find(L';');
+                int state = 0;
+                try { state = std::stoi(sep3 == std::wstring::npos ? rest : rest.substr(0, sep3)); } catch(...) { state = 0; }
+                if (state == 0 && sep3 != std::wstring::npos) {
+                    int pct = 0;
+                    try { pct = std::stoi(rest.substr(sep3 + 1)); } catch(...) { pct = 0; }
+                    if (onProgress_) onProgress_(std::min(100, std::max(0, pct)) / 100.0f);
+                } else if (state == 3 || state == 4) {
+                    if (onProgress_) onProgress_(-1.0f);
+                } else if (state == 1 || state == 2) {
+                    // error / pause – treat as indeterminate
+                    if (onProgress_) onProgress_(-1.0f);
+                }
+            }
+        }
+        break;
+    }
+
+    case 4: { // set colour palette: OSC 4 ; index ; #RRGGBB
+        const size_t sep2 = arg1.find(L';');
+        if (sep2 != std::wstring::npos) {
+            int idx = 0;
+            try { idx = std::stoi(arg1.substr(0, sep2)); } catch(...) { idx = -1; }
+            if (idx >= 0 && idx < 16) {
+                std::wstring val = arg1.substr(sep2 + 1);
+                uint8_t r, g, b;
+                if (parseRgbColor(val, r, g, b))
+                    buffer_->setPaletteColor(idx, TermColor::fromRgb(r, g, b));
+            }
+        }
+        break;
+    }
+
+    case 10: { // set default foreground: OSC 10 ; #RRGGBB
+        uint8_t r, g, b;
+        if (parseRgbColor(arg1, r, g, b))
+            buffer_->setDefaultFgColor(TermColor::fromRgb(r, g, b));
+        break;
+    }
+
+    case 11: { // set default background: OSC 11 ; #RRGGBB
+        uint8_t r, g, b;
+        if (parseRgbColor(arg1, r, g, b))
+            buffer_->setDefaultBgColor(TermColor::fromRgb(r, g, b));
+        break;
+    }
+
+    case 12: { // set cursor colour: OSC 12 ; #RRGGBB
+        uint8_t r, g, b;
+        if (parseRgbColor(arg1, r, g, b))
+            buffer_->setCursorColor(TermColor::fromRgb(r, g, b));
+        break;
+    }
+
     case 112: // reset cursor colour
         buffer_->setCursorBlink(true);
         break;
 
-    default: {
-        wchar_t buf[256];
-        swprintf_s(buf, L"[VT] unknown OSC %d (%s)\n", num, text.c_str());
-        logDebug(buf);
+    case 1337: // iTerm2 proprietary escape codes
+        handleOsc1337(arg1);
+        break;
+
+    default:
         break;
     }
+}
+
+// ---------------------------------------------------------------------------
+// OSC 1337 — iTerm2 inline images / file transfer
+// ---------------------------------------------------------------------------
+void TerminalEmulator::handleOsc1337(const std::wstring& params) {
+    // Dispatch by keyword (first segment before '=' or ':')
+    // "File=...", "MultipartFile=...", "FilePart=...", "FileEnd"
+    // "SetUserVar=...", "SetBadgeFormat=...", "SetMark", etc. (ignored for now)
+
+    if (params.find(L"File=") == 0) {
+        handleOsc1337File(params.substr(5));  // strip "File="
+    } else if (params.find(L"MultipartFile=") == 0) {
+        handleOsc1337MultipartStart(params.substr(14));
+    } else if (params.find(L"FilePart=") == 0) {
+        handleOsc1337FilePart(params.substr(9));
+    } else if (params.find(L"FileEnd") == 0) {
+        handleOsc1337FileEnd();
     }
+    // Other OSC 1337 sub-commands (SetUserVar, SetBadgeFormat, etc.) are ignored
+}
+
+// Parse key=value;key=value format into a map
+static std::unordered_map<std::wstring, std::wstring> parseKeyValuePairs(const std::wstring& s) {
+    std::unordered_map<std::wstring, std::wstring> map;
+    size_t start = 0;
+    while (start < s.size()) {
+        size_t eq = s.find(L'=', start);
+        if (eq == std::wstring::npos) break;
+        std::wstring key = s.substr(start, eq - start);
+        size_t semicolon = s.find(L';', eq + 1);
+        std::wstring value;
+        if (semicolon == std::wstring::npos) {
+            value = s.substr(eq + 1);
+            start = s.size();
+        } else {
+            value = s.substr(eq + 1, semicolon - eq - 1);
+            start = semicolon + 1;
+        }
+        map[key] = value;
+    }
+    return map;
+}
+
+// Parse width/height values: N, Npx, N%, auto
+static void parseDimension(const std::wstring& s, int cellSize, int viewportSize,
+                           int& outPixels, bool& outAuto)
+{
+    outPixels = 0;
+    outAuto = true; // default to auto
+
+    if (s.empty() || s == L"auto") return;
+
+    outAuto = false;
+
+    if (s.size() >= 3 && s.substr(s.size() - 2) == L"px") {
+        // Npx
+        outPixels = std::stoi(s.substr(0, s.size() - 2));
+    } else if (s.back() == L'%') {
+        // N%
+        std::wstring numStr = s.substr(0, s.size() - 1);
+        int pct = std::stoi(numStr);
+        outPixels = viewportSize * pct / 100;
+    } else {
+        // N (character cells)
+        int cells = std::stoi(s);
+        outPixels = cells * cellSize;
+    }
+    if (outPixels < 1) outPixels = 1;
+}
+
+void TerminalEmulator::handleOsc1337File(const std::wstring& s) {
+    // Format: [key=value;...]:base64data
+    // Find the ':' separator that separates options from data
+    size_t colon = s.find(L':');
+    if (colon == std::wstring::npos) return;
+
+    std::wstring optStr = s.substr(0, colon);
+    std::wstring b64data = s.substr(colon + 1);
+
+    auto opts = parseKeyValuePairs(optStr);
+
+    // Determine inline flag
+    bool inlineFlag = true; // default to inline for safety
+    auto itInline = opts.find(L"inline");
+    if (itInline != opts.end() && itInline->second == L"0") {
+        inlineFlag = false;
+    }
+
+    // Decode name (base64)
+    std::wstring name = L"Unnamed file";
+    auto itName = opts.find(L"name");
+    if (itName != opts.end()) {
+        std::string decodedName = base64Decode(itName->second);
+        if (!decodedName.empty()) {
+            int needed = MultiByteToWideChar(CP_UTF8, 0, decodedName.c_str(), -1, nullptr, 0);
+            if (needed > 0) {
+                std::wstring ws(needed, L'\0');
+                MultiByteToWideChar(CP_UTF8, 0, decodedName.c_str(), -1, ws.data(), needed);
+                if (!ws.empty() && ws.back() == L'\0') ws.pop_back();
+                name = ws;
+            }
+        }
+    }
+
+    // Preserve aspect ratio
+    bool preserveAspectRatio = true;
+    auto itPar = opts.find(L"preserveAspectRatio");
+    if (itPar != opts.end() && itPar->second == L"0") {
+        preserveAspectRatio = false;
+    }
+
+    if (inlineFlag) {
+        // Parse width/height
+        int widthPx = 0, heightPx = 0;
+        bool widthAuto = true, heightAuto = true;
+
+        // We need cell dimensions from the buffer for proper sizing
+        if (buffer_) {
+            int cellW = buffer_->cellWidth();
+            int cellH = buffer_->cellHeight();
+            int viewW = cellW * buffer_->columns();
+            int viewH = cellH * buffer_->rows();
+
+            auto itW = opts.find(L"width");
+            if (itW != opts.end())
+                parseDimension(itW->second, cellW, viewW, widthPx, widthAuto);
+
+            auto itH = opts.find(L"height");
+            if (itH != opts.end())
+                parseDimension(itH->second, cellH, viewH, heightPx, heightAuto);
+        }
+
+        // Decode base64 data
+        std::string rawData = base64Decode(b64data);
+
+        if (!rawData.empty()) {
+            std::vector<uint8_t> data(rawData.begin(), rawData.end());
+
+            if (onImageData_) {
+                onImageData_(data, widthPx, heightPx, preserveAspectRatio, name);
+            }
+        }
+    } else {
+        // File download
+        std::string rawData = base64Decode(b64data);
+        if (!rawData.empty() && onFileDownload_) {
+            std::vector<uint8_t> data(rawData.begin(), rawData.end());
+            onFileDownload_(data, name);
+        }
+    }
+}
+
+void TerminalEmulator::handleOsc1337MultipartStart(const std::wstring& opts) {
+    multipartActive_  = true;
+    multipartOptions_ = opts;
+    multipartBuffer_.clear();
+}
+
+void TerminalEmulator::handleOsc1337FilePart(const std::wstring& b64chunk) {
+    if (!multipartActive_) return;
+    // Accumulate base64 text (decode at the end)
+    multipartBuffer_ += base64Decode(b64chunk);
+}
+
+void TerminalEmulator::handleOsc1337FileEnd() {
+    if (!multipartActive_) return;
+    multipartActive_ = false;
+
+    if (multipartBuffer_.empty()) {
+        multipartOptions_.clear();
+        return;
+    }
+
+    // Re-parse options (may differ from original File= options)
+    auto opts = parseKeyValuePairs(multipartOptions_);
+
+    bool inlineFlag = true;
+    auto itInline = opts.find(L"inline");
+    if (itInline != opts.end() && itInline->second == L"0") {
+        inlineFlag = false;
+    }
+
+    std::wstring name = L"Unnamed file";
+    auto itName = opts.find(L"name");
+    if (itName != opts.end()) {
+        std::string decodedName = base64Decode(itName->second);
+        if (!decodedName.empty()) {
+            int needed = MultiByteToWideChar(CP_UTF8, 0, decodedName.c_str(), -1, nullptr, 0);
+            if (needed > 0) {
+                std::wstring ws(needed, L'\0');
+                MultiByteToWideChar(CP_UTF8, 0, decodedName.c_str(), -1, ws.data(), needed);
+                if (!ws.empty() && ws.back() == L'\0') ws.pop_back();
+                name = ws;
+            }
+        }
+    }
+
+    bool preserveAspectRatio = true;
+    auto itPar = opts.find(L"preserveAspectRatio");
+    if (itPar != opts.end() && itPar->second == L"0") {
+        preserveAspectRatio = false;
+    }
+
+    if (inlineFlag) {
+        int widthPx = 0, heightPx = 0;
+        bool widthAuto = true, heightAuto = true;
+
+        if (buffer_) {
+            int cellW = buffer_->cellWidth();
+            int cellH = buffer_->cellHeight();
+            int viewW = cellW * buffer_->columns();
+            int viewH = cellH * buffer_->rows();
+
+            auto itW = opts.find(L"width");
+            if (itW != opts.end())
+                parseDimension(itW->second, cellW, viewW, widthPx, widthAuto);
+
+            auto itH = opts.find(L"height");
+            if (itH != opts.end())
+                parseDimension(itH->second, cellH, viewH, heightPx, heightAuto);
+        }
+
+        std::vector<uint8_t> data(multipartBuffer_.begin(), multipartBuffer_.end());
+        if (!data.empty() && onImageData_) {
+            onImageData_(data, widthPx, heightPx, preserveAspectRatio, name);
+        }
+    } else {
+        std::vector<uint8_t> data(multipartBuffer_.begin(), multipartBuffer_.end());
+        if (!data.empty() && onFileDownload_) {
+            onFileDownload_(data, name);
+        }
+    }
+
+    multipartBuffer_.clear();
+    multipartOptions_.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -746,8 +1123,12 @@ void TerminalEmulator::sendDeviceStatusReport(int value) {
         emitResponse(L"\x1b[0n");
     } else if (value == 6) {
         wchar_t buf[64];
+        int r = buffer_->cursorRow();
+        if (buffer_->originMode()) {
+            r -= buffer_->scrollTop();
+        }
         swprintf(buf, 64, L"\x1b[%d;%dR",
-                 buffer_->cursorRow() + 1, buffer_->cursorColumnRaw() + 1);
+                 r + 1, buffer_->cursorColumnRaw() + 1);
         emitResponse(buf);
     }
 }
@@ -832,5 +1213,67 @@ wchar_t TerminalEmulator::mapLineDrawingChar(wchar_t ch) const {
     case L'g': return L'±'; // PLUS-MINUS SIGN
     case L'~': return L'·'; // MIDDLE DOT
     default:   return ch;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hex string helpers for XTGETTCAP
+// ---------------------------------------------------------------------------
+static std::string hexEncode(const std::string& s) {
+    std::string out;
+    for (unsigned char c : s) {
+        char buf[4];
+        snprintf(buf, sizeof(buf), "%02X", c);
+        out += buf;
+    }
+    return out;
+}
+static std::string hexDecode(const std::string& hex) {
+    std::string out;
+    for (size_t i = 0; i + 1 < hex.size(); i += 2) {
+        char buf[3] = {hex[i], hex[i+1], 0};
+        char* end = nullptr;
+        int val = (int)strtol(buf, &end, 16);
+        if (*end == 0) out += (char)val;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// DCS — Sixel data handler / XTGETTCAP
+// ---------------------------------------------------------------------------
+void TerminalEmulator::handleDcs(const std::string& data) {
+    if (data.empty()) return;
+
+    // XTGETTCAP: DCS + q <hex-capability> ST
+    if (data.size() >= 2 && data[0] == '+' && data[1] == 'q') {
+        std::string hexCap = data.substr(2);
+        std::string capName = hexDecode(hexCap);
+
+        std::string value;
+        if (capName == "RGB") {
+            value = "true";
+        } else if (capName == "Ss" || capName == "Se") {
+            value = "true";
+        }
+
+        if (!value.empty()) {
+            std::string respHex = hexEncode(value);
+            std::string respStr = "\x1bP1+r" + hexCap + "=" + respHex + "\x1b\\";
+            // Convert to wstring and emit
+            int needed = MultiByteToWideChar(CP_UTF8, 0, respStr.c_str(), (int)respStr.size(), nullptr, 0);
+            if (needed > 0) {
+                std::wstring ws(needed, L'\0');
+                MultiByteToWideChar(CP_UTF8, 0, respStr.c_str(), (int)respStr.size(), ws.data(), needed);
+                emitResponse(ws);
+            }
+        }
+        return;
+    }
+
+    // Pass all accumulated data (including 'q' introducer) to the decoder.
+    std::vector<uint8_t> sixelData(data.begin(), data.end());
+    if (onSixelData_) {
+        onSixelData_(sixelData);
     }
 }

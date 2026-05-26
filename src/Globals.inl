@@ -24,6 +24,13 @@
 #include <commctrl.h>
 #include <filesystem>
 #include <fstream>
+#include <dwmapi.h>
+#ifndef HTMINBUTTON
+#define HTMINBUTTON 8
+#endif
+#ifndef HTMAXBUTTON
+#define HTMAXBUTTON 9
+#endif
 #include <imm.h>
 #include <iostream>
 #include <memory>
@@ -52,6 +59,7 @@ void EnsureCaretVisible(HWND hwnd);
 bool PromptSaveBuffer(HWND hwnd, Buffer *buf);
 void HideMinibuffer();
 void ShowCliDialog(HWND hwnd);
+void ShowAppEntriesDialog(HWND hwnd);
 void KillAppProcessByIndex(HWND hwnd, size_t idx);
 void KillActiveAppProcess(HWND hwnd);
 void ScanPlugins();
@@ -65,6 +73,15 @@ extern int g_currentLogLevel;
 typedef void (*LogCallback)(const std::string &msg, LogLevel level);
 extern LogCallback g_logCallback;
 void DebugLog(const std::string &msg, LogLevel level = LOG_INFO);
+
+// Top bar functions (defined in TopBar.inl)
+void DrawTopBar(HDC hdc, HWND hwnd);
+void HandleTopBarClick(HWND hwnd, int x, int y);
+bool HandleTopBarButtonDown(HWND hwnd, int x, int y);
+void HandleTopBarButtonUp(HWND hwnd);
+void HandleTopBarDoubleClick(HWND hwnd);
+void HandleTopBarRightClick(HWND hwnd, int x, int y);
+bool HandleTopBarSysKeyDown(HWND hwnd, WPARAM wParam);
 
 // Window handlers
 LRESULT HandleCreate(HWND hwnd);
@@ -151,8 +168,10 @@ void HandleDestroy(HWND hwnd);
 #define IDM_TAB_COPY_PATH 702
 #define IDM_TAB_CLOSE_TERMINAL 703
 #define IDM_CLI_CONFIGURE 704
+#define IDM_APPS_CONFIGURE 708
 #define IDM_RECENT_START 2000
 #define IDM_CLI_START 3000
+#define IDM_APPS_START 9000
 #define IDM_TERMINALS_START 4000
 #define IDM_DIRED_START 5000
 #define IDM_DIRED_CONFIGURE 705
@@ -166,6 +185,7 @@ void HandleDestroy(HWND hwnd);
 #define IDM_HELP_ABOUT 802
 #define IDM_HELP_MESSAGES 803
 #define IDM_HELP_KEYBINDINGS 804
+#define IDM_HELP_COPYRIGHT 805
 
 #define WM_SHELL_OUTPUT (WM_USER + 101)
 #define WM_EMBED_APP (WM_USER + 200)
@@ -175,6 +195,7 @@ void HandleDestroy(HWND hwnd);
 #define WM_GREP_COMPLETE (WM_USER + 204)
 #define WM_DEFERRED_FOCUS (WM_USER + 205)
 #define WM_SET_PROCESS_HANDLE (WM_USER + 206)
+#define WM_TERMINAL_PROGRESS (WM_USER + 299)
 
 struct GrepSearchParams {
     std::wstring dir;
@@ -215,10 +236,47 @@ struct PluginEntry {
 };
 extern std::vector<PluginEntry> g_plugins;
 
+// Top bar / no-title-bar mode
+extern bool g_noTitleBar;
+extern int g_topBarHeight;
+struct MenuLabel {
+    std::wstring label;
+    HMENU        popup;
+    RECT         rect; // client-relative
+};
+extern std::vector<MenuLabel> g_menuLabels;
+extern RECT g_minButtonRect;
+extern RECT g_maxButtonRect;
+extern RECT g_closeButtonRect;
+extern bool g_isActive;
+extern bool g_menuTracking; // true while TrackPopupMenu is running (suppresses WM_NCACTIVATE flicker)
+extern std::wstring g_windowTitle;
+extern HMENU g_hSysMenu;
+extern int g_topBarButtonPushed; // 0=none, 1=min, 2=max, 3=close
+
+constexpr int TAB_ICON_GRAY   = 0;
+constexpr int TAB_ICON_BLUE   = 1;
+constexpr int TAB_ICON_GREEN  = 2;
+constexpr int TAB_ICON_ORANGE = 3;
+constexpr int TAB_ICON_PURPLE = 4;
+constexpr int TAB_ICON_TEAL   = 5;
+constexpr int TAB_ICON_RED    = 6;
+constexpr int TAB_ICON_PINK   = 7;
+constexpr int TAB_ICON_YELLOW = 8;
+constexpr int TAB_ICON_CYAN   = 9;
+constexpr int TAB_ICON_LIME   = 10;
+constexpr int TAB_ICON_BROWN  = 11;
+constexpr int TAB_ICON_COUNT  = 12;
+
+extern HIMAGELIST g_tabImageList;
+extern const wchar_t* g_tabIconNames[TAB_ICON_COUNT];
+
 struct AppTabInfo {
     HWND hwnd = nullptr;
     std::wstring label;
     int type; // 0 = file search, 1 = grep results, 5 = dired
+    int iImage = -1;
+
     void *data = nullptr; // type-specific data (e.g. ListView HWND or result list)
     HANDLE hProcess = nullptr; // process handle for killing
 };
@@ -232,6 +290,14 @@ extern int  g_dragTabFrom;
 extern bool g_suppressTabChange;
 extern WNDPROC g_oldTabProc;
 extern UINT g_uFindMsgString;
+
+// IME inline composition state
+extern std::wstring g_imeComposition;   // current composition string (UTF-16)
+extern std::vector<BYTE> g_imeCompAttr; // per-char attribute for composition
+extern bool g_imeComposing;             // true during composition
+extern std::string g_imeCompUtf8;       // composition as UTF-8 (for viewport insert)
+extern size_t g_imeCompViewOffset;      // byte offset of composition in viewport text
+extern size_t g_imeCompViewLen;         // byte length of composition in viewport text
 extern FINDREPLACEW g_fr;
 extern WCHAR g_szFindWhat[256];
 extern WCHAR g_szReplaceWith[256];

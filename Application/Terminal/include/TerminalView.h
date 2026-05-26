@@ -13,6 +13,7 @@
 #include "TerminalBuffer.h"
 #include "TerminalEmulator.h"
 #include "ConPtySession.h"
+#include "ImageManager.h"
 
 #include <functional>
 #include <memory>
@@ -23,6 +24,9 @@
 
 // Posted by the ConPTY reader thread to deliver output on the UI thread.
 #define WM_TERMINAL_OUTPUT (WM_USER + 200)
+
+// Sent to parent window to report taskbar progress (lParam = 0–10000, or -1 to clear).
+#define WM_TERMINAL_PROGRESS (WM_USER + 299)
 
 // ---------------------------------------------------------------------------
 // TerminalView
@@ -53,17 +57,18 @@ public:
     HANDLE GetProcessHandle() const { return session_.GetProcessHandle(); }
     std::wstring LastError()  const { return session_.LastError(); }
 
+    // Taskbar progress via ITaskbarList3 (requires CoInitializeEx).
+    void setProgressCallback(std::function<void(float)> cb) {
+        onProgress_ = std::move(cb);
+        emulator_.setProgressCallback(onProgress_);
+    }
+
     // Called from parent's WM_SIZE handler.
     void MoveAndResize(int x, int y, int w, int h);
 
     // Send raw text/bytes to the PTY.
     void SendInput(const std::string& utf8);
     void SendInput(const std::wstring& text);
-
-    // Set debug log callback (forwards to TerminalEmulator)
-    void SetLogCallback(std::function<void(const std::wstring&)> cb) {
-        emulator_.setLogCallback(std::move(cb));
-    }
 
     // Window class name for RegisterClassEx
     static constexpr const wchar_t* kClassName = L"EcodeTerminalView";
@@ -127,6 +132,17 @@ private:
     void StartCursorTimer();
     void StopCursorTimer();
 
+    // --- OSC 1337 image handlers ---
+    void OnImageData(const std::vector<uint8_t>& data,
+                     int widthPx, int heightPx,
+                     bool preserveAspectRatio,
+                     const std::wstring& name);
+    void OnFileDownload(const std::vector<uint8_t>& data,
+                        const std::wstring& name);
+
+    // --- Sixel handler ---
+    void OnSixelData(const std::vector<uint8_t>& data);
+
     // --- state ---
     HWND hwnd_ = nullptr;
 
@@ -149,15 +165,20 @@ private:
     float baseline_   = 12.0f;
 
     // Cursor blink
-    bool   cursorBlink_   = false;  // current visible state
+    bool   cursorBlink_   = true;   // current visible state (true = visible; starts visible so cursor shows at startup)
     UINT_PTR cursorTimer_ = 0;
 
     // Output mutex (reader thread → UI thread via PostMessage; no lock needed,
     // but we need one for the chunk pointer lifetime)
     std::mutex outputMutex_;
 
-    // Pending hyperlink URL (for Ctrl+click)
-    std::wstring pendingHyperlinkUrl_;
+    // Hyperlink config (from settings.ini [Terminal] section)
+    bool clickToOpenHyperlink_ = true;
+    int  hyperlinkModifier_    = 3;     // 0=Ctrl, 1=Alt, 2=Shift, 3=no modifier
+    std::wstring hyperlinkOpenCommand_; // empty = ShellExecuteW, else {url} template
+
+    // Is there a hyperlink at the given client-area point?
+    bool IsHyperlinkAt(int px, int py) const;
 
     // Selection state
     bool selecting_    = false;
@@ -167,6 +188,15 @@ private:
     int  selEndCol_    = -1;
 
     // IME インライン入力
-    std::wstring imeComposition_;   // 変換中の文字列（空 = 非アクティブ）
-    bool         imeActive_ = false;
+    std::wstring     imeComposition_;   // 変換中の文字列（空 = 非アクティブ）
+    std::vector<BYTE> imeCompAttr_;     // 各文字の属性（ATTR_INPUT/ATTR_CONVERTED）
+    bool             imeActive_ = false;
+    int              imeShift_ = 0;     // 編集中の右シフト量（セル単位）
+
+    // OSC 1337 image manager
+    ImageManager* imageManager_ = nullptr;
+
+    // Progress callback (OSC 9;4)
+    std::function<void(float)> onProgress_;
+
 };

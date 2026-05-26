@@ -4,17 +4,46 @@
 #include <vector>
 #include <windows.h>
 
+struct AppEntry {
+  std::wstring path;
+  std::wstring label;
+};
+
 struct CliEntry {
   std::wstring command;
   std::wstring folder;
   int encoding; // 0=UTF8, 1=ShiftJIS
   int shellType; // 0=cmd, 1=powershell, 2=bash
+  int iconIndex = -1; // -2 = none, -1 = auto (from exe), 0-11 = colored square
+  std::wstring label; // custom tab label (empty = auto from folder)
 };
 
 struct DiredPair {
   std::wstring label;
   std::wstring leftDir;
   std::wstring rightDir;
+};
+
+struct SessionBufferState {
+  std::wstring path;          // file path (empty for scratch/shell)
+  size_t caretPos = 0;
+  size_t selectionAnchor = 0;
+  int scrollLine = 0;
+  int scrollX = 0;
+  int desiredColumn = 0;
+  int encoding = 0;           // 0=UTF8, 1=UTF16LE, 2=UTF16BE, 3=ANSI
+  bool isDirty = false;
+  bool isScratch = false;
+  bool isShell = false;
+  std::vector<int> foldedLines;
+  std::wstring contentFile;   // filename within session dir for non-file-backed content
+};
+
+struct SessionInfo {
+  int index = 0;              // N from session_N
+  std::wstring name;
+  std::wstring time;
+  int bufferCount = 0;
 };
 
 struct ThemeEntry {
@@ -67,6 +96,13 @@ public:
   void SetShellEncoding(int encoding) { m_shellEncoding = encoding; }
   bool IsShowAI() const { return m_showAI; }
   void SetShowAI(bool show) { m_showAI = show; }
+  bool IsVTDebug() const { return m_vtDebug; }
+  void SetVTDebug(bool debug) { m_vtDebug = debug; }
+  bool IsReverseScrollDirection() const { return m_reverseScrollDirection; }
+  void SetReverseScrollDirection(bool v) { m_reverseScrollDirection = v; }
+
+  bool IsSessionManagementEnabled() const { return m_enableSessionManagement; }
+  void SetSessionManagementEnabled(bool enabled) { m_enableSessionManagement = enabled; }
 
   int GetTabGridCellW() const { return m_tabGridCellW; }
   void SetTabGridCellW(int w) { m_tabGridCellW = w; }
@@ -108,6 +144,21 @@ public:
   std::wstring GetPluginsDirectory() const { return m_pluginsDirectory; }
   void SetPluginsDirectory(const std::wstring &dir) { m_pluginsDirectory = dir; }
 
+  // Session management
+  std::wstring GetSessionsDirectory() const;
+  std::wstring GetSessionIndexPath() const;
+  std::wstring GetSessionDir(int index) const;
+  int SaveSession(const std::wstring &name);
+  bool LoadSession(int index);
+  bool DeleteSession(int index);
+  std::vector<SessionInfo> GetSessionList() const;
+  int GetAutoSaveSessionIndex() const;
+  void SetAutoSaveSessionIndex(int index);
+  void ClearAutoSaveSession();
+
+  bool IsNoTitleBar() const { return m_noTitleBar; }
+  void SetNoTitleBar(bool v) { m_noTitleBar = v; }
+
   // Returns bash exe path (--cd stripped), sets workingDir to the directory from --cd if present
   std::wstring GetBashCommand(std::wstring *workingDir = nullptr) const;
 
@@ -118,9 +169,15 @@ public:
   // CLI entries
   const std::vector<CliEntry> &GetCliEntries() const { return m_cliEntries; }
   void SetCliEntries(const std::vector<CliEntry> &entries) { m_cliEntries = entries; }
-  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding = 0, int shellType = 2);
+  void AddCliEntry(const std::wstring &cmd, const std::wstring &folder, int encoding = 0, int shellType = 2, int iconIndex = -1, const std::wstring &label = L"");
   void RemoveCliEntry(size_t index);
   void SaveCliEntries();
+
+  // App entries
+  const std::vector<AppEntry> &GetAppEntries() const { return m_appEntries; }
+  void AddAppEntry(const std::wstring &path, const std::wstring &label);
+  void RemoveAppEntry(size_t index);
+  void SaveAppEntries();
 
   // Dired pairs
   const std::vector<DiredPair> &GetDiredPairs() const { return m_diredPairs; }
@@ -150,6 +207,7 @@ private:
 
   RECT m_windowRect;
   bool m_maximized;
+  bool m_noTitleBar = false;
   std::wstring m_fontFamily;
   float m_fontSize;
   int m_language;
@@ -172,13 +230,17 @@ private:
   bool m_tabGridRefreshEnabled = false;
   int m_tabGridRefreshIntervalMs = 1000;
   bool m_showAI = false;
+  bool m_vtDebug = false;
+  bool m_enableSessionManagement = false;
   std::vector<CliEntry> m_cliEntries;
+  std::vector<AppEntry> m_appEntries;
   std::vector<DiredPair> m_diredPairs;
 
   std::wstring m_aiVendor;
   std::wstring m_aiModel;
   std::vector<std::pair<std::wstring, std::wstring>> m_aiApiKeys; // vendor -> key
 
+  bool m_reverseScrollDirection = false;
   std::vector<ThemeEntry> m_themes;
   std::wstring m_activeTheme;
   std::vector<std::wstring> m_hiddenPlugins;

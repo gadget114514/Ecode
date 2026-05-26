@@ -9,9 +9,77 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   if (uMsg == g_uFindMsgString)
     return HandleFindReplace(hwnd, lParam);
 
+  if (uMsg == WM_NCCALCSIZE && g_noTitleBar) {
+    return 0;
+  }
+  if (uMsg == WM_NCHITTEST && g_noTitleBar) {
+    POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+    ScreenToClient(hwnd, &pt);
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    int border = GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+    if (pt.y < border && pt.x < border) return HTTOPLEFT;
+    if (pt.y < border && pt.x > rc.right - border) return HTTOPRIGHT;
+    if (pt.y > rc.bottom - border && pt.x < border) return HTBOTTOMLEFT;
+    if (pt.y > rc.bottom - border && pt.x > rc.right - border) return HTBOTTOMRIGHT;
+    if (pt.x < border) return HTLEFT;
+    if (pt.x > rc.right - border) return HTRIGHT;
+    if (pt.y < border) return HTTOP;
+    if (pt.y > rc.bottom - border) return HTBOTTOM;
+    if (pt.y < g_topBarHeight) {
+      for (auto &ml : g_menuLabels) {
+        if (pt.x >= ml.rect.left && pt.x <= ml.rect.right)
+          return HTCLIENT;
+      }
+      POINT clientPt = pt;
+      if (PtInRect(&g_minButtonRect, clientPt) ||
+          PtInRect(&g_maxButtonRect, clientPt) ||
+          PtInRect(&g_closeButtonRect, clientPt))
+        return HTCLIENT;
+      return HTCAPTION;
+    }
+    return HTCLIENT;
+  }
+  if (uMsg == WM_NCACTIVATE && g_noTitleBar) {
+    if (!wParam && g_menuTracking)
+      return TRUE; // suppress deactivation flicker while our own menu is open
+    g_isActive = (wParam != FALSE);
+    InvalidateRect(hwnd, NULL, FALSE);
+    return TRUE;
+  }
+  if (uMsg == WM_NCPAINT && g_noTitleBar) {
+    return 0;
+  }
+  if (uMsg == WM_ERASEBKGND) {
+    return TRUE;
+  }
+  if (uMsg == WM_GETMINMAXINFO && g_noTitleBar) {
+    MINMAXINFO *mmi = (MINMAXINFO *)lParam;
+    RECT workArea;
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
+    int border = GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+    mmi->ptMaxPosition.x = workArea.left - border;
+    mmi->ptMaxPosition.y = workArea.top - border;
+    mmi->ptMaxSize.x = (workArea.right - workArea.left) + border * 2;
+    mmi->ptMaxSize.y = (workArea.bottom - workArea.top) + border * 2;
+    return 0;
+  }
+
   switch (uMsg) {
   case WM_CREATE:
     return HandleCreate(hwnd);
+  case WM_COPYDATA: {
+    PCOPYDATASTRUCT pcds = (PCOPYDATASTRUCT)lParam;
+    if (pcds && pcds->dwData == 0x5654) {
+      const char* logMsg = (const char*)pcds->lpData;
+      if (logMsg && strncmp(logMsg, "[VT]", 4) == 0) {
+        if (g_editor) {
+          g_editor->LogMessage(logMsg);
+        }
+      }
+    }
+    return 0;
+  }
   case WM_SETFOCUS:
     if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size())
       SetFocus(g_appTabs[g_activeAppTab].hwnd);
@@ -28,19 +96,45 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     return HandleCommand(hwnd, wParam, lParam);
   case WM_KEYDOWN:
   case WM_SYSKEYDOWN:
+    if (g_noTitleBar && HandleTopBarSysKeyDown(hwnd, wParam))
+      return 0;
     if (HandleKeyDown(hwnd, wParam, lParam) == 0)
       return 0;
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
   case WM_CHAR:
     return HandleChar(hwnd, wParam);
-  case WM_LBUTTONDOWN:
+  case WM_LBUTTONDOWN: {
+    if (g_noTitleBar) {
+      int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+      if (y >= 0 && y < g_topBarHeight) {
+        if (!HandleTopBarButtonDown(hwnd, x, y))
+          HandleTopBarClick(hwnd, x, y);
+        return 0;
+      }
+    }
     return HandleMouseDown(hwnd, lParam);
-  case WM_MOUSEMOVE:
-    return HandleMouseMove(hwnd, lParam);
-  case WM_LBUTTONUP:
+  }
+  case WM_LBUTTONUP: {
+    if (g_noTitleBar && g_topBarButtonPushed) {
+      HandleTopBarButtonUp(hwnd);
+      return 0;
+    }
     g_isDragging = false;
     ReleaseCapture();
     return 0;
+  }
+  case WM_LBUTTONDBLCLK: {
+    if (g_noTitleBar) {
+      int y = GET_Y_LPARAM(lParam);
+      if (y >= 0 && y < g_topBarHeight) {
+        HandleTopBarDoubleClick(hwnd);
+        return 0;
+      }
+    }
+    break;
+  }
+  case WM_MOUSEMOVE:
+    return HandleMouseMove(hwnd, lParam);
   case WM_VSCROLL:
     return HandleVScroll(hwnd, wParam);
   case WM_HSCROLL:
@@ -50,7 +144,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     if (!buf)
       return 0;
     int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-    int lines = (int)buf->GetScrollLine() - (delta / WHEEL_DELTA * 3);
+    int dir = SettingsManager::Instance().IsReverseScrollDirection() ? 1 : -1;
+    int lines = (int)buf->GetScrollLine() + dir * (delta / WHEEL_DELTA * 3);
     buf->SetScrollLine(
         (std::max)(0, (std::min)(lines, (int)buf->GetTotalLines() - 1)));
     UpdateScrollbars(hwnd);
@@ -60,6 +155,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   case WM_CONTEXTMENU: {
     if ((HWND)wParam == g_tabHwnd) {
       return 0; // Handled by NM_RCLICK in WM_NOTIFY
+    }
+    if (g_noTitleBar) {
+      int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+      POINT pt = { x, y };
+      ScreenToClient(hwnd, &pt);
+      if (pt.y >= 0 && pt.y < g_topBarHeight) {
+        HandleTopBarRightClick(hwnd, x, y);
+        return 0;
+      }
     }
     HMENU hMenu = CreatePopupMenu();
     AppendMenu(hMenu, MF_STRING, IDM_EDIT_UNDO, L10N("menu_edit_undo"));
@@ -127,6 +231,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       g_appTabs[appIdx].hProcess = hProcess;
     } else {
       CloseHandle(hProcess);
+    }
+    return 0;
+  }
+  case WM_TERMINAL_PROGRESS: {
+    int scaled = (int)lParam; // 0–10000 or -1 to clear
+    if (g_progressHwnd) {
+      if (scaled < 0) {
+        SendMessage(g_progressHwnd, PBM_SETPOS, 0, 0);
+      } else {
+        SendMessage(g_progressHwnd, PBM_SETPOS, scaled / 100, 0);
+      }
+      UpdateWindow(g_statusHwnd);
     }
     return 0;
   }
@@ -358,34 +474,87 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     lParam &= ~ISC_SHOWUICOMPOSITIONWINDOW;
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
   case WM_IME_STARTCOMPOSITION: {
+    g_imeComposing = true;
+    g_imeComposition.clear();
+    g_imeCompAttr.clear();
     HIMC himc = ImmGetContext(hwnd);
     if (himc) {
-      COMPOSITIONFORM cf = {CFS_POINT, g_renderer->GetCaretScreenPoint()};
-      ScreenToClient(hwnd, &cf.ptCurrentPos);
+      POINT ptScreen = g_renderer->GetCaretScreenPoint();
+      POINT ptClient = ptScreen;
+      ScreenToClient(hwnd, &ptClient);
+      COMPOSITIONFORM cf = {CFS_POINT, ptClient};
       ImmSetCompositionWindow(himc, &cf);
+      CANDIDATEFORM ccf = {0, CFS_CANDIDATEPOS, ptScreen};
+      ImmSetCandidateWindow(himc, &ccf);
+      ImmReleaseContext(hwnd, himc);
+    }
+    InvalidateRect(hwnd, NULL, FALSE);
+    return 0;
+  }
+  case WM_IME_COMPOSITION: {
+    HIMC himc = ImmGetContext(hwnd);
+    if (himc) {
+      // Intermediate composition string (visual overlay, not in buffer)
+      if (lParam & GCS_COMPSTR) {
+        LONG size = ImmGetCompositionStringW(himc, GCS_COMPSTR, NULL, 0);
+        if (size > 0) {
+          g_imeComposition.resize(size / sizeof(wchar_t));
+          ImmGetCompositionStringW(himc, GCS_COMPSTR, g_imeComposition.data(), size);
+          LONG attrSize = ImmGetCompositionStringW(himc, GCS_COMPATTR, NULL, 0);
+          if (attrSize > 0) {
+            g_imeCompAttr.resize(attrSize);
+            ImmGetCompositionStringW(himc, GCS_COMPATTR, g_imeCompAttr.data(), attrSize);
+          } else {
+            g_imeCompAttr.assign(g_imeComposition.size(), ATTR_INPUT);
+          }
+        } else {
+          g_imeComposition.clear();
+          g_imeCompAttr.clear();
+        }
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
+      // Finalized result string -> insert directly into buffer (not via WM_CHAR)
+      if (lParam & GCS_RESULTSTR) {
+        Buffer *buf = g_editor ? g_editor->GetActiveBuffer() : nullptr;
+        LONG size = ImmGetCompositionStringW(himc, GCS_RESULTSTR, NULL, 0);
+        if (size > 0 && buf) {
+          std::vector<wchar_t> wbuf(size / sizeof(wchar_t) + 1);
+          ImmGetCompositionStringW(himc, GCS_RESULTSTR, wbuf.data(), size);
+          int utf8Len = WideCharToMultiByte(CP_UTF8, 0, wbuf.data(), (int)(size / sizeof(wchar_t)), NULL, 0, NULL, NULL);
+          std::string utf8(utf8Len, '\0');
+          WideCharToMultiByte(CP_UTF8, 0, wbuf.data(), (int)(size / sizeof(wchar_t)), utf8.data(), utf8Len, NULL, NULL);
+          buf->Insert(buf->GetCaretPos(), utf8);
+          buf->MoveCaret((int)utf8.length());
+          buf->SetSelectionAnchor(buf->GetCaretPos());
+          EnsureCaretVisible(hwnd);
+          UpdateScrollbars(hwnd);
+        }
+        g_imeComposition.clear();
+        g_imeCompAttr.clear();
+        g_imeComposing = false;
+        InvalidateRect(hwnd, NULL, FALSE);
+      }
       ImmReleaseContext(hwnd, himc);
     }
     return 0;
   }
-  case WM_IME_COMPOSITION: {
-    if (lParam & GCS_RESULTSTR) {
+  case WM_IME_ENDCOMPOSITION:
+    g_imeComposition.clear();
+    g_imeCompAttr.clear();
+    g_imeComposing = false;
+    InvalidateRect(hwnd, NULL, FALSE);
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+  case WM_IME_NOTIFY: {
+    if (wParam == IMN_OPENCANDIDATE || wParam == IMN_CHANGECANDIDATE) {
       HIMC himc = ImmGetContext(hwnd);
       if (himc) {
-        LONG size = ImmGetCompositionStringW(himc, GCS_RESULTSTR, NULL, 0);
-        if (size > 0) {
-          std::vector<wchar_t> buf(size / sizeof(wchar_t) + 1);
-          ImmGetCompositionStringW(himc, GCS_RESULTSTR, buf.data(), size);
-          buf[size / sizeof(wchar_t)] = L'\0';
-          for (wchar_t wc : buf) {
-            if (wc == L'\0')
-              break;
-            SendMessage(hwnd, WM_CHAR, (WPARAM)wc, 0);
-          }
-        }
+        CANDIDATEFORM cf = {0, CFS_CANDIDATEPOS, {0, 0}};
+        cf.ptCurrentPos = g_renderer->GetCaretScreenPoint(); // screen coords
+        ImmSetCandidateWindow(himc, &cf);
         ImmReleaseContext(hwnd, himc);
       }
     }
-    return 0;
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
   }
   case WM_CLOSE:
     return HandleClose(hwnd);
@@ -427,11 +596,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   HWND hwnd = CreateWindowEx(0, CLASS_NAME, L"Ecode",
                              WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_HSCROLL |
-                                 WS_CLIPCHILDREN,
+                                 WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
                              CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                              CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
   if (!hwnd)
     return 0;
+
+  SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)LoadIcon(hInstance, MAKEINTRESOURCE(101)));
+  SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)LoadIcon(hInstance, MAKEINTRESOURCE(101)));
 
   if (argv) {
     for (int i = 1; i < argc; ++i) {

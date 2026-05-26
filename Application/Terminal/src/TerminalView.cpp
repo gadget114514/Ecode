@@ -4,7 +4,8 @@
 #include <cstdio>
 #include <shellapi.h>   // ShellExecuteW for hyperlink open
 #include <windowsx.h>  // GET_X_LPARAM / GET_Y_LPARAM
-#include <shlobj.h>    // SHGetFolderPathW
+#include <shlobj.h>    // SHGetFolderPathW, SHGetKnownFolderPath
+#include <shlwapi.h>   // PathAppendW
 #include <string>
 
 #pragma comment(lib, "d2d1.lib")
@@ -13,6 +14,18 @@
 
 #include <imm.h>
 #pragma comment(lib, "shell32.lib")
+
+// IME 文字列の表示幅を計算（全角=2, 半角=1）
+static int ImeCellWidth(const std::wstring& s) {
+    int w = 0;
+    for (wchar_t c : s) {
+        if (c >= 0x3000 && c <= 0x9FFF) w += 2;
+        else if (c >= 0xFF00 && c <= 0xFFEF) w += 2;
+        else if (c == L'？' || c == L'！' || c == L'、' || c == L'。') w += 2;
+        else w += 1;
+    }
+    return (std::max)(w, 1);
+}
 
 // ---------------------------------------------------------------------------
 // static registration
@@ -32,7 +45,9 @@ bool TerminalView::RegisterWindowClass(HINSTANCE hInst) {
 // ---------------------------------------------------------------------------
 // ctor / dtor
 // ---------------------------------------------------------------------------
-TerminalView::TerminalView() {
+TerminalView::TerminalView()
+    : imageManager_(nullptr)
+{
     emulator_.reset(&buffer_);
 
     // Response callback: PTY → emulator response → PTY
@@ -60,11 +75,42 @@ TerminalView::TerminalView() {
     emulator_.setHyperlinkOpenCallback([](const std::wstring& url) {
         ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     });
+
+    // OSC 1337 inline image callback
+    emulator_.setImageDataCallback([this](const std::vector<uint8_t>& data,
+                                          int widthPx, int heightPx,
+                                          bool preserveAspectRatio,
+                                          const std::wstring& name) {
+        OnImageData(data, widthPx, heightPx, preserveAspectRatio, name);
+    });
+
+    // OSC 1337 file download callback
+    emulator_.setFileDownloadCallback([this](const std::vector<uint8_t>& data,
+                                              const std::wstring& name) {
+        OnFileDownload(data, name);
+    });
+
+    // Sixel DCS callback
+    emulator_.setSixelDataCallback([this](const std::vector<uint8_t>& data) {
+        OnSixelData(data);
+    });
+
+    // OSC 9;4 taskbar progress – forward to parent via window message
+    emulator_.setProgressCallback([this](float progress) {
+        HWND parent = GetParent(hwnd_);
+        if (parent) {
+            // scale [0..1] → 0–10000, negative → -1 (clear)
+            int scaled = progress < 0.0f ? -1 : (int)(progress * 10000.0f);
+            PostMessage(parent, WM_TERMINAL_PROGRESS, 0, scaled);
+        }
+    });
 }
 
 TerminalView::~TerminalView() {
     StopCursorTimer();
     session_.Close();
+    delete imageManager_;
+    imageManager_ = nullptr;
     ReleaseRenderTarget();
     if (dwFactory_)  { dwFactory_->Release();  dwFactory_  = nullptr; }
     if (d2dFactory_) { d2dFactory_->Release(); d2dFactory_ = nullptr; }
@@ -96,8 +142,13 @@ bool TerminalView::StartSession(const std::wstring& shell,
     int rows = (int)(buffer_.rows());
     if (hwnd_) {
         RECT rc; GetClientRect(hwnd_, &rc);
-        if (cellWidth_  > 0) cols = std::max(10, (int)((rc.right  - rc.left) / cellWidth_));
-        if (cellHeight_ > 0) rows = std::max(3,  (int)((rc.bottom - rc.top)  / cellHeight_));
+        if (rc.right - rc.left > 120 && rc.bottom - rc.top > 100) {
+            if (cellWidth_  > 0) cols = std::max(10, (int)((rc.right  - rc.left) / cellWidth_));
+            if (cellHeight_ > 0) rows = std::max(3,  (int)((rc.bottom - rc.top)  / cellHeight_));
+        } else {
+            cols = 80;
+            rows = 24;
+        }
     }
     buffer_.resize(cols, rows);
 
@@ -165,19 +216,19 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_IME_STARTCOMPOSITION: {
         imeComposition_.clear();
         imeActive_ = true;
-        // IME 変換ウィンドウをカーソル位置に移動
+        imeCompAttr_.clear();
         if (HIMC hImc = ImmGetContext(hwnd)) {
-            COMPOSITIONFORM cf{};
-            cf.dwStyle        = CFS_POINT;
-            cf.ptCurrentPos.x = (LONG)(buffer_.cursorColumn() * cellWidth_);
-            cf.ptCurrentPos.y = (LONG)(buffer_.cursorRow()    * cellHeight_);
+            POINT pt;
+            pt.x = (LONG)(buffer_.cursorColumn() * cellWidth_);
+            pt.y = (LONG)(buffer_.cursorRow()    * cellHeight_);
+            COMPOSITIONFORM cf{CFS_POINT, pt};
             ImmSetCompositionWindow(hImc, &cf);
-
+            CANDIDATEFORM ccf{0, CFS_CANDIDATEPOS, pt};
+            ImmSetCandidateWindow(hImc, &ccf);
             LOGFONTW lf{};
             lf.lfHeight  = (LONG)cellHeight_;
             lf.lfCharSet = DEFAULT_CHARSET;
             if (textFormat_) {
-                // フォント名を DirectWrite から取得して IME に渡す
                 wchar_t fname[LF_FACESIZE] = L"Cascadia Mono";
                 textFormat_->GetFontFamilyName(fname, LF_FACESIZE);
                 wcsncpy_s(lf.lfFaceName, fname, LF_FACESIZE);
@@ -191,20 +242,32 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_IME_COMPOSITION: {
         if (HIMC hImc = ImmGetContext(hwnd)) {
-            // 変換中文字列（下線表示用）
+            // 変換中文字列 + 属性
             if (lp & GCS_COMPSTR) {
                 int bytes = ImmGetCompositionStringW(hImc, GCS_COMPSTR, nullptr, 0);
                 if (bytes > 0) {
                     imeComposition_.resize(bytes / sizeof(wchar_t));
                     ImmGetCompositionStringW(hImc, GCS_COMPSTR,
                                              imeComposition_.data(), bytes);
+                    imeShift_ = ImeCellWidth(imeComposition_);
+                    int attrSize = ImmGetCompositionStringW(hImc, GCS_COMPATTR, nullptr, 0);
+                    if (attrSize > 0) {
+                        imeCompAttr_.resize(attrSize);
+                        ImmGetCompositionStringW(hImc, GCS_COMPATTR,
+                                                 imeCompAttr_.data(), attrSize);
+                    } else {
+                        imeCompAttr_.assign(imeComposition_.size(), ATTR_INPUT);
+                    }
                 } else {
                     imeComposition_.clear();
+                    imeCompAttr_.clear();
+                    imeShift_ = 0;
                 }
                 InvalidateRect(hwnd_, nullptr, FALSE);
             }
-            // 確定文字列を PTY へ送信（WM_CHAR には頼らない）
+            // 確定文字列を PTY へ送信
             if (lp & GCS_RESULTSTR) {
+                imeShift_ = 0;
                 int bytes = ImmGetCompositionStringW(hImc, GCS_RESULTSTR, nullptr, 0);
                 if (bytes > 0) {
                     std::wstring result(bytes / sizeof(wchar_t), L'\0');
@@ -225,13 +288,28 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             ImmReleaseContext(hwnd, hImc);
         }
-        return 0;   // DefWindowProc を呼ばないことで WM_CHAR が二重送信されるのを防ぐ
+        return 0;
     }
 
     case WM_IME_ENDCOMPOSITION:
         imeComposition_.clear();
         imeActive_ = false;
+        imeCompAttr_.clear();
+        imeShift_ = 0;
         InvalidateRect(hwnd_, nullptr, FALSE);
+        return DefWindowProcW(hwnd, msg, wp, lp);
+
+    case WM_IME_NOTIFY:
+        if (wp == IMN_OPENCANDIDATE || wp == IMN_CHANGECANDIDATE) {
+            if (HIMC hImc = ImmGetContext(hwnd)) {
+                POINT pt;
+                pt.x = (LONG)(buffer_.cursorColumn() * cellWidth_);
+                pt.y = (LONG)(buffer_.cursorRow()    * cellHeight_);
+                CANDIDATEFORM cf{0, CFS_CANDIDATEPOS, pt};
+                ImmSetCandidateWindow(hImc, &cf);
+                ImmReleaseContext(hwnd, hImc);
+            }
+        }
         return DefWindowProcW(hwnd, msg, wp, lp);
 
     case WM_MOUSEWHEEL: {
@@ -262,7 +340,9 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // Notify PTY of focus (if focus events enabled)
         if (buffer_.focusEventReportingEnabled())
             session_.Write("\x1b[I", 3);
+        cursorBlink_ = true;   // フォーカス取得時にカーソルを即座に表示する
         StartCursorTimer();
+        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     case WM_KILLFOCUS:
         if (buffer_.focusEventReportingEnabled())
@@ -310,6 +390,9 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
     // D2D factory
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2dFactory_);
 
+    // Image manager (for OSC 1337)
+    imageManager_ = new ImageManager(d2dFactory_);
+
     // DWrite factory
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
                         __uuidof(IDWriteFactory),
@@ -339,7 +422,7 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
     }
 
     // ---------------------------------------------------------------------------
-    // %APPDATA%\Ecode\settings.ini の [Terminal] セクションからスクロールバック行数を読む
+    // %APPDATA%\Ecode\settings.ini の [Terminal] セクションから設定を読む
     {
         wchar_t appdata[MAX_PATH] = {};
         if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
@@ -347,6 +430,15 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
             int lines = (int)GetPrivateProfileIntW(
                 L"Terminal", L"ScrollbackLines", 10000, iniPath.c_str());
             buffer_.setMaxHistoryLines(lines);
+
+            clickToOpenHyperlink_ = GetPrivateProfileIntW(
+                L"Terminal", L"ClickToOpenHyperlink", 1, iniPath.c_str()) != 0;
+            hyperlinkModifier_ = (int)GetPrivateProfileIntW(
+                L"Terminal", L"HyperlinkClickModifier", 3, iniPath.c_str());
+            wchar_t buf[1024] = {};
+            GetPrivateProfileStringW(L"Terminal", L"HyperlinkOpenCommand",
+                L"", buf, 1024, iniPath.c_str());
+            hyperlinkOpenCommand_ = buf;
         }
     }
 
@@ -420,13 +512,56 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
     MultiByteToWideChar(CP_UTF8, 0, data, (int)len, ws.data(), needed);
 
     emulator_.process(ws);
+
+    // flush if not inside a synchronised update (?2026)
+    if (!buffer_.syncOutputEnabled())
+        InvalidateRect(hwnd_, nullptr, FALSE);
+
+    // VT debug: send raw ESC sequences to parent's *Messages* buffer
+    bool vtDebug = false;
+    {
+        wchar_t appdata[MAX_PATH] = {};
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
+            std::wstring iniPath = std::wstring(appdata) + L"\\Ecode\\settings.ini";
+            vtDebug = GetPrivateProfileIntW(
+                L"Editor", L"VTDebug", 0, iniPath.c_str()) != 0;
+        }
+    }
+    if (vtDebug) {
+        std::string escaped;
+        escaped.reserve(len + 32);
+        for (size_t i = 0; i < len; ++i) {
+            unsigned char c = (unsigned char)data[i];
+            if (c == 0x1b) {
+                escaped += "ESC";
+            } else if (c == 0x0d) {
+                escaped += "\\r";
+            } else if (c == 0x0a) {
+                escaped += "\\n";
+            } else if (c == 0x09) {
+                escaped += "\\t";
+            } else if (c < 0x20 || c > 0x7e) {
+                char buf[8];
+                snprintf(buf, sizeof(buf), "\\x%02x", c);
+                escaped += buf;
+            } else {
+                escaped += (char)c;
+            }
+        }
+        std::string msg = "[VT] " + escaped;
+        COPYDATASTRUCT cds;
+        cds.dwData = 0x5654;
+        cds.cbData = (DWORD)msg.size() + 1;
+        cds.lpData = (void*)msg.c_str();
+        SendMessage(GetAncestor(hwnd_, GA_ROOT), WM_COPYDATA, (WPARAM)hwnd_, (LPARAM)&cds);
+    }
+
     // スクロールバック中は位置をクランプ（履歴が減った場合）、底にいれば維持
     if (scrollOffset_ > 0) {
         const int maxScroll = std::max(0, buffer_.historyLineCount());
         scrollOffset_ = std::min(scrollOffset_, maxScroll);
         scrolledBack_ = (scrollOffset_ > 0);
     }
-    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 // ---------------------------------------------------------------------------
@@ -465,6 +600,163 @@ ID2D1SolidColorBrush* TerminalView::GetBrush(const TermColor& c, float alpha) {
 }
 
 // ---------------------------------------------------------------------------
+// OSC 1337 — OnImageData
+// ---------------------------------------------------------------------------
+void TerminalView::OnImageData(const std::vector<uint8_t>& data,
+                                int widthPx, int heightPx,
+                                bool preserveAspectRatio,
+                                const std::wstring& /*name*/)
+{
+    if (data.empty() || !buffer_.rows()) return;
+
+    // Determine display size in pixels (auto = use cell-based default)
+    int dispW = widthPx;
+    int dispH = heightPx;
+
+    // Store and decode via ImageManager
+    uint64_t imageId = imageManager_
+        ? imageManager_->StoreImage(data, dispW, dispH, preserveAspectRatio)
+        : 0;
+
+    if (imageId == 0) return;
+
+    // Calculate how many cells the image occupies
+    int cellW = (int)cellWidth_;
+    int cellH = (int)cellHeight_;
+    if (cellW < 1) cellW = 8;
+    if (cellH < 1) cellH = 16;
+
+    // If auto-size, compute from image's inherent size
+    if (dispW <= 0 || dispH <= 0) {
+        int origW = 0, origH = 0;
+        if (imageManager_)
+            imageManager_->GetDimensions(imageId, origW, origH);
+        if (origW > 0 && origH > 0) {
+            // Scale to fit within reasonable cell bounds
+            // Default: max 80 cells wide, preserve aspect ratio
+            int maxCellsW = std::min(80, buffer_.columns());
+            int autoCellsW = (origW + cellW - 1) / cellW;
+            int autoCellsH = (origH + cellH - 1) / cellH;
+            if (autoCellsW > maxCellsW) {
+                float scale = (float)maxCellsW / autoCellsW;
+                autoCellsW = maxCellsW;
+                autoCellsH = std::max(1, (int)(autoCellsH * scale));
+            }
+            dispW = autoCellsW * cellW;
+            dispH = autoCellsH * cellH;
+
+            // Re-store with computed display size
+            imageManager_->Remove(imageId);
+            imageId = imageManager_->StoreImage(data, dispW, dispH, preserveAspectRatio);
+            if (imageId == 0) return;
+        }
+    }
+
+    // Convert pixels to cells (round up)
+    int widthCells  = std::max(1, (dispW + cellW - 1) / cellW);
+    int heightCells = std::max(1, (dispH + cellH - 1) / cellH);
+
+    // Clamp to available columns
+    widthCells = std::min(widthCells, buffer_.columns());
+
+    buffer_.placeImage(imageId, widthCells, heightCells);
+}
+
+// ---------------------------------------------------------------------------
+// Sixel — OnSixelData
+// ---------------------------------------------------------------------------
+void TerminalView::OnSixelData(const std::vector<uint8_t>& data) {
+    if (data.empty() || !buffer_.rows()) return;
+
+    // Decode sixel data via ImageManager
+    uint64_t imageId = imageManager_
+        ? imageManager_->StoreSixelImage(data)
+        : 0;
+
+    if (imageId == 0) return;
+
+    // Calculate cell-based display size
+    int cellW = (int)cellWidth_;
+    int cellH = (int)cellHeight_;
+    if (cellW < 1) cellW = 8;
+    if (cellH < 1) cellH = 16;
+
+    int origW = 0, origH = 0;
+    imageManager_->GetDimensions(imageId, origW, origH);
+
+    if (origW <= 0 || origH <= 0) {
+        imageManager_->Remove(imageId);
+        return;
+    }
+
+    // Auto-size: max 80 cells wide, preserve aspect ratio
+    int maxCellsW = std::min(80, buffer_.columns());
+    int autoCellsW = (origW + cellW - 1) / cellW;
+    int autoCellsH = (origH + cellH - 1) / cellH;
+    if (autoCellsW > maxCellsW) {
+        float scale = (float)maxCellsW / autoCellsW;
+        autoCellsW = maxCellsW;
+        autoCellsH = std::max(1, (int)(autoCellsH * scale));
+    }
+
+    int widthCells  = std::max(1, autoCellsW);
+    int heightCells = std::max(1, autoCellsH);
+
+    // Clamp to available columns
+    widthCells = std::min(widthCells, buffer_.columns());
+
+    buffer_.placeImage(imageId, widthCells, heightCells);
+}
+
+// ---------------------------------------------------------------------------
+// OSC 1337 — OnFileDownload (inline=0)
+// ---------------------------------------------------------------------------
+void TerminalView::OnFileDownload(const std::vector<uint8_t>& data,
+                                   const std::wstring& name)
+{
+    if (data.empty()) return;
+
+    // Determine save path: Downloads folder
+    wchar_t downloadsPath[MAX_PATH] = {};
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_PROFILE, nullptr, 0, downloadsPath))) {
+        downloadsPath[0] = L'.';
+        downloadsPath[1] = L'\0';
+    }
+
+    std::wstring savePath = downloadsPath;
+    savePath += L"\\Downloads\\";
+    savePath += name.empty() ? L"Unnamed file" : name;
+
+    // If file exists, append a number
+    if (GetFileAttributesW(savePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        size_t dot = savePath.rfind(L'.');
+        std::wstring base = (dot != std::wstring::npos)
+            ? savePath.substr(0, dot)
+            : savePath;
+        std::wstring ext = (dot != std::wstring::npos)
+            ? savePath.substr(dot)
+            : L"";
+        for (int i = 1; i < 1000; ++i) {
+            wchar_t num[16];
+            swprintf_s(num, L" (%d)", i);
+            std::wstring candidate = base + num + ext;
+            if (GetFileAttributesW(candidate.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                savePath = candidate;
+                break;
+            }
+        }
+    }
+
+    HANDLE hFile = CreateFileW(savePath.c_str(), GENERIC_WRITE, 0, nullptr,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return;
+
+    DWORD written = 0;
+    WriteFile(hFile, data.data(), (DWORD)data.size(), &written, nullptr);
+    CloseHandle(hFile);
+}
+
+// ---------------------------------------------------------------------------
 // OnPaint
 // ---------------------------------------------------------------------------
 void TerminalView::OnPaint() {
@@ -476,7 +768,7 @@ void TerminalView::OnPaint() {
     rt->BeginDraw();
 
     // Background
-    rt->Clear(ToD2DColor(DefaultBg()));
+    rt->Clear(ToD2DColor(buffer_.defaultBgColor()));
 
     if (!textFormat_) { rt->EndDraw(); EndPaint(hwnd_, &ps); return; }
 
@@ -503,11 +795,13 @@ void TerminalView::OnPaint() {
         // VT420 スクロール領域対応:
         // スクロールバック中かつ部分スクロール領域が有効なとき、
         // 領域外の行は常に現在の画面内容（ピン固定）を表示する。
+        bool isPinned = false;
         if (scrollOffset_ > 0 && buffer_.hasScrollRegion()) {
             const bool outsideRegion = screenRow < buffer_.scrollTop() ||
                                        screenRow > buffer_.scrollBottom();
             if (outsideRegion) {
                 logRow = histLines + screenRow;  // 現在の画面行をピン固定
+                isPinned = true;
             }
         }
 
@@ -518,19 +812,31 @@ void TerminalView::OnPaint() {
             if (col >= (int)line.size()) break;
             const TerminalCell& cell = line[col];
             if (cell.wideContinuation) continue;
+            if (cell.imagePlaceholderIndex > 0) continue; // image continuation cell
 
-            bool isCursor = (logRow == curRow && col == buffer_.cursorColumn()
-                             && scrollOffset_ == 0 && buffer_.cursorVisible());
+            // カーソルはスクロールオフセット 0 のときか、ピン固定行（スクロール領域外）のときに表示する。
+            // スクロールバック中でもピン固定行はカレント画面を表示しているためカーソルを描く。
+            // ワイド文字のベースセルにカーソルがあるか、カーソルが継続セルを指している場合（CJK等）もカーソルを描く
+            bool isCursor = (logRow == curRow
+                             && (col == buffer_.cursorColumn() ||
+                                 (cell.wide && col + 1 == buffer_.cursorColumn()))
+                             && (scrollOffset_ == 0 || isPinned)
+                             && buffer_.cursorVisible());
             bool isSelected = IsSelected(logRow, col);
-            DrawCell(rt, screenRow, col, cell, isCursor, cursorBlink_, isSelected);
+            bool showCursor = cursorBlink_ || !buffer_.cursorBlink();
+            DrawCell(rt, screenRow, col, cell, isCursor, showCursor, isSelected);
         }
     }
 
     // IME 変換中文字列をカーソル位置にインライン描画
-    if (imeActive_ && !imeComposition_.empty() && scrollOffset_ == 0) {
+    // ピン固定行にカーソルがある場合（スクロールバック中）も表示する。
+    const bool cursorPinned = buffer_.hasScrollRegion() && scrollOffset_ > 0 &&
+                              (buffer_.cursorRow() < buffer_.scrollTop() ||
+                               buffer_.cursorRow() > buffer_.scrollBottom());
+    if (imeActive_ && !imeComposition_.empty() && (scrollOffset_ == 0 || cursorPinned)) {
         const float cx = buffer_.cursorColumn() * cellWidth_;
         const float cy = buffer_.cursorRow()    * cellHeight_;
-        const float compW = imeComposition_.size() * cellWidth_;
+        float compW = (float)imeShift_ * cellWidth_;
 
         // 背景（薄いハイライト）
         TermColor imeBg;
@@ -538,23 +844,52 @@ void TerminalView::OnPaint() {
         if (auto* b = GetBrush(imeBg, 0.85f))
             rt->FillRectangle(D2D1::RectF(cx, cy, cx + compW, cy + cellHeight_), b);
 
-        // テキスト
+        // テキスト（1文字ずつセル位置に描画＝確定後との字間一致）
         TermColor imeFg;
         imeFg.r = 255; imeFg.g = 255; imeFg.b = 255; imeFg.isDefault = false;
         if (auto* b = GetBrush(imeFg)) {
-            D2D1_RECT_F tr = D2D1::RectF(cx, cy, cx + compW + cellWidth_, cy + cellHeight_);
-            rt->DrawText(imeComposition_.c_str(), (UINT32)imeComposition_.size(),
-                         textFormat_, tr, b,
-                         D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+            float cellW = cellWidth_;
+            int cellPos = 0;
+            for (size_t ci = 0; ci < imeComposition_.size(); ++ci) {
+                wchar_t ch = imeComposition_[ci];
+                int cw = ImeCellWidth(std::wstring(1, ch));
+                float chx = cx + (float)cellPos * cellW;
+                D2D1_RECT_F cr = D2D1::RectF(chx, cy, chx + (float)cw * cellW, cy + cellHeight_);
+                rt->DrawText(&ch, 1, textFormat_, cr, b,
+                             D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+                cellPos += cw;
+            }
         }
 
-        // 下線
-        TermColor lineCol;
-        lineCol.r = 180; lineCol.g = 180; lineCol.b = 255; lineCol.isDefault = false;
-        if (auto* b = GetBrush(lineCol))
-            rt->DrawLine(D2D1::Point2F(cx, cy + cellHeight_ - 1.5f),
-                         D2D1::Point2F(cx + compW, cy + cellHeight_ - 1.5f),
-                         b, 1.5f);
+        // 下線（文字ごとの属性＋セル幅に応じて）
+        {
+            float cellW = cellWidth_;
+            TermColor wavyCol;  wavyCol.r = 255; wavyCol.g = 200; wavyCol.b = 100; wavyCol.isDefault = false;
+            TermColor lineCol;  lineCol.r = 180;  lineCol.g = 180;  lineCol.b = 255; lineCol.isDefault = false;
+            int cellPos = 0;
+            for (size_t ci = 0; ci < imeComposition_.size(); ++ci) {
+                int cw = ImeCellWidth(std::wstring(1, imeComposition_[ci]));
+                float ux = cx + (float)cellPos * cellW;
+                float uy = cy + cellHeight_ - 1.5f;
+                float uw = (float)cw * cellW;
+                BYTE attr = (ci < imeCompAttr_.size()) ? imeCompAttr_[ci] : ATTR_INPUT;
+                if (attr == ATTR_INPUT) {
+                    if (auto* b = GetBrush(wavyCol)) {
+                        float amp = 1.5f, step = 2.0f;
+                        for (float wx = 0; wx < uw; wx += step) {
+                            float x0 = ux + wx, x1 = ux + (std::min)(wx + step, uw);
+                            float y0 = uy + amp * sinf(wx / 4.0f * 3.14159f);
+                            float y1 = uy + amp * sinf((wx + step) / 4.0f * 3.14159f);
+                            rt->DrawLine(D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1), b, 1.0f);
+                        }
+                    }
+                } else {
+                    if (auto* b = GetBrush(lineCol))
+                        rt->DrawLine(D2D1::Point2F(ux, uy), D2D1::Point2F(ux + uw, uy), b, 1.0f);
+                }
+                cellPos += cw;
+            }
+        }
     }
 
     rt->PopAxisAlignedClip();
@@ -573,44 +908,101 @@ void TerminalView::OnPaint() {
 void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
                             const TerminalCell& cell, bool isCursor, bool cursorVisible,
                             bool isSelected) {
-    const float x = col * cellWidth_;
+    // --- OSC 1337 inline image rendering (before IME shift) ---
+    if (cell.imageId != 0 && cell.imagePlaceholderIndex == 0 && imageManager_) {
+        const float x = col * cellWidth_;
+        const float y = row * cellHeight_;
+        float imgW = cell.imageWidthCells * cellWidth_;
+        float imgH = cell.imageHeightCells * cellHeight_;
+        if (auto* bmp = imageManager_->GetBitmap(cell.imageId, rt)) {
+            rt->DrawBitmap(bmp, D2D1::RectF(x, y, x + imgW, y + imgH));
+        } else {
+            TermColor missingCol;
+            missingCol.r = 60; missingCol.g = 60; missingCol.b = 80; missingCol.isDefault = false;
+            if (auto* b = GetBrush(missingCol))
+                rt->FillRectangle(D2D1::RectF(x, y, x + imgW, y + imgH), b);
+        }
+        if (isSelected) {
+            TermColor selColor;
+            selColor.r = 80; selColor.g = 130; selColor.b = 220; selColor.isDefault = false;
+            if (auto* b = GetBrush(selColor, 0.4f))
+                rt->FillRectangle(D2D1::RectF(x, y, x + imgW, y + imgH), b);
+        }
+        if (isCursor && cursorVisible) {
+            if (auto* b = GetBrush(buffer_.defaultFgColor()))
+                rt->DrawRectangle(D2D1::RectF(x, y, x + imgW, y + imgH), b, 1.0f);
+        }
+        return;
+    }
+
+    int visualCol = col;
+    if (imeShift_ > 0 && row == buffer_.cursorRow() && col >= buffer_.cursorColumn()) {
+        visualCol = col + imeShift_;
+    }
+    const float bgX = col * cellWidth_;
     const float y = row * cellHeight_;
     const float w = cellWidth_ * (cell.wide ? 2.0f : 1.0f);
     const float h = cellHeight_;
 
-    TermColor fg = cell.foreground.isDefault ? DefaultFg() : cell.foreground;
-    TermColor bg = cell.background.isDefault ? DefaultBg() : cell.background;
+    TermColor fg = cell.foreground.isDefault ? buffer_.defaultFgColor() : cell.foreground;
+    TermColor bg = cell.background.isDefault ? buffer_.defaultBgColor() : cell.background;
     TermColor dc = cell.decorColor.isDefault ? fg : cell.decorColor;
 
-    // Apply inverse (reverse video) at render time — swap fg/bg
-    if (cell.inverse) std::swap(fg, bg);
-
-    // Draw background first
-    bool drawBlock = isCursor && cursorVisible
-                     && buffer_.cursorShape() == TerminalBuffer::CursorShape::Block;
-    if (!bg.isDefault || drawBlock) {
-        TermColor drawBg = drawBlock ? fg : bg;
-        if (auto* b = GetBrush(drawBg))
-            rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
+    // Apply inverse (reverse video) at render time — swap fg/bg.
+    // defaultFgColor()/defaultBgColor() both return TermColor with isDefault=true, so after
+    // the swap the new bg still has isDefault=true and the background fill below
+    // would be skipped (the "skip default bg" optimisation).  Clear the flag so
+    // the swapped colour is always rendered.
+    if (cell.inverse) {
+        std::swap(fg, bg);
+        bg.isDefault = false;
+        fg.isDefault = false;
     }
 
-    // Selection overlay (drawn after background so it's visible on any cell bg)
+    // Cursor colour override (OSC 12)
+    bool hasCursorColor = isCursor && cursorVisible && !buffer_.cursorColor().isDefault;
+
+    // Cell background at original column position
+    if (!bg.isDefault) {
+        if (auto* b = GetBrush(bg))
+            rt->FillRectangle(D2D1::RectF(bgX, y, bgX + w, y + h), b);
+    }
+
+    // If foreground is shifted off-screen, skip text/cursor/decorations
+    if (visualCol >= buffer_.columns())
+        return;
+
+    const float textX = visualCol * cellWidth_;
+
+    // Block cursor at text position (overwrites whatever background occupies textX)
+    bool drawBlock = isCursor && cursorVisible
+                     && buffer_.cursorShape() == TerminalBuffer::CursorShape::Block;
+    if (drawBlock) {
+        if (auto* b = GetBrush(fg))
+            rt->FillRectangle(D2D1::RectF(textX, y, textX + w, y + h), b);
+    }
+
+    // Selection overlay at text position
     if (isSelected) {
         TermColor selColor;
         selColor.r = 80; selColor.g = 130; selColor.b = 220; selColor.isDefault = false;
         if (auto* b = GetBrush(selColor, 0.4f))
-            rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
-        // Lighten foreground for readability on selection
+            rt->FillRectangle(D2D1::RectF(textX, y, textX + w, y + h), b);
         fg.r = (uint8_t)std::min(255, (int)fg.r + 60);
         fg.g = (uint8_t)std::min(255, (int)fg.g + 60);
         fg.b = (uint8_t)std::min(255, (int)fg.b + 60);
     }
 
-    // Draw text
+    // Hyperlink: apply blue color if foreground is default
+    bool hasHyperlink = !cell.hyperlinkUrl.empty();
+    if (hasHyperlink && cell.foreground.isDefault)
+        fg = TermColor::fromRgb(50, 140, 230);
+
+    // Draw text at shifted position
     if (!cell.text.empty() && cell.text != L" ") {
         TermColor drawFg = drawBlock ? bg : fg;
         if (auto* b = GetBrush(drawFg)) {
-            D2D1_RECT_F rect = D2D1::RectF(x, y, x + w, y + h);
+            D2D1_RECT_F rect = D2D1::RectF(textX, y, textX + w, y + h);
             rt->DrawText(cell.text.c_str(), (UINT32)cell.text.size(),
                          textFormat_, rect, b,
                          D2D1_DRAW_TEXT_OPTIONS_NONE,
@@ -618,30 +1010,40 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
         }
     }
 
-    // Underline
+    // Underline at text position
     if (cell.underline) {
         if (auto* b = GetBrush(dc)) {
             float uy = y + baseline_ + 1.5f;
-            rt->DrawLine({x, uy}, {x + w, uy}, b, 1.0f);
+            rt->DrawLine({textX, uy}, {textX + w, uy}, b, 1.0f);
         }
     }
 
-    // Strikethrough
+    // Strikethrough at text position
     if (cell.strikethrough) {
         if (auto* b = GetBrush(dc)) {
             float sy = y + baseline_ * 0.5f;
-            rt->DrawLine({x, sy}, {x + w, sy}, b, 1.0f);
+            rt->DrawLine({textX, sy}, {textX + w, sy}, b, 1.0f);
         }
     }
 
-    // Cursor outline (when not blinking-invisible)
+    // Hyperlink underline (OSC 8) at text position
+    if (hasHyperlink) {
+        TermColor hc = TermColor::fromRgb(50, 140, 230);
+        if (auto* b = GetBrush(hc)) {
+            float uy = y + baseline_ + 1.5f;
+            rt->DrawLine({textX, uy}, {textX + w, uy}, b, 1.0f);
+        }
+    }
+
+    // Cursor outline at text position
     if (isCursor && cursorVisible) {
+        TermColor cursorFg = hasCursorColor ? buffer_.cursorColor() : fg;
         if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Underline) {
-            if (auto* b = GetBrush(fg))
-                rt->DrawLine({x, y + h - 2}, {x + cellWidth_, y + h - 2}, b, 2.0f);
+            if (auto* b = GetBrush(cursorFg))
+                rt->DrawLine({textX, y + h - 2}, {textX + cellWidth_, y + h - 2}, b, 2.0f);
         } else if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Bar) {
-            if (auto* b = GetBrush(fg))
-                rt->DrawLine({x, y}, {x, y + h}, b, 2.0f);
+            if (auto* b = GetBrush(cursorFg))
+                rt->DrawLine({textX, y}, {textX, y + h}, b, 2.0f);
         }
     }
 }
@@ -685,7 +1087,50 @@ bool TerminalView::IsSelected(int logRow, int col) const {
     return logRow >= r1 && logRow <= r2 && col >= c1 && col <= c2;
 }
 
+bool TerminalView::IsHyperlinkAt(int px, int py) const {
+    RECT rc; GetClientRect(hwnd_, &rc);
+    if (px < 0 || py < 0 || px >= rc.right || py >= rc.bottom)
+        return false;
+    int row, col;
+    BufferCoordFromPoint(px, py, row, col);
+    const auto& line = buffer_.lineAt(row);
+    return col >= 0 && col < (int)line.size() && !line[col].hyperlinkUrl.empty();
+}
+
 void TerminalView::OnLButtonDown(int px, int py) {
+    // Ctrl+Click / modifier+Click: open hyperlink if present
+    if (clickToOpenHyperlink_) {
+        bool modHeld = false;
+        switch (hyperlinkModifier_) {
+            case 0: modHeld = (GetKeyState(VK_CONTROL) & 0x8000) != 0; break;
+            case 1: modHeld = (GetKeyState(VK_MENU)    & 0x8000) != 0; break;
+            case 2: modHeld = (GetKeyState(VK_SHIFT)   & 0x8000) != 0; break;
+            case 3: modHeld = true; break; // no modifier required
+        }
+        if (modHeld) {
+            int row, col;
+            BufferCoordFromPoint(px, py, row, col);
+            auto& line = buffer_.lineAt(row);
+            if (col >= 0 && col < (int)line.size()) {
+                const auto& url = line[col].hyperlinkUrl;
+                if (!url.empty()) {
+                    if (hyperlinkOpenCommand_.empty()) {
+                        ShellExecuteW(nullptr, L"open", url.c_str(),
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+                    } else {
+                        std::wstring cmd = hyperlinkOpenCommand_;
+                        size_t pos = cmd.find(L"{url}");
+                        if (pos != std::wstring::npos)
+                            cmd.replace(pos, 5, url);
+                        ShellExecuteW(nullptr, L"open", cmd.c_str(),
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
     // Click clears existing selection
     selAnchorRow_ = -1;
     selAnchorCol_ = -1;
@@ -1040,11 +1485,35 @@ void TerminalView::OnChar(wchar_t ch) {
 // ---------------------------------------------------------------------------
 // EncodeKey — WM_KEYDOWN → VT escape sequence
 // Application cursor mode is respected via buffer_.applicationCursorMode()
+//
+// Modifier encoding (xterm standard):
+//   1=none  2=shift  3=alt  4=shift+alt
+//   5=ctrl  6=ctrl+shift  7=ctrl+alt  8=ctrl+shift+alt
 // ---------------------------------------------------------------------------
 std::string TerminalView::EncodeKey(WPARAM vk, bool ctrl, bool shift, bool alt) {
     const bool appCursor = buffer_.applicationCursorMode();
 
-    // Ctrl + letter
+    // xterm modifier parameter
+    int mod = 1;
+    if (shift)                                   mod = 2;
+    if (alt && !ctrl && !shift)                  mod = 3;
+    if (alt && shift && !ctrl)                   mod = 4;
+    if (ctrl && !alt && !shift)                  mod = 5;
+    if (ctrl && shift && !alt)                   mod = 6;
+    if (ctrl && alt && !shift)                   mod = 7;
+    if (ctrl && alt && shift)                    mod = 8;
+    std::string modStr = (mod > 1) ? (";" + std::to_string(mod)) : "";
+
+    // Alt prefix for control chars (Backspace / Enter / Escape)
+    std::string altPfx = alt ? "\x1b" : "";
+
+    // Kitty keyboard: Ctrl+letter as CSI codepoint;mod u
+    if (vk >= 'A' && vk <= 'Z' && ctrl && buffer_.kittyKeyboardEnabled()) {
+        int codepoint = shift ? (int)vk : (int)(vk - 'A' + 'a');
+        return "\x1b[" + std::to_string(codepoint) + modStr + "u";
+    }
+
+    // Ctrl + letter (plain Ctrl only, no Alt)
     if (ctrl && !alt) {
         if (vk >= 'A' && vk <= 'Z') {
             char c = (char)(vk - 'A' + 1);
@@ -1056,44 +1525,60 @@ std::string TerminalView::EncodeKey(WPARAM vk, bool ctrl, bool shift, bool alt) 
         case VK_OEM_5:  return "\x1c"; // Ctrl+\ = FS
         case VK_OEM_6:  return "\x1d"; // Ctrl+] = GS
         case VK_OEM_3:  return "\x1e"; // Ctrl+` = RS (approx)
-        case VK_DELETE: return "\x1b[3;5~";
         }
     }
 
-    // Alt prefix
-    std::string altPfx = alt ? "\x1b" : "";
-
     switch (vk) {
     // --- cursor keys ---
-    case VK_UP:     return altPfx + (appCursor ? "\x1bOA" : "\x1b[A");
-    case VK_DOWN:   return altPfx + (appCursor ? "\x1bOB" : "\x1b[B");
-    case VK_RIGHT:  return altPfx + (appCursor ? "\x1bOC" : "\x1b[C");
-    case VK_LEFT:   return altPfx + (appCursor ? "\x1bOD" : "\x1b[D");
+    case VK_UP:
+        if (mod > 1) return "\x1b[1" + modStr + "A";
+        return appCursor ? "\x1bOA" : "\x1b[A";
+    case VK_DOWN:
+        if (mod > 1) return "\x1b[1" + modStr + "B";
+        return appCursor ? "\x1bOB" : "\x1b[B";
+    case VK_RIGHT:
+        if (mod > 1) return "\x1b[1" + modStr + "C";
+        return appCursor ? "\x1bOC" : "\x1b[C";
+    case VK_LEFT:
+        if (mod > 1) return "\x1b[1" + modStr + "D";
+        return appCursor ? "\x1bOD" : "\x1b[D";
     // --- special keys ---
-    case VK_HOME:   return shift ? "\x1b[1;2H" : "\x1b[H";
-    case VK_END:    return shift ? "\x1b[1;2F" : "\x1b[F";
-    case VK_INSERT: return "\x1b[2~";
-    case VK_DELETE: return "\x1b[3~";
-    case VK_PRIOR:  return shift ? "\x1b[5;2~" : "\x1b[5~"; // Page Up
-    case VK_NEXT:   return shift ? "\x1b[6;2~" : "\x1b[6~"; // Page Down
+    case VK_HOME:
+        if (mod > 1) return "\x1b[1" + modStr + "H";
+        return "\x1b[H";
+    case VK_END:
+        if (mod > 1) return "\x1b[1" + modStr + "F";
+        return "\x1b[F";
+    case VK_INSERT:
+        if (mod > 1) return "\x1b[2" + modStr + "~";
+        return "\x1b[2~";
+    case VK_DELETE:
+        if (mod > 1) return "\x1b[3" + modStr + "~";
+        return "\x1b[3~";
+    case VK_PRIOR: // Page Up
+        if (mod > 1) return "\x1b[5" + modStr + "~";
+        return "\x1b[5~";
+    case VK_NEXT: // Page Down
+        if (mod > 1) return "\x1b[6" + modStr + "~";
+        return "\x1b[6~";
     // --- function keys ---
-    case VK_F1:  return "\x1bOP";
-    case VK_F2:  return "\x1bOQ";
-    case VK_F3:  return "\x1bOR";
-    case VK_F4:  return "\x1bOS";
-    case VK_F5:  return "\x1b[15~";
-    case VK_F6:  return "\x1b[17~";
-    case VK_F7:  return "\x1b[18~";
-    case VK_F8:  return "\x1b[19~";
-    case VK_F9:  return "\x1b[20~";
-    case VK_F10: return "\x1b[21~";
-    case VK_F11: return "\x1b[23~";
-    case VK_F12: return "\x1b[24~";
+    case VK_F1:  return mod > 1 ? "\x1b[1" + modStr + "P" : "\x1bOP";
+    case VK_F2:  return mod > 1 ? "\x1b[1" + modStr + "Q" : "\x1bOQ";
+    case VK_F3:  return mod > 1 ? "\x1b[1" + modStr + "R" : "\x1bOR";
+    case VK_F4:  return mod > 1 ? "\x1b[1" + modStr + "S" : "\x1bOS";
+    case VK_F5:  return "\x1b[15" + modStr + "~";
+    case VK_F6:  return "\x1b[17" + modStr + "~";
+    case VK_F7:  return "\x1b[18" + modStr + "~";
+    case VK_F8:  return "\x1b[19" + modStr + "~";
+    case VK_F9:  return "\x1b[20" + modStr + "~";
+    case VK_F10: return "\x1b[21" + modStr + "~";
+    case VK_F11: return "\x1b[23" + modStr + "~";
+    case VK_F12: return "\x1b[24" + modStr + "~";
     // --- control chars ---
-    case VK_BACK:   return "\x7f";      // Backspace
-    case VK_RETURN: return "\r";        // Enter
-    case VK_TAB:    return shift ? "\x1b[Z" : "\x09"; // Tab / Shift+Tab
-    case VK_ESCAPE: return "\x1b";
+    case VK_BACK:   return altPfx + "\x7f";
+    case VK_RETURN: return altPfx + "\r";
+    case VK_TAB:    return shift ? "\x1b[Z" : "\x09";
+    case VK_ESCAPE: return altPfx + "\x1b";
     default:        return "";
     }
 }

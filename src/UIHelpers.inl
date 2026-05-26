@@ -134,16 +134,18 @@ void UpdateTabs(HWND hwnd) {
     }
 
     TCITEMW tie = {0};
-    tie.mask = TCIF_TEXT;
+    tie.mask = TCIF_TEXT | TCIF_IMAGE;
     tie.pszText = (LPWSTR)name.c_str();
+    tie.iImage = buffers[i]->GetPath().empty() ? -1 : AddFileTypeIcon(g_tabImageList, buffers[i]->GetPath());
     TabCtrl_InsertItem(g_tabHwnd, static_cast<int>(i), &tie);
   }
   // Append all app tabs after buffer tabs
   int appStart = static_cast<int>(buffers.size());
   for (size_t i = 0; i < g_appTabs.size(); ++i) {
     TCITEMW tci = {0};
-    tci.mask = TCIF_TEXT;
+    tci.mask = TCIF_TEXT | TCIF_IMAGE;
     tci.pszText = (LPWSTR)g_appTabs[i].label.c_str();
+    tci.iImage = g_appTabs[i].iImage;
     TabCtrl_InsertItem(g_tabHwnd, appStart + static_cast<int>(i), &tci);
   }
 
@@ -230,6 +232,24 @@ void UpdateMenu(HWND hwnd) {
   HMENU hConfig = CreatePopupMenu();
   AppendMenu(hConfig, MF_STRING, IDM_CONFIG_SETTINGS,
              L10N("menu_config_settings"));
+  AppendMenu(hConfig, MF_SEPARATOR, 0, NULL);
+
+  // Language submenu
+  {
+    HMENU hLang = CreatePopupMenu();
+    Language curLang = Localization::Instance().GetCurrentLanguage();
+    auto addLang = [&](Language lang, UINT id, const wchar_t* name) {
+      UINT flags = MF_STRING;
+      if (lang == curLang) flags |= MF_CHECKED;
+      AppendMenu(hLang, flags, id, name);
+    };
+    addLang(Language::English,   IDM_LANG_EN, L"English");
+    addLang(Language::Japanese,  IDM_LANG_JP, L"Japanese");
+    addLang(Language::Spanish,   IDM_LANG_ES, L"Spanish");
+    addLang(Language::French,    IDM_LANG_FR, L"French");
+    addLang(Language::German,    IDM_LANG_DE, L"German");
+    AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hLang, L"Language");
+  }
 
   // Themes submenu
   HMENU hThemes = CreatePopupMenu();
@@ -271,14 +291,6 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
-  // Language Menu
-  HMENU hLang = CreatePopupMenu();
-  AppendMenu(hLang, MF_STRING, IDM_LANG_EN, L10N("menu_language_en"));
-  AppendMenu(hLang, MF_STRING, IDM_LANG_JP, L10N("menu_language_jp"));
-  AppendMenu(hLang, MF_STRING, IDM_LANG_ES, L10N("menu_language_es"));
-  AppendMenu(hLang, MF_STRING, IDM_LANG_FR, L10N("menu_language_fr"));
-  AppendMenu(hLang, MF_STRING, IDM_LANG_DE, L10N("menu_language_de"));
-
   // Buffers Menu - integrated buffer/app tabs with type indicators
   HMENU hBuffers = CreatePopupMenu();
   const auto &buffers = g_editor->GetBuffers();
@@ -312,6 +324,7 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hHelp, MF_STRING, IDM_HELP_KEYBINDINGS,
              L10N("menu_help_keybindings"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_ABOUT, L10N("menu_help_about"));
+  AppendMenu(hHelp, MF_STRING, IDM_HELP_COPYRIGHT, L10N("menu_help_copyright"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_MESSAGES, L"Show Messages");
 
   // AI Menu (hidden by default, only shown when IsShowAI)
@@ -358,9 +371,23 @@ void UpdateMenu(HWND hwnd) {
     AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hAi, L"AI");
   else
     DestroyMenu(hAi);
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
+
+  // Apps Menu
+  HMENU hApps = CreatePopupMenu();
+  {
+    const auto &appEntries = SettingsManager::Instance().GetAppEntries();
+    for (size_t i = 0; i < appEntries.size(); ++i) {
+      std::wstring text = appEntries[i].label + L"  \u2192  " + appEntries[i].path;
+      AppendMenu(hApps, MF_STRING, IDM_APPS_START + i, text.c_str());
+    }
+    if (!appEntries.empty())
+      AppendMenu(hApps, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hApps, MF_STRING, IDM_APPS_CONFIGURE, L"Configure App Entries...");
+  }
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hApps, L"Apps");
+
   // Process Menu - kill process-bound apps and terminals
   HMENU hProcess = CreatePopupMenu();
   bool hasProcesses = false;
@@ -380,7 +407,31 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hProcess, L"Process");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hHelp, L10N("menu_help"));
 
-  SetMenu(hwnd, hMenu);
+  if (g_noTitleBar) {
+    g_menuLabels.clear();
+    struct NamePopup { std::wstring name; HMENU popup; };
+    NamePopup defs[] = {
+      { L10N("menu_file"), hFile }, { L10N("menu_edit"), hEdit },
+      { L10N("menu_view"), hView }, { L10N("menu_config"), hConfig },
+      { L10N("menu_tools"), hTools }, { L"Plugins", hPlugins },
+    };
+    for (auto &d : defs)
+      g_menuLabels.push_back({ d.name, d.popup, {0,0,0,0} });
+    if (SettingsManager::Instance().IsShowAI())
+      g_menuLabels.push_back({ L"AI", hAi, {0,0,0,0} });
+    else
+      DestroyMenu(hAi);
+    g_menuLabels.push_back({ L10N("menu_buffers"), hBuffers, {0,0,0,0} });
+    g_menuLabels.push_back({ L"CLI", hCli, {0,0,0,0} });
+    g_menuLabels.push_back({ L"Process", hProcess, {0,0,0,0} });
+    g_menuLabels.push_back({ L10N("menu_help"), hHelp, {0,0,0,0} });
+    static HMENU s_prevMenuBar = NULL;
+    if (s_prevMenuBar) DestroyMenu(s_prevMenuBar);
+    s_prevMenuBar = hMenu;
+  } else {
+    SetMenu(hwnd, hMenu);
+  }
+
   // Set window title: "Ecode - {full file path / tab name}"
   std::wstring title = L"Ecode";
   if (g_activeAppTab >= 0 && static_cast<size_t>(g_activeAppTab) < g_appTabs.size()) {
@@ -394,6 +445,7 @@ void UpdateMenu(HWND hwnd) {
       title = L"Ecode - " + name;
     }
   }
+  g_windowTitle = title;
   SetWindowText(hwnd, title.c_str());
   UpdateScrollbars(hwnd);
   UpdateTabs(hwnd);

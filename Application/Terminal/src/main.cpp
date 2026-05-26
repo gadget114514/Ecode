@@ -49,53 +49,50 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         argIdx = 2;
     }
 
-    if (argv && argc > argIdx) {
-        g_shell = argv[argIdx];
-        if (g_shell.find(L' ') != std::wstring::npos)
-            g_shell = L"\"" + g_shell + L"\"";
-        for (int i = argIdx + 1; i < argc; ++i) {
-            g_shell += L" ";
-            std::wstring arg = argv[i];
-            if (arg.find(L' ') != std::wstring::npos)
-                arg = L"\"" + arg + L"\"";
-            g_shell += arg;
-        }
-    }
-    if (argv) LocalFree(argv);
-
-    // Derive window title: "powershell.exe" -> "powershell"
-    std::wstring title = g_shell;
-    size_t slash = title.find_last_of(L"\\/");
-    if (slash != std::wstring::npos) title = title.substr(slash + 1);
-    size_t dot = title.rfind(L'.');
-    if (dot != std::wstring::npos) title = title.substr(0, dot);
-
+    // Register classes
     TerminalView::RegisterWindowClass(hInstance);
 
-    const wchar_t CLASS_NAME[] = L"EcodeTerminalWindow";
-    WNDCLASSEXW wc = {};
+    WNDCLASSEXW wc{};
     wc.cbSize        = sizeof(wc);
+    wc.style         = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc   = WindowProc;
     wc.hInstance     = hInstance;
-    wc.lpszClassName = CLASS_NAME;
-    wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+    wc.lpszClassName = L"EcodeTerminalWindow";
     if (!RegisterClassExW(&wc)) return 1;
 
+    // Parse shell argument (join remaining args, re-quoting elements with spaces)
+    if (argv && argc >= argIdx + 1) {
+        auto quoteIfNeeded = [](const std::wstring& s) -> std::wstring {
+            if (s.find(L' ') != std::wstring::npos && s.find(L'"') == std::wstring::npos)
+                return L"\"" + s + L"\"";
+            return s;
+        };
+        g_shell = quoteIfNeeded(argv[argIdx]);
+        for (int i = argIdx + 1; i < argc; ++i) {
+            g_shell += L" " + quoteIfNeeded(argv[i]);
+        }
+    }
+
+    // Create window
     HWND hwnd = CreateWindowExW(
-        0, CLASS_NAME, title.c_str(),
-        WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-        CW_USEDEFAULT, CW_USEDEFAULT, 800, 500,
-        NULL, NULL, hInstance, NULL);
+        embedded ? WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW : 0,
+        L"EcodeTerminalWindow",
+        L"Terminal",
+        embedded ? WS_POPUP : WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        900, 640,
+        nullptr, nullptr, hInstance, nullptr);
     if (!hwnd) return 1;
 
-    // When embedded, stay hidden until host sends WM_EMBED_APP
-    ShowWindow(hwnd, embedded ? SW_HIDE : nCmdShow);
-
-    if (g_view && !g_view->StartSession(g_shell)) {
-        std::wstring msg = L"Failed to start shell: " + g_shell + L"\n\n" + g_view->LastError();
-        MessageBoxW(hwnd, msg.c_str(), L"Terminal", MB_OK | MB_ICONERROR);
+    if (embedded) {
+        // Parent (ecode) will show and reposition after embedding via WM_EMBED_APP
+    } else {
+        ShowWindow(hwnd, nCmdShow);
     }
+
+    if (g_view)
+        g_view->StartSession(g_shell);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -104,3 +101,4 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     }
     return 0;
 }
+
