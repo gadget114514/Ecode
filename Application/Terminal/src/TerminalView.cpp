@@ -938,9 +938,8 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     int visualCol = col;
     if (imeShift_ > 0 && row == buffer_.cursorRow() && col >= buffer_.cursorColumn()) {
         visualCol = col + imeShift_;
-        if (visualCol >= buffer_.columns()) return; // off-screen
     }
-    const float x = visualCol * cellWidth_;
+    const float bgX = col * cellWidth_;
     const float y = row * cellHeight_;
     const float w = cellWidth_ * (cell.wide ? 2.0f : 1.0f);
     const float h = cellHeight_;
@@ -963,28 +962,32 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     // Cursor colour override (OSC 12)
     bool hasCursorColor = isCursor && cursorVisible && !buffer_.cursorColor().isDefault;
 
-    // Draw background first
-    bool drawBlock = isCursor && cursorVisible
-                     && buffer_.cursorShape() == TerminalBuffer::CursorShape::Block;
-    if (!bg.isDefault || drawBlock) {
-        TermColor drawBg;
-        if (drawBlock && hasCursorColor)
-            drawBg = buffer_.cursorColor();
-        else if (drawBlock)
-            drawBg = fg;
-        else
-            drawBg = bg;
-        if (auto* b = GetBrush(drawBg))
-            rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
+    // Cell background at original column position
+    if (!bg.isDefault) {
+        if (auto* b = GetBrush(bg))
+            rt->FillRectangle(D2D1::RectF(bgX, y, bgX + w, y + h), b);
     }
 
-    // Selection overlay (drawn after background so it's visible on any cell bg)
+    // If foreground is shifted off-screen, skip text/cursor/decorations
+    if (visualCol >= buffer_.columns())
+        return;
+
+    const float textX = visualCol * cellWidth_;
+
+    // Block cursor at text position (overwrites whatever background occupies textX)
+    bool drawBlock = isCursor && cursorVisible
+                     && buffer_.cursorShape() == TerminalBuffer::CursorShape::Block;
+    if (drawBlock) {
+        if (auto* b = GetBrush(fg))
+            rt->FillRectangle(D2D1::RectF(textX, y, textX + w, y + h), b);
+    }
+
+    // Selection overlay at text position
     if (isSelected) {
         TermColor selColor;
         selColor.r = 80; selColor.g = 130; selColor.b = 220; selColor.isDefault = false;
         if (auto* b = GetBrush(selColor, 0.4f))
-            rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
-        // Lighten foreground for readability on selection
+            rt->FillRectangle(D2D1::RectF(textX, y, textX + w, y + h), b);
         fg.r = (uint8_t)std::min(255, (int)fg.r + 60);
         fg.g = (uint8_t)std::min(255, (int)fg.g + 60);
         fg.b = (uint8_t)std::min(255, (int)fg.b + 60);
@@ -995,11 +998,11 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     if (hasHyperlink && cell.foreground.isDefault)
         fg = TermColor::fromRgb(50, 140, 230);
 
-    // Draw text
+    // Draw text at shifted position
     if (!cell.text.empty() && cell.text != L" ") {
         TermColor drawFg = drawBlock ? bg : fg;
         if (auto* b = GetBrush(drawFg)) {
-            D2D1_RECT_F rect = D2D1::RectF(x, y, x + w, y + h);
+            D2D1_RECT_F rect = D2D1::RectF(textX, y, textX + w, y + h);
             rt->DrawText(cell.text.c_str(), (UINT32)cell.text.size(),
                          textFormat_, rect, b,
                          D2D1_DRAW_TEXT_OPTIONS_NONE,
@@ -1007,40 +1010,40 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
         }
     }
 
-    // Underline
+    // Underline at text position
     if (cell.underline) {
         if (auto* b = GetBrush(dc)) {
             float uy = y + baseline_ + 1.5f;
-            rt->DrawLine({x, uy}, {x + w, uy}, b, 1.0f);
+            rt->DrawLine({textX, uy}, {textX + w, uy}, b, 1.0f);
         }
     }
 
-    // Strikethrough
+    // Strikethrough at text position
     if (cell.strikethrough) {
         if (auto* b = GetBrush(dc)) {
             float sy = y + baseline_ * 0.5f;
-            rt->DrawLine({x, sy}, {x + w, sy}, b, 1.0f);
+            rt->DrawLine({textX, sy}, {textX + w, sy}, b, 1.0f);
         }
     }
 
-    // Hyperlink underline (OSC 8)
+    // Hyperlink underline (OSC 8) at text position
     if (hasHyperlink) {
         TermColor hc = TermColor::fromRgb(50, 140, 230);
         if (auto* b = GetBrush(hc)) {
             float uy = y + baseline_ + 1.5f;
-            rt->DrawLine({x, uy}, {x + w, uy}, b, 1.0f);
+            rt->DrawLine({textX, uy}, {textX + w, uy}, b, 1.0f);
         }
     }
 
-    // Cursor outline (when not blinking-invisible)
+    // Cursor outline at text position
     if (isCursor && cursorVisible) {
         TermColor cursorFg = hasCursorColor ? buffer_.cursorColor() : fg;
         if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Underline) {
             if (auto* b = GetBrush(cursorFg))
-                rt->DrawLine({x, y + h - 2}, {x + cellWidth_, y + h - 2}, b, 2.0f);
+                rt->DrawLine({textX, y + h - 2}, {textX + cellWidth_, y + h - 2}, b, 2.0f);
         } else if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Bar) {
             if (auto* b = GetBrush(cursorFg))
-                rt->DrawLine({x, y}, {x, y + h}, b, 2.0f);
+                rt->DrawLine({textX, y}, {textX, y + h}, b, 2.0f);
         }
     }
 }
