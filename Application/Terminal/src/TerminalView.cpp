@@ -537,11 +537,63 @@ void TerminalView::OnSize(int w, int h) {
 // OnTerminalOutput — called on UI thread via PostMessage
 // ---------------------------------------------------------------------------
 void TerminalView::OnTerminalOutput(const char* data, size_t len) {
-    // Decode UTF-8 → UTF-16
-    int needed = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, nullptr, 0);
+    // Combine with any partial UTF-8 sequence from the previous chunk,
+    // so that multi-byte sequences split across pipe reads are not corrupted.
+    std::string combined;
+    if (!pendingUtf8_.empty()) {
+        combined = std::move(pendingUtf8_);
+        pendingUtf8_.clear();
+    }
+    combined.append(data, len);
+
+    // Scan from the end to detect an incomplete trailing UTF-8 sequence
+    // and save it for the next chunk.
+    size_t validLen = combined.size();
+    if (validLen > 0) {
+        const unsigned char* u = (const unsigned char*)combined.data();
+        size_t pos = validLen;
+        int contCount = 0;
+        // Count trailing continuation bytes (10xxxxxx)
+        while (pos > 0 && (u[pos - 1] & 0xC0) == 0x80) {
+            ++contCount;
+            --pos;
+        }
+        if (pos > 0) {
+            unsigned char lead = u[pos - 1];
+            if ((lead & 0xE0) == 0xC0) {
+                // 2-byte sequence: lead + 1 continuation
+                if (contCount < 1) {
+                    pendingUtf8_ = combined.substr(pos - 1);
+                    validLen = pos - 1;
+                }
+            } else if ((lead & 0xF0) == 0xE0) {
+                // 3-byte sequence: lead + 2 continuations
+                if (contCount < 2) {
+                    pendingUtf8_ = combined.substr(pos - 1);
+                    validLen = pos - 1;
+                }
+            } else if ((lead & 0xF8) == 0xF0) {
+                // 4-byte sequence: lead + 3 continuations
+                if (contCount < 3) {
+                    pendingUtf8_ = combined.substr(pos - 1);
+                    validLen = pos - 1;
+                }
+            }
+            // else: ASCII or invalid lead → no pending
+        } else if (contCount > 0) {
+            // Only continuation bytes with no lead byte → all are pending
+            pendingUtf8_ = std::move(combined);
+            return;
+        }
+    }
+
+    // Decode the valid portion only (UTF-8 → UTF-16)
+    int needed = MultiByteToWideChar(CP_UTF8, 0,
+        combined.data(), (int)validLen, nullptr, 0);
     if (needed <= 0) return;
     std::wstring ws(needed, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, data, (int)len, ws.data(), needed);
+    MultiByteToWideChar(CP_UTF8, 0,
+        combined.data(), (int)validLen, ws.data(), needed);
 
     emulator_.process(ws);
 

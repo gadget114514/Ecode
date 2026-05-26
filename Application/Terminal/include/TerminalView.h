@@ -204,4 +204,7 @@ private:
     // Progress callback (OSC 9;4)
     std::function<void(float)> onProgress_;
 
+    // UTF-8 partial sequence buffer (跨ぐチャンク間の不完全なUTF-8シーケンス)
+    std::string pendingUtf8_;
+
 };
