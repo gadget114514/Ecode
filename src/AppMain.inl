@@ -144,7 +144,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     if (!buf)
       return 0;
     int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-    int lines = (int)buf->GetScrollLine() - (delta / WHEEL_DELTA * 3);
+    int dir = SettingsManager::Instance().IsReverseScrollDirection() ? 1 : -1;
+    int lines = (int)buf->GetScrollLine() + dir * (delta / WHEEL_DELTA * 3);
     buf->SetScrollLine(
         (std::max)(0, (std::min)(lines, (int)buf->GetTotalLines() - 1)));
     UpdateScrollbars(hwnd);
