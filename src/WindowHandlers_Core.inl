@@ -83,8 +83,11 @@ static LRESULT HandleCreate(HWND hwnd) {
 
   g_scriptEngine = new ScriptEngine();
   g_scriptEngine->SetBypassCache(g_bypassCache);
-  g_scriptEngine->Initialize();
-  if (g_compileAllScripts)
+  bool initOk = g_scriptEngine->Initialize();
+  if (!initOk && g_scriptEngine->IsFatalError()) {
+    DebugLog("ScriptEngine::Initialize failed with fatal error", LOG_ERROR);
+  }
+  if (initOk && g_compileAllScripts)
     g_scriptEngine->CompileAllScripts();
   g_editor->NewFile();
   ScanPlugins();

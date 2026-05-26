@@ -14,7 +14,7 @@ struct CliEntry {
   std::wstring folder;
   int encoding; // 0=UTF8, 1=ShiftJIS
   int shellType; // 0=cmd, 1=powershell, 2=bash
-  int iconIndex = -1; // -1 = auto (from exe), 0-11 = colored square
+  int iconIndex = -1; // -2 = none, -1 = auto (from exe), 0-11 = colored square
   std::wstring label; // custom tab label (empty = auto from folder)
 };
 
@@ -98,6 +98,8 @@ public:
   void SetShowAI(bool show) { m_showAI = show; }
   bool IsVTDebug() const { return m_vtDebug; }
   void SetVTDebug(bool debug) { m_vtDebug = debug; }
+  bool IsReverseScrollDirection() const { return m_reverseScrollDirection; }
+  void SetReverseScrollDirection(bool v) { m_reverseScrollDirection = v; }
 
   bool IsSessionManagementEnabled() const { return m_enableSessionManagement; }
   void SetSessionManagementEnabled(bool enabled) { m_enableSessionManagement = enabled; }
@@ -238,6 +240,7 @@ private:
   std::wstring m_aiModel;
   std::vector<std::pair<std::wstring, std::wstring>> m_aiApiKeys; // vendor -> key
 
+  bool m_reverseScrollDirection = false;
   std::vector<ThemeEntry> m_themes;
   std::wstring m_activeTheme;
   std::vector<std::wstring> m_hiddenPlugins;
