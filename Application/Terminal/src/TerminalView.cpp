@@ -513,6 +513,10 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
 
     emulator_.process(ws);
 
+    // flush if not inside a synchronised update (?2026)
+    if (!buffer_.syncOutputEnabled())
+        InvalidateRect(hwnd_, nullptr, FALSE);
+
     // VT debug: send raw ESC sequences to parent's *Messages* buffer
     bool vtDebug = false;
     {
@@ -558,7 +562,6 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
         scrollOffset_ = std::min(scrollOffset_, maxScroll);
         scrolledBack_ = (scrollOffset_ > 0);
     }
-    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 // ---------------------------------------------------------------------------
@@ -765,7 +768,7 @@ void TerminalView::OnPaint() {
     rt->BeginDraw();
 
     // Background
-    rt->Clear(ToD2DColor(DefaultBg()));
+    rt->Clear(ToD2DColor(buffer_.defaultBgColor()));
 
     if (!textFormat_) { rt->EndDraw(); EndPaint(hwnd_, &ps); return; }
 
@@ -926,7 +929,7 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
                 rt->FillRectangle(D2D1::RectF(x, y, x + imgW, y + imgH), b);
         }
         if (isCursor && cursorVisible) {
-            if (auto* b = GetBrush(DefaultFg()))
+            if (auto* b = GetBrush(buffer_.defaultFgColor()))
                 rt->DrawRectangle(D2D1::RectF(x, y, x + imgW, y + imgH), b, 1.0f);
         }
         return;
@@ -942,12 +945,12 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     const float w = cellWidth_ * (cell.wide ? 2.0f : 1.0f);
     const float h = cellHeight_;
 
-    TermColor fg = cell.foreground.isDefault ? DefaultFg() : cell.foreground;
-    TermColor bg = cell.background.isDefault ? DefaultBg() : cell.background;
+    TermColor fg = cell.foreground.isDefault ? buffer_.defaultFgColor() : cell.foreground;
+    TermColor bg = cell.background.isDefault ? buffer_.defaultBgColor() : cell.background;
     TermColor dc = cell.decorColor.isDefault ? fg : cell.decorColor;
 
     // Apply inverse (reverse video) at render time — swap fg/bg.
-    // DefaultFg()/DefaultBg() both return TermColor with isDefault=true, so after
+    // defaultFgColor()/defaultBgColor() both return TermColor with isDefault=true, so after
     // the swap the new bg still has isDefault=true and the background fill below
     // would be skipped (the "skip default bg" optimisation).  Clear the flag so
     // the swapped colour is always rendered.
@@ -957,11 +960,20 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
         fg.isDefault = false;
     }
 
+    // Cursor colour override (OSC 12)
+    bool hasCursorColor = isCursor && cursorVisible && !buffer_.cursorColor().isDefault;
+
     // Draw background first
     bool drawBlock = isCursor && cursorVisible
                      && buffer_.cursorShape() == TerminalBuffer::CursorShape::Block;
     if (!bg.isDefault || drawBlock) {
-        TermColor drawBg = drawBlock ? fg : bg;
+        TermColor drawBg;
+        if (drawBlock && hasCursorColor)
+            drawBg = buffer_.cursorColor();
+        else if (drawBlock)
+            drawBg = fg;
+        else
+            drawBg = bg;
         if (auto* b = GetBrush(drawBg))
             rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
     }
@@ -1022,11 +1034,12 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
 
     // Cursor outline (when not blinking-invisible)
     if (isCursor && cursorVisible) {
+        TermColor cursorFg = hasCursorColor ? buffer_.cursorColor() : fg;
         if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Underline) {
-            if (auto* b = GetBrush(fg))
+            if (auto* b = GetBrush(cursorFg))
                 rt->DrawLine({x, y + h - 2}, {x + cellWidth_, y + h - 2}, b, 2.0f);
         } else if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Bar) {
-            if (auto* b = GetBrush(fg))
+            if (auto* b = GetBrush(cursorFg))
                 rt->DrawLine({x, y}, {x, y + h}, b, 2.0f);
         }
     }
@@ -1082,17 +1095,6 @@ bool TerminalView::IsHyperlinkAt(int px, int py) const {
 }
 
 void TerminalView::OnLButtonDown(int px, int py) {
-<<<<<<< Updated upstream
-    // Ctrl+click opens hyperlink
-    if (GetKeyState(VK_CONTROL) & 0x8000) {
-        int row, col;
-        BufferCoordFromPoint(px, py, row, col);
-        if (row >= 0 && col >= 0) {
-            const auto& line = buffer_.lineAt(row);
-            if (col < (int)line.size() && !line[col].hyperlinkUrl.empty()) {
-                ShellExecuteW(nullptr, L"open", line[col].hyperlinkUrl.c_str(),
-                              nullptr, nullptr, SW_SHOWNORMAL);
-                return;
     // Ctrl+Click / modifier+Click: open hyperlink if present
     if (clickToOpenHyperlink_) {
         bool modHeld = false;
@@ -1480,11 +1482,35 @@ void TerminalView::OnChar(wchar_t ch) {
 // ---------------------------------------------------------------------------
 // EncodeKey — WM_KEYDOWN → VT escape sequence
 // Application cursor mode is respected via buffer_.applicationCursorMode()
+//
+// Modifier encoding (xterm standard):
+//   1=none  2=shift  3=alt  4=shift+alt
+//   5=ctrl  6=ctrl+shift  7=ctrl+alt  8=ctrl+shift+alt
 // ---------------------------------------------------------------------------
 std::string TerminalView::EncodeKey(WPARAM vk, bool ctrl, bool shift, bool alt) {
     const bool appCursor = buffer_.applicationCursorMode();
 
-    // Ctrl + letter
+    // xterm modifier parameter
+    int mod = 1;
+    if (shift)                                   mod = 2;
+    if (alt && !ctrl && !shift)                  mod = 3;
+    if (alt && shift && !ctrl)                   mod = 4;
+    if (ctrl && !alt && !shift)                  mod = 5;
+    if (ctrl && shift && !alt)                   mod = 6;
+    if (ctrl && alt && !shift)                   mod = 7;
+    if (ctrl && alt && shift)                    mod = 8;
+    std::string modStr = (mod > 1) ? (";" + std::to_string(mod)) : "";
+
+    // Alt prefix for control chars (Backspace / Enter / Escape)
+    std::string altPfx = alt ? "\x1b" : "";
+
+    // Kitty keyboard: Ctrl+letter as CSI codepoint;mod u
+    if (vk >= 'A' && vk <= 'Z' && ctrl && buffer_.kittyKeyboardEnabled()) {
+        int codepoint = shift ? (int)vk : (int)(vk - 'A' + 'a');
+        return "\x1b[" + std::to_string(codepoint) + modStr + "u";
+    }
+
+    // Ctrl + letter (plain Ctrl only, no Alt)
     if (ctrl && !alt) {
         if (vk >= 'A' && vk <= 'Z') {
             char c = (char)(vk - 'A' + 1);
@@ -1496,44 +1522,60 @@ std::string TerminalView::EncodeKey(WPARAM vk, bool ctrl, bool shift, bool alt) 
         case VK_OEM_5:  return "\x1c"; // Ctrl+\ = FS
         case VK_OEM_6:  return "\x1d"; // Ctrl+] = GS
         case VK_OEM_3:  return "\x1e"; // Ctrl+` = RS (approx)
-        case VK_DELETE: return "\x1b[3;5~";
         }
     }
 
-    // Alt prefix
-    std::string altPfx = alt ? "\x1b" : "";
-
     switch (vk) {
     // --- cursor keys ---
-    case VK_UP:     return altPfx + (appCursor ? "\x1bOA" : "\x1b[A");
-    case VK_DOWN:   return altPfx + (appCursor ? "\x1bOB" : "\x1b[B");
-    case VK_RIGHT:  return altPfx + (appCursor ? "\x1bOC" : "\x1b[C");
-    case VK_LEFT:   return altPfx + (appCursor ? "\x1bOD" : "\x1b[D");
+    case VK_UP:
+        if (mod > 1) return "\x1b[1" + modStr + "A";
+        return appCursor ? "\x1bOA" : "\x1b[A";
+    case VK_DOWN:
+        if (mod > 1) return "\x1b[1" + modStr + "B";
+        return appCursor ? "\x1bOB" : "\x1b[B";
+    case VK_RIGHT:
+        if (mod > 1) return "\x1b[1" + modStr + "C";
+        return appCursor ? "\x1bOC" : "\x1b[C";
+    case VK_LEFT:
+        if (mod > 1) return "\x1b[1" + modStr + "D";
+        return appCursor ? "\x1bOD" : "\x1b[D";
     // --- special keys ---
-    case VK_HOME:   return shift ? "\x1b[1;2H" : "\x1b[H";
-    case VK_END:    return shift ? "\x1b[1;2F" : "\x1b[F";
-    case VK_INSERT: return "\x1b[2~";
-    case VK_DELETE: return "\x1b[3~";
-    case VK_PRIOR:  return shift ? "\x1b[5;2~" : "\x1b[5~"; // Page Up
-    case VK_NEXT:   return shift ? "\x1b[6;2~" : "\x1b[6~"; // Page Down
+    case VK_HOME:
+        if (mod > 1) return "\x1b[1" + modStr + "H";
+        return "\x1b[H";
+    case VK_END:
+        if (mod > 1) return "\x1b[1" + modStr + "F";
+        return "\x1b[F";
+    case VK_INSERT:
+        if (mod > 1) return "\x1b[2" + modStr + "~";
+        return "\x1b[2~";
+    case VK_DELETE:
+        if (mod > 1) return "\x1b[3" + modStr + "~";
+        return "\x1b[3~";
+    case VK_PRIOR: // Page Up
+        if (mod > 1) return "\x1b[5" + modStr + "~";
+        return "\x1b[5~";
+    case VK_NEXT: // Page Down
+        if (mod > 1) return "\x1b[6" + modStr + "~";
+        return "\x1b[6~";
     // --- function keys ---
-    case VK_F1:  return "\x1bOP";
-    case VK_F2:  return "\x1bOQ";
-    case VK_F3:  return "\x1bOR";
-    case VK_F4:  return "\x1bOS";
-    case VK_F5:  return "\x1b[15~";
-    case VK_F6:  return "\x1b[17~";
-    case VK_F7:  return "\x1b[18~";
-    case VK_F8:  return "\x1b[19~";
-    case VK_F9:  return "\x1b[20~";
-    case VK_F10: return "\x1b[21~";
-    case VK_F11: return "\x1b[23~";
-    case VK_F12: return "\x1b[24~";
+    case VK_F1:  return mod > 1 ? "\x1b[1" + modStr + "P" : "\x1bOP";
+    case VK_F2:  return mod > 1 ? "\x1b[1" + modStr + "Q" : "\x1bOQ";
+    case VK_F3:  return mod > 1 ? "\x1b[1" + modStr + "R" : "\x1bOR";
+    case VK_F4:  return mod > 1 ? "\x1b[1" + modStr + "S" : "\x1bOS";
+    case VK_F5:  return "\x1b[15" + modStr + "~";
+    case VK_F6:  return "\x1b[17" + modStr + "~";
+    case VK_F7:  return "\x1b[18" + modStr + "~";
+    case VK_F8:  return "\x1b[19" + modStr + "~";
+    case VK_F9:  return "\x1b[20" + modStr + "~";
+    case VK_F10: return "\x1b[21" + modStr + "~";
+    case VK_F11: return "\x1b[23" + modStr + "~";
+    case VK_F12: return "\x1b[24" + modStr + "~";
     // --- control chars ---
-    case VK_BACK:   return "\x7f";      // Backspace
-    case VK_RETURN: return "\r";        // Enter
-    case VK_TAB:    return shift ? "\x1b[Z" : "\x09"; // Tab / Shift+Tab
-    case VK_ESCAPE: return "\x1b";
+    case VK_BACK:   return altPfx + "\x7f";
+    case VK_RETURN: return altPfx + "\r";
+    case VK_TAB:    return shift ? "\x1b[Z" : "\x09";
+    case VK_ESCAPE: return altPfx + "\x1b";
     default:        return "";
     }
 }

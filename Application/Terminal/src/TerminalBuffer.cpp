@@ -12,6 +12,19 @@ static int clamp(int v, int lo, int hi) { return std::max(lo, std::min(v, hi)); 
 // ---------------------------------------------------------------------------
 TerminalBuffer::TerminalBuffer(int columns, int rows) {
     resize(columns, rows);
+    // Default ANSI palette
+    static const TermColor kPalette[16] = {
+        TermColor::fromRgb( 12,  12,  12), TermColor::fromRgb(197,  15,  31),
+        TermColor::fromRgb( 19, 161,  14), TermColor::fromRgb(193, 156,   0),
+        TermColor::fromRgb(  0,  55, 218), TermColor::fromRgb(136,  23, 152),
+        TermColor::fromRgb( 58, 150, 221), TermColor::fromRgb(204, 204, 204),
+        TermColor::fromRgb(118, 118, 118), TermColor::fromRgb(231,  72,  86),
+        TermColor::fromRgb( 22, 198,  12), TermColor::fromRgb(249, 241, 165),
+        TermColor::fromRgb( 59, 120, 255), TermColor::fromRgb(180,   0, 158),
+        TermColor::fromRgb( 97, 214, 214), TermColor::fromRgb(242, 242, 242),
+    };
+    for (int i = 0; i < 16; i++)
+        palette_[i] = kPalette[i];
 }
 
 // ---------------------------------------------------------------------------
@@ -440,6 +453,8 @@ bool TerminalBuffer::hasScrollRegion() const {
 // ---------------------------------------------------------------------------
 void TerminalBuffer::setBracketedPasteEnabled(bool v)      { bracketedPasteEnabled_ = v; }
 bool TerminalBuffer::bracketedPasteEnabled()         const { return bracketedPasteEnabled_; }
+void TerminalBuffer::setSyncOutputEnabled(bool v)          { syncOutputEnabled_ = v; }
+bool TerminalBuffer::syncOutputEnabled()             const { return syncOutputEnabled_; }
 void TerminalBuffer::setMouseTrackingMode(int mode)        { mouseTrackingMode_ = mode; }
 int  TerminalBuffer::mouseTrackingMode()             const { return mouseTrackingMode_; }
 void TerminalBuffer::setSgrMouseEnabled(bool v)            { sgrMouseEnabled_ = v; }
@@ -462,6 +477,18 @@ void TerminalBuffer::setCursorBlink(bool v)                { cursorBlink_ = v; }
 bool TerminalBuffer::cursorBlink()                   const { return cursorBlink_; }
 void TerminalBuffer::setCursorShape(CursorShape s)         { cursorShape_ = s; }
 TerminalBuffer::CursorShape TerminalBuffer::cursorShape()  const { return cursorShape_; }
+
+// ---------------------------------------------------------------------------
+// OSC 4/10/11/12 colour overrides
+// ---------------------------------------------------------------------------
+void TerminalBuffer::setDefaultFgColor(const TermColor& c)  { defaultFg_ = c; }
+TermColor TerminalBuffer::defaultFgColor()             const { return defaultFg_; }
+void TerminalBuffer::setDefaultBgColor(const TermColor& c)  { defaultBg_ = c; }
+TermColor TerminalBuffer::defaultBgColor()             const { return defaultBg_; }
+void TerminalBuffer::setCursorColor(const TermColor& c)     { cursorColor_ = c; }
+TermColor TerminalBuffer::cursorColor()                const { return cursorColor_; }
+void TerminalBuffer::setPaletteColor(int i, const TermColor& c) { if (i >= 0 && i < 16) palette_[i] = c; }
+TermColor TerminalBuffer::paletteColor(int i)          const { return (i >= 0 && i < 16) ? palette_[i] : TermColor(); }
 
 // ---------------------------------------------------------------------------
 // alternate screen
@@ -502,21 +529,23 @@ bool TerminalBuffer::alternateScreenActive() const { return alternateScreenActiv
 
 void TerminalBuffer::savePrivateMode(int mode) {
     switch (mode) {
-    case 1:    savedPrivateMode1_    = applicationCursorMode_; break;
-    case 25:   savedPrivateMode25_   = cursorVisible_;          break;
+    case 1:    savedPrivateMode1_     = applicationCursorMode_; break;
+    case 25:   savedPrivateMode25_    = cursorVisible_;         break;
     case 1049:
     case 1047:
-    case 47:   savedPrivateMode1049_ = alternateScreenActive_;  break;
+    case 47:   savedPrivateMode1049_  = alternateScreenActive_; break;
+    case 2026: savedPrivateMode2026_  = syncOutputEnabled_;     break;
     }
 }
 
 void TerminalBuffer::restorePrivateMode(int mode) {
     switch (mode) {
     case 1:    setApplicationCursorMode(savedPrivateMode1_); break;
-    case 25:   setCursorVisible(savedPrivateMode25_);          break;
+    case 25:   setCursorVisible(savedPrivateMode25_);         break;
     case 1049:
     case 1047:
-    case 47:   useAlternateScreen(savedPrivateMode1049_);  break;
+    case 47:   useAlternateScreen(savedPrivateMode1049_); break;
+    case 2026: setSyncOutputEnabled(savedPrivateMode2026_); break;
     }
 }
 
