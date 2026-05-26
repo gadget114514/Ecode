@@ -177,6 +177,11 @@ private:
     int  hyperlinkModifier_    = 3;     // 0=Ctrl, 1=Alt, 2=Shift, 3=no modifier
     std::wstring hyperlinkOpenCommand_; // empty = ShellExecuteW, else {url} template
 
+    // Tooltip for hyperlinks
+    HWND tooltip_ = nullptr;
+    bool tooltipActive_ = false;
+    std::wstring tooltipText_;
+
     // Is there a hyperlink at the given client-area point?
     bool IsHyperlinkAt(int px, int py) const;
 
