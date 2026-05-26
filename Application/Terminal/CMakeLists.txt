@@ -4,12 +4,12 @@ project(Terminal LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_definitions(-DUNICODE -D_UNICODE)
+add_definitions(-DUNICODE -D_UNICODE -DECODE_ENABLE_SIXEL)
 if(MSVC)
   add_compile_options(/utf-8)
 endif()
 
-include_directories(include)
+include_directories(include ../../libsixel-windows/include)
 
 set(SOURCES
     src/main.cpp
