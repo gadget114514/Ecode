@@ -32,6 +32,27 @@ static LRESULT HandlePaint(HWND hwnd) {
         activeBuffer->GetLineOffset(viewportStartPhysicalLine);
     size_t viewportStartVisual =
         activeBuffer->LogicalToVisualOffset(viewportStartLogical);
+
+    // IME composition: insert into viewport text to push existing text right
+    std::string displayContent = content;
+    size_t adjustedCaret = logicalCaret;
+    g_imeCompViewOffset = 0;
+    g_imeCompViewLen = 0;
+    if (g_imeComposing && !g_imeComposition.empty()) {
+      if (logicalCaret >= viewportStartLogical &&
+          logicalCaret - viewportStartLogical <= content.length()) {
+        g_imeCompViewOffset = logicalCaret - viewportStartLogical;
+        int utf8Len = WideCharToMultiByte(CP_UTF8, 0, g_imeComposition.c_str(),
+            (int)g_imeComposition.size(), NULL, 0, NULL, NULL);
+        g_imeCompUtf8.resize(utf8Len);
+        WideCharToMultiByte(CP_UTF8, 0, g_imeComposition.c_str(),
+            (int)g_imeComposition.size(), g_imeCompUtf8.data(), utf8Len, NULL, NULL);
+        displayContent.insert(g_imeCompViewOffset, g_imeCompUtf8);
+        g_imeCompViewLen = g_imeCompUtf8.length();
+        adjustedCaret = logicalCaret + g_imeCompViewLen;
+      }
+    }
+
     size_t viewportRelativeCaret = (visualCaret >= viewportStartVisual)
                                        ? (visualCaret - viewportStartVisual)
                                        : 0;
@@ -87,8 +108,11 @@ static LRESULT HandlePaint(HWND hwnd) {
       }
     }
 
+    size_t caretInDisplay = g_imeCompViewLen > 0
+        ? (g_imeCompViewOffset + g_imeCompViewLen)
+        : (visualCaret - viewportStartVisual);
     g_renderer->DrawEditorLines(
-        content, viewportRelativeCaret, &viewportSelections,
+        displayContent, caretInDisplay, &viewportSelections,
         &viewportHighlights, scrollLine + 1, activeBuffer->GetScrollX(),
         &physicalLineNumbers, activeBuffer->GetTotalLines());
   }
@@ -98,6 +122,7 @@ static LRESULT HandlePaint(HWND hwnd) {
 
 static LRESULT HandleChar(HWND hwnd, WPARAM wParam) {
   if (g_activeAppTab >= 0) return 0;
+  if (g_imeComposing) return 0; // IME finalized text inserted directly
   if (g_scriptEngine->IsKeyboardCaptured()) {
     wchar_t wc = static_cast<wchar_t>(wParam);
     std::string s;

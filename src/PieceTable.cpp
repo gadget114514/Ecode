@@ -97,6 +97,7 @@ void PieceTable::Insert(size_t pos, const std::string &text) {
     m_pieces.emplace_back(BufferType::Added, addedStart, text.length(), lines);
     m_totalLength += text.length();
     m_totalLines += lines;
+    InvalidateLineCache();
     return;
   }
 

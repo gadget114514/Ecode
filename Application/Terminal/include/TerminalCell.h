@@ -54,6 +54,12 @@ struct TerminalCell {
     bool wide             = false;  // cell occupies 2 columns (CJK, emoji)
     bool wideContinuation = false;  // right half placeholder of a wide cell
 
+    // OSC 1337 inline image
+    uint64_t imageId                 = 0;   // 0 = no image
+    int16_t  imageWidthCells         = 0;   // image occupies N columns
+    int16_t  imageHeightCells        = 0;   // image occupies M rows
+    uint8_t  imagePlaceholderIndex   = 0;   // 0=base, 1..n=continuation
+
     // OSC 8 hyperlink URL (empty = none) — from terminalpp
     std::wstring hyperlinkUrl;
 

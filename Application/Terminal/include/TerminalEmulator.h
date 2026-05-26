@@ -45,13 +45,40 @@ public:
     void setHyperlinkOpenCallback(std::function<void(const std::wstring&)> cb) {
         onHyperlinkOpen_ = std::move(cb);
     }
-    // Debug log callback (*Messages* buffer)
-    void setLogCallback(std::function<void(const std::wstring&)> cb) {
-        onLog_ = std::move(cb);
-    }
-
     // Whether bold colours should use the bright palette variants (terminalpp)
     void setBoldIsBright(bool v) { boldIsBright_ = v; }
+
+    // --- OSC 1337 callbacks ---
+
+    // Raw decoded image data for inline display
+    using ImageDataCallback = std::function<void(
+        const std::vector<uint8_t>& data,
+        int width, int height,
+        bool preserveAspectRatio,
+        const std::wstring& name)>;
+    void setImageDataCallback(ImageDataCallback cb) {
+        onImageData_ = std::move(cb);
+    }
+
+    // File download request (inline=0)
+    using FileDownloadCallback = std::function<void(
+        const std::vector<uint8_t>& data,
+        const std::wstring& name)>;
+    void setFileDownloadCallback(FileDownloadCallback cb) {
+        onFileDownload_ = std::move(cb);
+    }
+
+    // --- Sixel DCS callback ---
+    using SixelDataCallback = std::function<void(const std::vector<uint8_t>& data)>;
+    void setSixelDataCallback(SixelDataCallback cb) {
+        onSixelData_ = std::move(cb);
+    }
+
+    // Taskbar / progress indicator (OSC 9;4).  Called with progress [0..1]
+    // or with a negative value when the indicator should be cleared.
+    void setProgressCallback(std::function<void(float)> cb) {
+        onProgress_ = std::move(cb);
+    }
 
 private:
     // --- parsing state ---
@@ -61,7 +88,7 @@ private:
         Csi,          // ESC [
         CsiParam,
         Osc,          // ESC ]
-        DcsEntry,     // ESC P  (ignored, consumed)
+        DcsEntry,     // ESC P  (accumulated for sixel)
         CharsetG0,    // ESC (
         CharsetG1,    // ESC )
     };
@@ -70,6 +97,7 @@ private:
     void handleCsi(const std::wstring& params, wchar_t finalByte);
     void handleOsc(const std::wstring& text);
     void handlePrivateMode(const std::wstring& params, bool enabled);
+    void handlePrivateModeSaveRestore(const std::wstring& params, bool save);
     void handleSgr(const std::vector<std::wstring>& parts);
     TermColor parseSgrExtendedColor(const std::vector<std::wstring>& parts, size_t& i);
     void handleCursorStyle(int value);
@@ -81,12 +109,21 @@ private:
     void queryKittyKeyboardProtocol();
     wchar_t mapLineDrawingChar(wchar_t ch) const;
 
+    // OSC 1337 handlers
+    void handleOsc1337(const std::wstring& params);
+    void handleOsc1337File(const std::wstring& s);
+    void handleOsc1337MultipartStart(const std::wstring& opts);
+    void handleOsc1337FilePart(const std::wstring& b64chunk);
+    void handleOsc1337FileEnd();
+
     // helper: split wstring by delimiter
     static std::vector<std::wstring> splitParams(const std::wstring& s, wchar_t delim = L';');
     static int paramInt(const std::vector<std::wstring>& p, size_t i, int def = 0);
 
     void emitResponse(const std::wstring& s) { if (onResponse_) onResponse_(s); }
-    void logDebug(const std::wstring& s) { if (onLog_) onLog_(s); }
+
+    // DCS (Sixel) handler
+    void handleDcs(const std::string& data);
 
     // --- state ---
     TerminalBuffer* buffer_ = nullptr;
@@ -109,10 +146,21 @@ private:
     // active hyperlink URL (OSC 8)
     std::wstring activeHyperlinkUrl_;
 
+    // DCS accumulation buffer
+    std::string dcsBuffer_;
+
     // callbacks
     std::function<void(const std::wstring&)> onResponse_;
     std::function<void(const std::wstring&)> onTitle_;
     std::function<void(const std::wstring&)> onClipboard_;
     std::function<void(const std::wstring&)> onHyperlinkOpen_;
-    std::function<void(const std::wstring&)> onLog_;
+    ImageDataCallback    onImageData_;
+    FileDownloadCallback onFileDownload_;
+    SixelDataCallback    onSixelData_;
+    std::function<void(float)> onProgress_;
+
+    // --- OSC 1337 multipart state ---
+    bool         multipartActive_ = false;
+    std::wstring multipartOptions_;   // options from MultipartFile=
+    std::string  multipartBuffer_;    // accumulated base64 data
 };

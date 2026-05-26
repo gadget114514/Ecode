@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-# Fully static build: static vcpkg deps + static CRT (/MT).
 set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "vcpkg triplet")
-
 project(JYEditor LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -32,10 +30,18 @@ if(MSVC)
 endif()
 
 
-# If using vcpkg, these find_packages will work if installed
-find_package(nlohmann_json CONFIG REQUIRED)
-target_link_libraries(JYEditor PRIVATE nlohmann_json::nlohmann_json)
+# nlohmann_json (header-only, local copy)
+target_include_directories(JYEditor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# YAML-CPP
-find_package(yaml-cpp CONFIG REQUIRED)
-target_link_libraries(JYEditor PRIVATE yaml-cpp::yaml-cpp)
+# yaml-cpp built from source via FetchContent
+include(FetchContent)
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_INSTALL OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_FORMAT_SOURCE OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG 0.8.0
+)
+FetchContent_MakeAvailable(yaml-cpp)
+target_link_libraries(JYEditor PRIVATE yaml-cpp)

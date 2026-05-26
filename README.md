@@ -1,8 +1,17 @@
 # Ecode
 
+There are same name editor gainning a lot of stars. but this editor and terminal just one star from me. Hahaha.
+
+The development of this application is very early stage now. 
+
+# Purpose
+
+I want to use CLI and small editor in a pane. I've not edited at all. I always go and back between several windows in which CLI runs.
+Maybe such application exists, but I started the development. it was hard even using AI CLIs.
+
 Talk to AI, edit code, run commands — all in one fast native Windows app.
 
-No Electron. No webView. No 500MB install.
+Minimal, No Electron. No webView. No 500MB install.
 
 > **Process-bounded architecture**: Plugins like the terminal run as **separate child processes**, not as in-process DLLs or web views. Each dies cleanly when closed. No process hikes or memory leaks.
 
@@ -50,6 +59,10 @@ A real terminal runs as a child process inside an editor tab. Works with any CLI
 - Copy text from terminal output and paste into your code
 - Colors, bold, italic, underline — everything renders correctly
 
+
+This figure shows the opencode running in terminal.
+![](https://github.com/user-attachments/assets/5a0ab0e6-0b00-4ca2-8784-2256205d9191)
+
 ### CLI Command Launcher
 Save your most-used shell commands with names and working directories. Run them from a menu anytime.
 
@@ -59,6 +72,9 @@ Save your most-used shell commands with names and working directories. Run them 
 | Test | `pytest tests/` | `D:\project` |
 | Git status | `git status` | `D:\project` |
 | AI chat | `claude` | `D:\project` |
+
+This figure shows the psmux(third party) running in terminal.
+![](https://github.com/user-attachments/assets/ff2abfe1-512d-4255-9f26-6afff6cdda63)
 
 ### Git-Friendly
 - Atomic saves (write to temp, rename) — no corrupted files even on crash
@@ -75,7 +91,7 @@ JavaScript engine built in. Create macros, automate editing tasks, add custom ke
 ## Getting Started
 
 ### Download
-Download the latest installer from [Releases](https://github.com/user/Ecode/releases).
+Download the latest installer from [Releases](https://github.com/gadget114514/Ecode/releases).
 
 ### Build from Source
 ```powershell
@@ -90,16 +106,34 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 ---
 
 ## Project Status
-
 - [x] Terminal + CLI launcher
-
+- [x] Simple Text editor
 - [x] Find in files (grep with regex)
 - [x] Huge file support
-- [x] Multi-language UI
+- [ ] Multi-language UI
+- [x] CLI (agy,opencode,claude CLI)
+- [x] Launcher Applications/Plugins
+- [x] Applications(admin)
+- [x] Inline IME input 
+- [x] osc1337
+- [x] sixel
 - [ ] Theming
+- [ ] Session save/resume
+- [ ] Notepad keybindings
+- [ ] JavaScript macros / bytecode compiler and loader
+- [ ] MCP server
+- [ ] Document/About/Help
+- [ ] Autosave editor
+- [ ] UI/small icons
+- [ ] Language Server or AI assistant
+      
 
 ---
 
 ## License
 
 MIT
+
+## Thirdparty
+
+Microsoft MIT license

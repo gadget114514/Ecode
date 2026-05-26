@@ -56,7 +56,21 @@ bool g_bypassCache = false;
 bool g_compileAllScripts = false;
 volatile LONG g_grepCancelFlag = 0;
 bool g_grepSearchActive = false;
+HIMAGELIST g_tabImageList = nullptr;
+// Top bar / no-title-bar mode
+bool g_noTitleBar = false;
+int g_topBarHeight = 32;
+std::vector<MenuLabel> g_menuLabels;
+RECT g_minButtonRect  = {0};
+RECT g_maxButtonRect  = {0};
+RECT g_closeButtonRect = {0};
+bool g_isActive = true;
+bool g_menuTracking = false;
+std::wstring g_windowTitle;
+HMENU g_hSysMenu = nullptr;
+int g_topBarButtonPushed = 0;
 
+#include "TabIconHelper.inl"
 #include "TreeViewHelpers.inl"
 #include "AppMain.inl"
 #include "MinibufferHandler.inl"
@@ -65,4 +79,5 @@ bool g_grepSearchActive = false;
 #include "TabDragHandler.inl"
 #include "WindowHandlers_Core.inl"
 #include "WindowHandlers_Input.inl"
+#include "TopBar.inl"
 #include "TabSwitcherView.inl"

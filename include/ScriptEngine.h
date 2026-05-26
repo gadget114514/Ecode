@@ -28,11 +28,17 @@ public:
   void CompileAllScripts();
   void CallGlobalFunction(const std::string &name, const std::string &arg);
 
+  // Error recovery
+  bool IsFatalError() const { return m_fatalError; }
+  void Reset();
+
 private:
+  static void FatalHandler(void *udata, const char *msg);
   void LoadDefaultBindings();
   duk_context *m_ctx;
   std::map<std::string, std::string> m_keyBindings;
   bool m_captureKeyboard = false;
   std::string m_keyHandler;
   bool m_bypassCache = false;
+  bool m_fatalError = false;
 };

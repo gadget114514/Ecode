@@ -6,6 +6,16 @@
 #include <vector>
 
 extern Editor *g_editor;
+extern std::wstring g_imeComposition;
+extern std::vector<BYTE> g_imeCompAttr;
+extern bool g_imeComposing;
+extern size_t g_imeCompViewOffset;
+extern size_t g_imeCompViewLen;
+
+extern bool g_noTitleBar;
+extern bool g_isActive;
+extern int g_topBarHeight;
+extern void DrawTopBar(HDC hdc, HWND hwnd);
 
 void EditorBufferRenderer::DrawEditorLines(
     const std::string &text, size_t caretPos,
@@ -17,6 +27,15 @@ void EditorBufferRenderer::DrawEditorLines(
     return;
 
   this->m_renderTarget->BeginDraw();
+  D2D1_SIZE_F sz = this->m_renderTarget->GetSize();
+
+  bool clipped = false;
+  if (this->val_TopPadding > 0) {
+    D2D1_RECT_F clipRect = {0, this->val_TopPadding, sz.width, sz.height};
+    this->m_renderTarget->PushAxisAlignedClip(&clipRect, D2D1_ANTIALIAS_MODE_ALIASED);
+    clipped = true;
+  }
+
   this->m_renderTarget->Clear(this->m_theme.background);
 
   // OPTIMIZATION #6: Cache UTF-8 to UTF-16 conversion
@@ -255,8 +274,7 @@ void EditorBufferRenderer::DrawEditorLines(
       }
     }
 
-    // Draw Caret
-    // Draw Caret
+    // Draw Caret (position from text layout, already includes composition in displayContent)
     bool cv = m_enableCaretBlinking ? this->m_bIsCaretVisibleVal : true;
     if (cv) {
       DWRITE_HIT_TEST_METRICS metrics;
@@ -268,32 +286,100 @@ void EditorBufferRenderer::DrawEditorLines(
         if (width <= 0)
           width = 8.0f;
 
+        float cx = caretX + xOffset;
+        float cy = caretY + yOffset;
+
         if (m_caretStyle == CaretStyle::Block) {
-          D2D1_RECT_F rect = D2D1::RectF(caretX + xOffset, caretY + yOffset,
-                                         caretX + xOffset + width,
-                                         caretY + metrics.height + yOffset);
+          D2D1_RECT_F rect = D2D1::RectF(cx, cy, cx + width, cy + metrics.height);
           this->m_lastCaretRect = rect;
           m_caretBrush->SetOpacity(0.5f);
           this->m_renderTarget->FillRectangle(rect, this->m_caretBrush.Get());
           m_caretBrush->SetOpacity(1.0f);
         } else if (m_caretStyle == CaretStyle::Underline) {
-          float yPos = caretY + metrics.height + yOffset;
-          this->m_lastCaretRect = D2D1::RectF(caretX + xOffset, yPos - 2,
-                                              caretX + xOffset + width, yPos);
+          float yPos = cy + metrics.height;
+          this->m_lastCaretRect = D2D1::RectF(cx, yPos - 2, cx + width, yPos);
           this->m_renderTarget->DrawLine(
-              D2D1::Point2F(caretX + xOffset, yPos),
-              D2D1::Point2F(caretX + xOffset + width, yPos),
+              D2D1::Point2F(cx, yPos), D2D1::Point2F(cx + width, yPos),
               this->m_caretBrush.Get(), 2.0f);
         } else { // Line
-          this->m_lastCaretRect = D2D1::RectF(
-              caretX + xOffset, caretY + yOffset, caretX + xOffset + 2,
-              caretY + metrics.height + yOffset);
+          this->m_lastCaretRect = D2D1::RectF(cx, cy, cx + 2, cy + metrics.height);
           this->m_renderTarget->DrawLine(
-              D2D1::Point2F(caretX + xOffset, caretY + yOffset),
-              D2D1::Point2F(caretX + xOffset,
-                            caretY + metrics.height + yOffset),
+              D2D1::Point2F(cx, cy), D2D1::Point2F(cx, cy + metrics.height),
               this->m_caretBrush.Get(), 2.0f);
         }
+      }
+    }
+
+    // IME composition range highlight + underlines (text is in displayContent)
+    if (g_imeComposing && g_imeCompViewLen > 0 && !g_imeCompAttr.empty()) {
+      // Convert byte offsets to char indices in the modified text
+      int compStartChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
+          static_cast<int>(g_imeCompViewOffset), NULL, 0);
+      int compEndChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
+          static_cast<int>(g_imeCompViewOffset + g_imeCompViewLen), NULL, 0);
+      int compCharLen = compEndChar - compStartChar;
+
+      // Highlight the composition range
+      UINT32 hitCount = 0;
+      textLayout->HitTestTextRange((UINT32)compStartChar, (UINT32)compCharLen,
+          0, 0, NULL, 0, &hitCount);
+      if (hitCount > 0) {
+        std::vector<DWRITE_HIT_TEST_METRICS> hits(hitCount);
+        textLayout->HitTestTextRange((UINT32)compStartChar, (UINT32)compCharLen,
+            0, 0, hits.data(), hitCount, &hitCount);
+        for (const auto &h : hits) {
+          m_renderTarget->FillRectangle(
+              D2D1::RectF(h.left + xOffset, h.top + yOffset,
+                          h.left + h.width + xOffset,
+                          h.top + h.height + yOffset),
+              m_selBrush.Get());
+        }
+      }
+
+      // Underlines per character
+      float lineH = GetLineHeight();
+      for (int ci = 0; ci < (int)g_imeCompAttr.size() && ci < compCharLen; ++ci) {
+        int tp = compStartChar + ci;
+        DWRITE_HIT_TEST_METRICS hm;
+        float ux, uy;
+        if (SUCCEEDED(textLayout->HitTestTextPosition(tp, FALSE, &ux, &uy, &hm))) {
+          float sx = ux + xOffset;
+          float sy = uy + yOffset + lineH - 1.5f;
+          float sw = (std::max)(hm.width, 4.0f);
+          BYTE attr = g_imeCompAttr[ci];
+          if (attr == ATTR_INPUT) {
+            float amp = 1.5f, step = 2.0f;
+            for (float wx = 0; wx < sw; wx += step) {
+              float x0 = sx + wx, x1 = sx + (std::min)(wx + step, sw);
+              float y0 = sy + amp * sinf(wx / 4.0f * 3.14159f);
+              float y1 = sy + amp * sinf((wx + step) / 4.0f * 3.14159f);
+              m_renderTarget->DrawLine(
+                  D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1),
+                  m_caretBrush.Get(), 1.0f);
+            }
+          } else {
+            m_renderTarget->DrawLine(
+                D2D1::Point2F(sx, sy), D2D1::Point2F(sx + sw, sy),
+                m_caretBrush.Get(), 1.0f);
+          }
+        }
+      }
+    }
+  }
+
+  if (clipped)
+    this->m_renderTarget->PopAxisAlignedClip();
+
+  // Draw topbar via GDI interop so it lands in the same D2D frame (no flicker).
+  if (g_noTitleBar) {
+    ComPtr<ID2D1GdiInteropRenderTarget> gdiInterop;
+    if (SUCCEEDED(m_renderTarget->QueryInterface(
+            __uuidof(ID2D1GdiInteropRenderTarget),
+            reinterpret_cast<void **>(gdiInterop.GetAddressOf())))) {
+      HDC dc = NULL;
+      if (SUCCEEDED(gdiInterop->GetDC(D2D1_DC_INITIALIZE_MODE_COPY, &dc))) {
+        DrawTopBar(dc, m_hwnd);
+        gdiInterop->ReleaseDC(NULL);
       }
     }
   }

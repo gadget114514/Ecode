@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Buffer.h"
+#include "SettingsManager.h"
 #include <functional>
 #include <memory>
 #include <vector>
@@ -45,6 +46,9 @@ public:
 
   void LogMessage(const std::string &msg);
   Buffer *GetBufferByName(const std::wstring &name);
+
+  SessionBufferState GetBufferState(size_t index) const;
+  void RestoreBufferState(size_t index, const SessionBufferState &state);
 
 private:
   std::function<void(float)> m_progressCb;

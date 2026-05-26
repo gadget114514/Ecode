@@ -89,6 +89,7 @@ private:
     FnCreate fnCreate_ = nullptr;
     FnResize fnResize_ = nullptr;
     FnClose  fnClose_  = nullptr;
+    HMODULE  hConptyDll_ = nullptr;
 
     HPCON  hPC_ = nullptr;
 

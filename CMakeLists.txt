@@ -2,6 +2,42 @@ cmake_minimum_required(VERSION 3.10)
 project(Ecode LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
+
+# Git-based version auto-detection
+execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_DESCRIBE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT GIT_DESCRIBE)
+    set(GIT_DESCRIBE "v1.0")
+endif()
+# Parse into string and numeric components
+# Strip leading 'v' or 'V' if present
+string(REGEX MATCH "^[vV]" HAS_PREFIX "${GIT_DESCRIBE}")
+if(HAS_PREFIX)
+    string(REGEX REPLACE "^[vV]" "" GIT_CLEAN "${GIT_DESCRIBE}")
+else()
+    set(GIT_CLEAN "${GIT_DESCRIBE}")
+endif()
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" VERSION_MATCH "${GIT_CLEAN}")
+if(VERSION_MATCH)
+    set(ECODE_VERSION_STRING "${GIT_DESCRIBE}")
+    set(ECODE_VERSION_MAJOR "${CMAKE_MATCH_1}")
+    set(ECODE_VERSION_MINOR "${CMAKE_MATCH_2}")
+    set(ECODE_VERSION_PATCH "${CMAKE_MATCH_3}")
+else()
+    set(ECODE_VERSION_STRING "${GIT_DESCRIBE}")
+    set(ECODE_VERSION_MAJOR "1")
+    set(ECODE_VERSION_MINOR "0")
+    set(ECODE_VERSION_PATCH "0")
+endif()
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/version_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/version_config.h"
+)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Define Unicode for Win32
@@ -14,16 +50,37 @@ endif()
 
 # Include directories
 include_directories(include)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 include_directories(FastFileSearch/src)
 
 # Source files
 file(GLOB SOURCES "src/*.cpp")
+list(APPEND SOURCES "src/copyright.c")
 list(APPEND SOURCES "Application/Terminal/src/TerminalGridView.cpp")
 file(GLOB FASTFS_SOURCES "FastFileSearch/src/MFTReader.cpp" "FastFileSearch/src/FatReader.cpp" "FastFileSearch/src/exFatReader.cpp")
 list(APPEND SOURCES ${FASTFS_SOURCES})
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/test_piecetable.cpp")
 set(DUKTAPE_SOURCES "src-duktape/duktape.c")
+
+# Generate icon resource file from 24x24 icon set (output in source tree for RC compiler)
+set(ICONS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/images/24x24-free-application-icons/24x24-free-application-icons/ico")
+set(GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/generated")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${GEN_DIR}"
+)
+execute_process(
+    COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_icons_rc.py"
+            "${ICONS_DIR}"
+            "${GEN_DIR}/icons.rc"
+            "${GEN_DIR}/icons.h"
+            "11000"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/icons.rc")
+    file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/icons.rc" "")
+endif()
 set(RESOURCES "src/Ecode.rc")
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/generated)
 
 # Executable (GUI)
 add_executable(ecode WIN32 ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
@@ -51,6 +108,7 @@ add_executable(test_piecetable_stress EXCLUDE_FROM_ALL
 add_executable(test_editor_core EXCLUDE_FROM_ALL
     tests/test_editor_core.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -61,6 +119,28 @@ add_executable(test_editor_core EXCLUDE_FROM_ALL
     src/FileUtils.cpp
 )
 target_link_libraries(test_editor_core 
+    user32 
+    gdi32 
+    shell32 
+    ole32 
+    comdlg32
+    comctl32
+    d2d1 
+    dwrite
+)
+
+add_executable(test_session_management EXCLUDE_FROM_ALL
+    tests/test_session_management.cpp
+    ${TEST_BASE_SOURCES}
+    src/Editor.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src/FileUtils.cpp
+)
+target_link_libraries(test_session_management 
     user32 
     gdi32 
     shell32 
@@ -89,6 +169,7 @@ target_link_libraries(test_undoredo_stress
 add_executable(test_search_replace EXCLUDE_FROM_ALL
     tests/test_search_replace.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -111,6 +192,7 @@ target_link_libraries(test_search_replace
 add_executable(test_file_io EXCLUDE_FROM_ALL
     tests/test_file_io.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -131,6 +213,7 @@ target_link_libraries(test_file_io
 add_executable(performance_benchmark EXCLUDE_FROM_ALL
     tests/performance_benchmark.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/PieceTable.cpp
     src/Buffer.cpp
     src/MemoryMappedFile.cpp
@@ -151,6 +234,7 @@ target_link_libraries(performance_benchmark
 add_executable(test_visual_wrap EXCLUDE_FROM_ALL
     tests/test_visual_wrap.cpp
     ${TEST_BASE_SOURCES}
+    src/IMEState.cpp
     src/EditorBufferRenderer.cpp
     src/EditorBufferRenderer_Draw.cpp
     src/Buffer.cpp
@@ -197,6 +281,7 @@ target_link_libraries(test_find_in_files
 add_executable(test_shortcuts EXCLUDE_FROM_ALL
     tests/test_shortcuts.cpp
     ${TEST_BASE_SOURCES}
+    src/IMEState.cpp
     src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
@@ -230,6 +315,7 @@ add_executable(test_localization EXCLUDE_FROM_ALL
 add_executable(test_buffer_stress EXCLUDE_FROM_ALL
     tests/test_buffer_stress.cpp
     ${TEST_BASE_SOURCES}
+    src/Editor.cpp
     src/Buffer.cpp
     src/PieceTable.cpp
     src/MemoryMappedFile.cpp
@@ -246,6 +332,76 @@ target_link_libraries(test_buffer_stress
     comctl32
     d2d1
     dwrite
+)
+
+add_executable(test_cursor_move EXCLUDE_FROM_ALL
+    tests/test_cursor_move.cpp
+    ${TEST_BASE_SOURCES}
+    src/Editor.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src-duktape/duktape.c
+    src-duktape/duktape.c
+    src/FileUtils.cpp
+)
+target_link_libraries(test_cursor_move
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+    d2d1
+    dwrite
+)
+
+add_executable(test_memorymappedfile EXCLUDE_FROM_ALL
+    tests/test_memorymappedfile.cpp
+    src/MemoryMappedFile.cpp
+)
+
+add_executable(test_fileutils EXCLUDE_FROM_ALL
+    tests/test_fileutils.cpp
+    tests/FileUtilsTestGlobals.cpp
+    src/FileUtils.cpp
+)
+target_link_libraries(test_fileutils
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+)
+
+add_executable(test_editor_buffer_ops EXCLUDE_FROM_ALL
+    tests/test_editor_buffer_ops.cpp
+    ${TEST_BASE_SOURCES}
+    src/Editor.cpp
+    src/Buffer.cpp
+    src/PieceTable.cpp
+    src/MemoryMappedFile.cpp
+    src/Process.cpp
+    src/SettingsManager.cpp
+    src/FileUtils.cpp
+)
+target_link_libraries(test_editor_buffer_ops
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+    d2d1
+    dwrite
+)
+
+add_executable(test_piecetable_advanced EXCLUDE_FROM_ALL
+    tests/test_piecetable_advanced.cpp
+    src/PieceTable.cpp
 )
 
 # Libraries to link
@@ -283,6 +439,7 @@ set(TEST_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin/tests")
 set_target_properties(test_piecetable PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_piecetable_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_editor_core PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_session_management PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_undoredo_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_search_replace PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_file_io PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
@@ -293,6 +450,11 @@ set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY 
 set_target_properties(test_string_helpers PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_localization PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_buffer_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_cursor_move PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_memorymappedfile PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_fileutils PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_editor_buffer_ops PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_piecetable_advanced PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 
 # Copy scripts directory to output
 add_custom_command(TARGET ecode POST_BUILD
@@ -345,6 +507,18 @@ add_plugin(CSVEditor Application/CSVEditor)
 add_plugin(FastFileSearch Application/FastFileSearch)
 add_plugin(FastFD Application/FastFD)
 add_plugin(Terminal  Application/Terminal)
+add_plugin(SureBackup Application/SureBackup)
+add_plugin(dukluv    Application/dukluv)
+
+# Copy FastFileSearch to apps/ directory for app launcher
+set(plugin_out "$<TARGET_FILE_DIR:ecode>")
+add_custom_command(TARGET ecode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_out}/apps"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${plugin_out}/plugins/FastFileSearch.exe"
+        "${plugin_out}/apps/FastFileSearch.exe"
+    COMMENT "Copying FastFileSearch.exe to apps/..."
+)
 
 # Custom/unknown plugins: copy any .exe from plugins_custom/ to output
 set(CUSTOM_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/plugins_custom")
@@ -360,19 +534,8 @@ foreach(PLUGIN ${CUSTOM_PLUGINS})
     )
 endforeach()
 
-find_package(nlohmann_json QUIET)
-if(nlohmann_json_FOUND)
-    add_plugin(JYEditor Application/JYEditor)
-    # Copy yaml-cpp.dll alongside JYEditor.exe
-    add_custom_command(TARGET ecode POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/Application/JYEditor/vcpkg_installed/vcpkg/blds/yaml-cpp/x64-windows-rel/yaml-cpp.dll"
-        "$<TARGET_FILE_DIR:ecode>/yaml-cpp.dll"
-        COMMENT "Copying yaml-cpp.dll..."
-    )
-else()
-    message(STATUS "JYEditor skipped (nlohmann_json not found)")
-endif()
+add_plugin(JYEditor Application/JYEditor)
+message(STATUS "JYEditor enabled (local nlohmann_json)")
 
 
 

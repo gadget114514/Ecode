@@ -1,18 +1,29 @@
 #include <windows.h>
 #include <shellapi.h>
 #include "MainWindow.h"
+#include "Localization.h"
 
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    // Check for --embedded flag (host requests hidden window for embedding)
+    // Check for --embedded and --lang flags
     {
         int argc;
         LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-        if (argv && argc >= 2 && wcscmp(argv[1], L"--embedded") == 0)
-            nCmdShow = SW_HIDE;
+        if (argv) {
+            for (int i = 1; i < argc; ++i) {
+                if (wcscmp(argv[i], L"--embedded") == 0)
+                    nCmdShow = SW_HIDE;
+                else if (wcscmp(argv[i], L"--lang") == 0 && i + 1 < argc) {
+                    if (wcscmp(argv[i + 1], L"jp") == 0)
+                        CsvLocalization::SetLanguage(CsvLanguage::Japanese);
+                    else
+                        CsvLocalization::SetLanguage(CsvLanguage::English);
+                }
+            }
+        }
         if (argv) LocalFree(argv);
     }
 

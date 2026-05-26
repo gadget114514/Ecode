@@ -22,6 +22,7 @@ public:
   bool SaveFile(const std::wstring &path);
 
   Encoding GetEncoding() const { return m_encoding; }
+  void SetEncoding(Encoding enc) { m_encoding = enc; }
 
   void Insert(size_t pos, const std::string &text);
   void Delete(size_t pos, size_t length);

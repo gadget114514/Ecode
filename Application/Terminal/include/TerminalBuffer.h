@@ -94,6 +94,14 @@ public:
     int  scrollBottom()    const;
     bool hasScrollRegion() const;
 
+    // --- OSC 1337 inline image ---
+    // Place an image at the current cursor position, occupying (widthCells x heightCells).
+    // Cursor advances to the row below the image.
+    void placeImage(uint64_t imageId, int widthCells, int heightCells);
+
+    // Clear all cells belonging to a given imageId from screen and history.
+    void clearImage(uint64_t imageId);
+
     // --- scrollback limit ---
     void setMaxHistoryLines(int n);   // 設定変更（即時トリム）
     int  maxHistoryLines()  const;    // 現在の上限を返す
@@ -101,6 +109,10 @@ public:
     // --- feature flags (read by TerminalView / TerminalEmulator) ---
     void setBracketedPasteEnabled(bool v);
     bool bracketedPasteEnabled()         const;
+
+    // synchronised output (?2026) — suppresses intermediate paints
+    void setSyncOutputEnabled(bool v);
+    bool syncOutputEnabled()             const;
 
     // mouse
     void setMouseTrackingMode(int mode); // 0=off,1000=normal,1002=btn,1003=all
@@ -140,6 +152,20 @@ public:
     void useAlternateScreen(bool enabled);
     bool alternateScreenActive() const;
 
+    // private mode save/restore (?Ps s / ?Ps r)
+    void savePrivateMode(int mode);
+    void restorePrivateMode(int mode);
+
+    // --- OSC 4/10/11/12 colour overrides ---
+    void setDefaultFgColor(const TermColor& c);
+    TermColor defaultFgColor() const;
+    void setDefaultBgColor(const TermColor& c);
+    TermColor defaultBgColor() const;
+    void setCursorColor(const TermColor& c);
+    TermColor cursorColor() const;
+    void setPaletteColor(int index, const TermColor& c);
+    TermColor paletteColor(int index) const;
+
     // --- static utilities ---
     static int characterWidth(wchar_t ch);
     static int characterWidth(const std::wstring& text);
@@ -158,12 +184,19 @@ private:
     int cursorColumn_ = 0;
     int savedCursorRow_    = 0;
     int savedCursorColumn_ = 0;
+    bool savedCursorVisible_ = true;
+
+    // Alternate screen saved cursor
+    int savedCursorRowAlt_    = 0;
+    int savedCursorColumnAlt_ = 0;
+    bool savedCursorVisibleAlt_ = true;
     int scrollTop_    = 0;
     int scrollBottom_ = 29;
     int maxHistoryLines_ = 10000;
 
     // feature flags
     bool bracketedPasteEnabled_      = false;
+    bool syncOutputEnabled_          = false;
     int  mouseTrackingMode_          = 0;
     bool sgrMouseEnabled_            = false;
     bool applicationCursorMode_      = false; // terminalpp
@@ -185,12 +218,25 @@ private:
     bool pendingWrap_    = false;
     bool alternateScreenActive_ = false;
 
+    // saved private modes (?Ps s / ?Ps r)
+    bool savedPrivateMode1_    = false;
+    bool savedPrivateMode25_   = true;
+    bool savedPrivateMode1049_ = false;
+    bool savedPrivateMode2026_ = false;
+
+    // OSC 4/10/11/12 colour overrides
+    TermColor defaultFg_ = DefaultFg();   // initialized with isDefault=true
+    TermColor defaultBg_ = DefaultBg();
+    TermColor cursorColor_;               // isDefault=true = don't override
+    TermColor palette_[16];               // overridable ANSI palette
+
     // screen data
     std::vector<Line> history_;
     std::vector<Line> screen_;
     std::vector<Line> mainHistory_;
     std::vector<Line> mainScreen_;
     std::vector<Line> alternateScreen_;
-    int mainCursorRow_    = 0;
-    int mainCursorColumn_ = 0;
+    int  mainCursorRow_     = 0;
+    int  mainCursorColumn_  = 0;
+    bool mainCursorVisible_ = true;  // saved across alternate screen switches
 };

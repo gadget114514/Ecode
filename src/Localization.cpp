@@ -111,7 +111,9 @@ void Localization::LoadTranslations() {
   en["menu_buffers"] = L"&Buffers";
   en["menu_help"] = L"&Help";
   en["menu_help_doc"] = L"&Documentation";
+  en["menu_help_keybindings"] = L"&Key Bindings";
   en["menu_help_about"] = L"&About";
+  en["menu_help_copyright"] = L"&Copyright";
 
   // Japanese
   auto &jp = m_translations[Language::Japanese];
@@ -160,6 +162,8 @@ void Localization::LoadTranslations() {
   jp["menu_help_doc"] = L"ドキュメント(&D)";
   jp["menu_help_keybindings"] = L"キーバインド(&K)";
   jp["menu_help_about"] = L"バージョン情報(&A)";
+  jp["menu_help_copyright"] = L"著作権(&C)";
+  jp["menu_help_messages"] = L"メッセージを表示(&M)";
 
   // Spanish
   auto &es = m_translations[Language::Spanish];
@@ -192,6 +196,11 @@ void Localization::LoadTranslations() {
   es["menu_language"] = L"&Idioma";
   es["menu_buffers"] = L"&Búferes";
   es["menu_help"] = L"&Ayuda";
+  es["menu_help_doc"] = L"&Documentación";
+  es["menu_help_keybindings"] = L"&Atajos de teclado";
+  es["menu_help_about"] = L"&Acerca de";
+  es["menu_help_copyright"] = L"&Copyright";
+  es["menu_help_messages"] = L"&Mostrar mensajes";
 
   // French
   auto &fr = m_translations[Language::French];
@@ -224,6 +233,11 @@ void Localization::LoadTranslations() {
   fr["menu_language"] = L"&Langue";
   fr["menu_buffers"] = L"&Tampons";
   fr["menu_help"] = L"&Aide";
+  fr["menu_help_doc"] = L"&Documentation";
+  fr["menu_help_keybindings"] = L"&Raccourcis clavier";
+  fr["menu_help_about"] = L"&À propos";
+  fr["menu_help_copyright"] = L"&Copyright";
+  fr["menu_help_messages"] = L"&Afficher les messages";
 
   // German
   auto &de = m_translations[Language::German];
@@ -256,4 +270,9 @@ void Localization::LoadTranslations() {
   de["menu_language"] = L"&Sprache";
   de["menu_buffers"] = L"&Puffer";
   de["menu_help"] = L"&Hilfe";
+  de["menu_help_doc"] = L"&Dokumentation";
+  de["menu_help_keybindings"] = L"&Tastenkombinationen";
+  de["menu_help_about"] = L"&Über";
+  de["menu_help_copyright"] = L"&Urheberrecht";
+  de["menu_help_messages"] = L"&Nachrichten anzeigen";
 }
