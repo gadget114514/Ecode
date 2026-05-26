@@ -110,6 +110,10 @@ public:
     void setBracketedPasteEnabled(bool v);
     bool bracketedPasteEnabled()         const;
 
+    // synchronised output (?2026) — suppresses intermediate paints
+    void setSyncOutputEnabled(bool v);
+    bool syncOutputEnabled()             const;
+
     // mouse
     void setMouseTrackingMode(int mode); // 0=off,1000=normal,1002=btn,1003=all
     int  mouseTrackingMode()             const;
@@ -152,6 +156,16 @@ public:
     void savePrivateMode(int mode);
     void restorePrivateMode(int mode);
 
+    // --- OSC 4/10/11/12 colour overrides ---
+    void setDefaultFgColor(const TermColor& c);
+    TermColor defaultFgColor() const;
+    void setDefaultBgColor(const TermColor& c);
+    TermColor defaultBgColor() const;
+    void setCursorColor(const TermColor& c);
+    TermColor cursorColor() const;
+    void setPaletteColor(int index, const TermColor& c);
+    TermColor paletteColor(int index) const;
+
     // --- static utilities ---
     static int characterWidth(wchar_t ch);
     static int characterWidth(const std::wstring& text);
@@ -182,6 +196,7 @@ private:
 
     // feature flags
     bool bracketedPasteEnabled_      = false;
+    bool syncOutputEnabled_          = false;
     int  mouseTrackingMode_          = 0;
     bool sgrMouseEnabled_            = false;
     bool applicationCursorMode_      = false; // terminalpp
@@ -207,6 +222,13 @@ private:
     bool savedPrivateMode1_    = false;
     bool savedPrivateMode25_   = true;
     bool savedPrivateMode1049_ = false;
+    bool savedPrivateMode2026_ = false;
+
+    // OSC 4/10/11/12 colour overrides
+    TermColor defaultFg_ = DefaultFg();   // initialized with isDefault=true
+    TermColor defaultBg_ = DefaultBg();
+    TermColor cursorColor_;               // isDefault=true = don't override
+    TermColor palette_[16];               // overridable ANSI palette
 
     // screen data
     std::vector<Line> history_;

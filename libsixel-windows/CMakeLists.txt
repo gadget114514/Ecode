@@ -35,11 +35,7 @@ add_library(libsixel STATIC
 
 target_include_directories(libsixel
     PRIVATE
-<<<<<<< Updated upstream
-        ${LIBSIXEL_SRC_DIR}
-=======
         ${LIBSIXEL_SRC}
->>>>>>> Stashed changes
         ${PROJECT_SOURCE_DIR}
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include

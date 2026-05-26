@@ -38,16 +38,16 @@ static const TermColor kAnsiPalette[16] = {
     TermColor::fromRgb(242, 242, 242),  // 15 Bright White
 };
 
-static TermColor ansiColor(int index) {
+static TermColor ansiColor(int index, const TerminalBuffer* buffer) {
     if (index < 0 || index > 15) index = 0;
-    return kAnsiPalette[index];
+    return buffer ? buffer->paletteColor(index) : kAnsiPalette[index];
 }
 
 // xterm 256-colour palette
-static TermColor color256(int index) {
+static TermColor color256(int index, const TerminalBuffer* buffer) {
     if (index < 0)   index = 0;
     if (index > 255) index = 255;
-    if (index < 16)  return kAnsiPalette[index];
+    if (index < 16)  return ansiColor(index, buffer);
     if (index >= 232) {
         int v = 8 + (index - 232) * 10;
         return TermColor::fromRgb((uint8_t)v, (uint8_t)v, (uint8_t)v);
@@ -305,8 +305,9 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             params += c;
 
     // --- private / extended first-byte prefixes ---
+    wchar_t prefix = 0;
     if (!params.empty() && (params[0] == L'?' || params[0] == L'>')) {
-        wchar_t prefix = params[0];
+        prefix = params[0];
         std::wstring rest = params.substr(1);
         if (prefix == L'?' && (fin == L'h' || fin == L'l')) {
             handlePrivateMode(rest, fin == L'h');
@@ -402,6 +403,44 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
         if (fin == L't') {
             // DECRARA: CSI Pt;Pl;Pb;Pr;Ps1..Psn $t
             buffer_->reverseRectAttr(RP(0,1)-1, RP(1,1)-1, RP(2,1)-1, RP(3,1)-1);
+            return;
+        }
+        if (fin == L'p') {
+            if (prefix == L'?') {
+                // DECRPM: Report Mode — respond with mode state
+                int ps = 0;
+                if (!rparts.empty()) { try { ps = std::stoi(rparts[0]); } catch(...) {} }
+                bool enabled = false;
+                switch (ps) {
+                case 1:    enabled = buffer_->applicationCursorMode();       break;
+                case 6:    enabled = buffer_->originMode();                   break;
+                case 7:    enabled = buffer_->autoWrapEnabled();              break;
+                case 12:   enabled = buffer_->cursorBlink();                  break;
+                case 25:   enabled = buffer_->cursorVisible();                break;
+                case 1000: enabled = buffer_->mouseTrackingMode() == 1000;    break;
+                case 1002: enabled = buffer_->mouseTrackingMode() == 1002;    break;
+                case 1003: enabled = buffer_->mouseTrackingMode() == 1003;    break;
+                case 1004: enabled = buffer_->focusEventReportingEnabled();   break;
+                case 1006: enabled = buffer_->sgrMouseEnabled();              break;
+                case 47:
+                case 1047:
+                case 1049: enabled = buffer_->alternateScreenActive();       break;
+                case 2004: enabled = buffer_->bracketedPasteEnabled();        break;
+                case 2026: enabled = buffer_->syncOutputEnabled();            break;
+                }
+                wchar_t buf[64];
+                swprintf(buf, 64, L"\x1b[?%d;%d$y", ps, enabled ? 1 : 2);
+                emitResponse(buf);
+            } else {
+                // DECRQSS: Request Status String — respond with $y
+                int q = 0;
+                if (!rparts.empty()) { try { q = std::stoi(rparts[0]); } catch(...) {} }
+                if (q == 1) {
+                    emitResponse(L"\x1b[1;61;1$y"); // DECSCL
+                } else if (q == 2) {
+                    emitResponse(L"\x1b[2;0$y");     // DECSCA
+                }
+            }
             return;
         }
         return;
@@ -513,8 +552,9 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
             else         buffer_->restoreCursor();
             break;
         case 2004: buffer_->setBracketedPasteEnabled(enabled);        break;
-        // Windows Terminal extensions – not implemented
-        case 2026:
+        // Windows Terminal extensions – 2026 implemented, rest no-op
+        case 2026: // synchronised output
+            buffer_->setSyncOutputEnabled(enabled);
             break;
         case 2027:
             break;
@@ -635,15 +675,15 @@ void TerminalEmulator::handleSgr(const std::vector<std::wstring>& parts) {
             if (v >= 30 && v <= 37) {
                 int idx = v - 30;
                 if (boldIsBright_ && isBold_) idx += 8;
-                currentAttrs_.foreground = ansiColor(idx);
+                currentAttrs_.foreground = ansiColor(idx, buffer_);
                 currentAttrs_.decorColor = currentAttrs_.foreground;
             } else if (v >= 40 && v <= 47) {
-                currentAttrs_.background = ansiColor(v - 40);
+                currentAttrs_.background = ansiColor(v - 40, buffer_);
             } else if (v >= 90 && v <= 97) {
-                currentAttrs_.foreground = ansiColor(v - 82); // 90-97 → 8-15
+                currentAttrs_.foreground = ansiColor(v - 82, buffer_); // 90-97 → 8-15
                 currentAttrs_.decorColor = currentAttrs_.foreground;
             } else if (v >= 100 && v <= 107) {
-                currentAttrs_.background = ansiColor(v - 92);
+                currentAttrs_.background = ansiColor(v - 92, buffer_);
             }
             break;
         }
@@ -661,7 +701,7 @@ TermColor TerminalEmulator::parseSgrExtendedColor(const std::vector<std::wstring
         if (i >= parts.size()) return DefaultFg();
         int idx = 0;
         try { idx = std::stoi(parts[i]); } catch(...) {}
-        return color256(idx);
+        return color256(idx, buffer_);
     }
     if (mode == 2) { // truecolor
         if (i + 3 >= parts.size()) { i += 3; return DefaultFg(); }
@@ -673,6 +713,33 @@ TermColor TerminalEmulator::parseSgrExtendedColor(const std::vector<std::wstring
         return TermColor::fromRgb((uint8_t)r, (uint8_t)g, (uint8_t)b);
     }
     return DefaultFg();
+}
+
+// ---------------------------------------------------------------------------
+// Parse #RRGGBB or rgb:RR/GG/BB colour specification
+// ---------------------------------------------------------------------------
+static bool parseRgbColor(const std::wstring& s, uint8_t& r, uint8_t& g, uint8_t& b) {
+    auto hexVal = [](wchar_t c) -> int {
+        if (c >= L'0' && c <= L'9') return c - L'0';
+        if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+        if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+        return -1;
+    };
+    auto hex2 = [&](size_t i) -> int {
+        int hi = hexVal(s[i]), lo = hexVal(s[i+1]);
+        return (hi < 0 || lo < 0) ? -1 : (hi << 4) | lo;
+    };
+    // #RRGGBB
+    if (s.size() == 7 && s[0] == L'#') {
+        int ri = hex2(1), gi = hex2(3), bi = hex2(5);
+        if (ri >= 0 && gi >= 0 && bi >= 0) { r = (uint8_t)ri; g = (uint8_t)gi; b = (uint8_t)bi; return true; }
+    }
+    // rgb:RR/GG/BB  (12 chars: "rgb:" + 2 hex + '/' + 2 hex + '/' + 2 hex)
+    if (s.size() >= 12 && s.substr(0, 4) == L"rgb:" && s[6] == L'/') {
+        int ri = hex2(4), gi = hex2(7), bi = hex2(10);
+        if (ri >= 0 && gi >= 0 && bi >= 0) { r = (uint8_t)ri; g = (uint8_t)gi; b = (uint8_t)bi; return true; }
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -744,6 +811,42 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
                 }
             }
         }
+        break;
+    }
+
+    case 4: { // set colour palette: OSC 4 ; index ; #RRGGBB
+        const size_t sep2 = arg1.find(L';');
+        if (sep2 != std::wstring::npos) {
+            int idx = 0;
+            try { idx = std::stoi(arg1.substr(0, sep2)); } catch(...) { idx = -1; }
+            if (idx >= 0 && idx < 16) {
+                std::wstring val = arg1.substr(sep2 + 1);
+                uint8_t r, g, b;
+                if (parseRgbColor(val, r, g, b))
+                    buffer_->setPaletteColor(idx, TermColor::fromRgb(r, g, b));
+            }
+        }
+        break;
+    }
+
+    case 10: { // set default foreground: OSC 10 ; #RRGGBB
+        uint8_t r, g, b;
+        if (parseRgbColor(arg1, r, g, b))
+            buffer_->setDefaultFgColor(TermColor::fromRgb(r, g, b));
+        break;
+    }
+
+    case 11: { // set default background: OSC 11 ; #RRGGBB
+        uint8_t r, g, b;
+        if (parseRgbColor(arg1, r, g, b))
+            buffer_->setDefaultBgColor(TermColor::fromRgb(r, g, b));
+        break;
+    }
+
+    case 12: { // set cursor colour: OSC 12 ; #RRGGBB
+        uint8_t r, g, b;
+        if (parseRgbColor(arg1, r, g, b))
+            buffer_->setCursorColor(TermColor::fromRgb(r, g, b));
         break;
     }
 
@@ -1114,10 +1217,59 @@ wchar_t TerminalEmulator::mapLineDrawingChar(wchar_t ch) const {
 }
 
 // ---------------------------------------------------------------------------
-// DCS — Sixel data handler
+// Hex string helpers for XTGETTCAP
+// ---------------------------------------------------------------------------
+static std::string hexEncode(const std::string& s) {
+    std::string out;
+    for (unsigned char c : s) {
+        char buf[4];
+        snprintf(buf, sizeof(buf), "%02X", c);
+        out += buf;
+    }
+    return out;
+}
+static std::string hexDecode(const std::string& hex) {
+    std::string out;
+    for (size_t i = 0; i + 1 < hex.size(); i += 2) {
+        char buf[3] = {hex[i], hex[i+1], 0};
+        char* end = nullptr;
+        int val = (int)strtol(buf, &end, 16);
+        if (*end == 0) out += (char)val;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// DCS — Sixel data handler / XTGETTCAP
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handleDcs(const std::string& data) {
     if (data.empty()) return;
+
+    // XTGETTCAP: DCS + q <hex-capability> ST
+    if (data.size() >= 2 && data[0] == '+' && data[1] == 'q') {
+        std::string hexCap = data.substr(2);
+        std::string capName = hexDecode(hexCap);
+
+        std::string value;
+        if (capName == "RGB") {
+            value = "true";
+        } else if (capName == "Ss" || capName == "Se") {
+            value = "true";
+        }
+
+        if (!value.empty()) {
+            std::string respHex = hexEncode(value);
+            std::string respStr = "\x1bP1+r" + hexCap + "=" + respHex + "\x1b\\";
+            // Convert to wstring and emit
+            int needed = MultiByteToWideChar(CP_UTF8, 0, respStr.c_str(), (int)respStr.size(), nullptr, 0);
+            if (needed > 0) {
+                std::wstring ws(needed, L'\0');
+                MultiByteToWideChar(CP_UTF8, 0, respStr.c_str(), (int)respStr.size(), ws.data(), needed);
+                emitResponse(ws);
+            }
+        }
+        return;
+    }
 
     // Pass all accumulated data (including 'q' introducer) to the decoder.
     std::vector<uint8_t> sixelData(data.begin(), data.end());
