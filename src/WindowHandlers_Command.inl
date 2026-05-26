@@ -495,7 +495,10 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   AppTabInfo tab;
   tab.label = label;
   tab.type  = type;
-  tab.iImage = iImage >= 0 ? iImage : AddExeIcon(g_tabImageList, exePath);
+  if (iImage == -2)
+    tab.iImage = -1;
+  else
+    tab.iImage = iImage >= 0 ? iImage : AddExeIcon(g_tabImageList, exePath);
   tab.hwnd  = CreateWindowExW(0, L"STATIC", L"Starting...",
                                WS_CHILD | WS_VISIBLE | SS_CENTER,
                                0, 0, 100, 100, hwnd, nullptr,

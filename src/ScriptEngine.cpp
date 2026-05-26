@@ -29,10 +29,22 @@ ScriptEngine::~ScriptEngine() {
   }
 }
 
+void ScriptEngine::FatalHandler(void *udata, const char *msg) {
+  DebugLog(std::string("Duktape fatal error: ") + (msg ? msg : "unknown"),
+           LOG_ERROR);
+  std::cerr << "Duktape fatal error: " << (msg ? msg : "unknown") << std::endl;
+  if (udata) {
+    static_cast<ScriptEngine *>(udata)->m_fatalError = true;
+  }
+}
+
 bool ScriptEngine::Initialize() {
-  m_ctx = duk_create_heap_default();
-  if (!m_ctx)
+  m_fatalError = false;
+  m_ctx = duk_create_heap(nullptr, nullptr, nullptr, this, FatalHandler);
+  if (!m_ctx) {
+    m_fatalError = true;
     return false;
+  }
 
   // Create global 'Editor' object
   duk_push_object(m_ctx);
@@ -274,39 +286,29 @@ void ScriptEngine::LoadDefaultBindings() {
 }
 
 std::string ScriptEngine::Evaluate(const std::string &code) {
-  if (!m_ctx)
-    return "Error: no script context";
-
-  // Push error handler
-  duk_push_c_function(
-      m_ctx,
-      [](duk_context *ctx) -> duk_ret_t {
-        duk_get_prop_string(ctx, -1, "stack");
-        return 1;
-      },
-      1);
-  int errIdx = duk_get_top_index(m_ctx);
+  if (!m_ctx || m_fatalError)
+    return "Error: script engine unavailable";
 
   duk_push_string(m_ctx, code.c_str());
   if (duk_pcompile_string(m_ctx, 0, code.c_str()) != 0) {
     std::string err = duk_safe_to_string(m_ctx, -1);
-    duk_pop_2(m_ctx); // pop error + handler
+    duk_pop(m_ctx);
     return "Compile error: " + err;
   }
 
   if (duk_pcall(m_ctx, 0) != 0) {
     std::string err = duk_safe_to_string(m_ctx, -1);
-    duk_pop_2(m_ctx);
+    duk_pop(m_ctx);
     return "Error: " + err;
   }
 
   std::string result = duk_safe_to_string(m_ctx, -1);
-  duk_pop_2(m_ctx);
+  duk_pop(m_ctx);
   return result;
 }
 
 bool ScriptEngine::RunFile(const std::wstring &path) {
-  if (!m_ctx)
+  if (!m_ctx || m_fatalError)
     return false;
 
   std::wstring bytecodePath = path + L"b";
@@ -471,7 +473,7 @@ bool ScriptEngine::RunFile(const std::wstring &path) {
 }
 
 bool ScriptEngine::HandleKeyEvent(const std::string &key, bool isChar) {
-  if (m_keyHandler.empty())
+  if (!m_ctx || m_fatalError || m_keyHandler.empty())
     return false;
 
   if (m_keyHandler == "__JS_FUNCTION__") {
@@ -501,6 +503,23 @@ bool ScriptEngine::HandleKeyEvent(const std::string &key, bool isChar) {
   return false;
 }
 
+void ScriptEngine::Reset() {
+  if (m_ctx) {
+    duk_destroy_heap(m_ctx);
+    m_ctx = nullptr;
+  }
+  m_keyBindings.clear();
+  m_captureKeyboard = false;
+  m_keyHandler.clear();
+  m_fatalError = false;
+
+  // Re-initialize from scratch
+  Initialize();
+  // Re-load default bindings if Initialize succeeded
+  if (!m_fatalError)
+    LoadDefaultBindings();
+}
+
 void ScriptEngine::RegisterBinding(const std::string &chord,
                                    const std::string &jsFuncName) {
   DebugLog("ScriptEngine::RegisterBinding: " + chord + " -> " + jsFuncName,
@@ -509,6 +528,8 @@ void ScriptEngine::RegisterBinding(const std::string &chord,
 }
 
 bool ScriptEngine::HandleBinding(const std::string &chord) {
+  if (!m_ctx || m_fatalError)
+    return false;
   DebugLog("ScriptEngine::HandleBinding: " + chord, LOG_INFO);
   auto it = m_keyBindings.find(chord);
   if (it == m_keyBindings.end()) {
@@ -570,7 +591,7 @@ void ScriptEngine::CompileAllScripts() {
 
 void ScriptEngine::CallGlobalFunction(const std::string &name,
                                       const std::string &arg) {
-  if (!m_ctx)
+  if (!m_ctx || m_fatalError)
     return;
   duk_push_global_object(m_ctx);
   if (duk_get_prop_string(m_ctx, -1, name.c_str())) {
