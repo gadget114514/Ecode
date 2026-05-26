@@ -322,10 +322,23 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
   return (INT_PTR)FALSE;
 }
 
+static BOOL CALLBACK SetChildMenuFont(HWND hChild, LPARAM lParam) {
+  SendMessage(hChild, WM_SETFONT, lParam, TRUE);
+  return TRUE;
+}
+
 INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                         LPARAM lParam) {
   switch (message) {
   case WM_INITDIALOG: {
+    NONCLIENTMETRICSW ncm = {0};
+    ncm.cbSize = sizeof(ncm);
+    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
+    HFONT hMenuFont = CreateFontIndirectW(&ncm.lfMenuFont);
+    SetWindowLongPtrW(hDlg, GWLP_USERDATA, (LONG_PTR)hMenuFont);
+    SendMessage(hDlg, WM_SETFONT, (WPARAM)hMenuFont, TRUE);
+    EnumChildWindows(hDlg, SetChildMenuFont, (LPARAM)hMenuFont);
+
     if (g_renderer) {
       SetDlgItemTextW(hDlg, IDC_FONT_FAMILY,
                       g_renderer->GetFontFamily().c_str());
@@ -391,6 +404,13 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                    SettingsManager::Instance().IsReverseScrollDirection() ? BST_CHECKED : BST_UNCHECKED);
 
     return (INT_PTR)TRUE;
+  }
+  case WM_DESTROY: {
+    HFONT hFont = (HFONT)GetWindowLongPtrW(hDlg, GWLP_USERDATA);
+    if (hFont) {
+      DeleteObject(hFont);
+    }
+    break;
   }
   case WM_COMMAND:
     if (LOWORD(wParam) == IDC_BASH_BROWSE) {

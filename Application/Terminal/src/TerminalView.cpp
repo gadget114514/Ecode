@@ -13,7 +13,9 @@
 #pragma comment(lib, "imm32.lib")
 
 #include <imm.h>
+#include <commctrl.h>
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "comctl32.lib")
 
 // IME 文字列の表示幅を計算（全角=2, 半角=1）
 static int ImeCellWidth(const std::wstring& s) {
@@ -371,6 +373,18 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         delete[] data;
         return 0;
     }
+    case WM_SETCURSOR:
+        if (LOWORD(lp) == HTCLIENT) {
+            POINT pt;
+            GetCursorPos(&pt);
+            ScreenToClient(hwnd, &pt);
+            SetCursor(IsHyperlinkAt(pt.x, pt.y)
+                ? LoadCursorW(nullptr, IDC_HAND)
+                : LoadCursorW(nullptr, IDC_IBEAM));
+            return TRUE;
+        }
+        return DefWindowProcW(hwnd, msg, wp, lp);
+
     case WM_TIMER:
         if (wp == cursorTimer_) {
             cursorBlink_ = !cursorBlink_;
@@ -443,6 +457,23 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
     }
 
     UpdateMetrics();
+
+    // Create tooltip for hyperlinks
+    InitCommonControls();
+    tooltip_ = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL,
+                               TTS_ALWAYSTIP | TTS_NOPREFIX,
+                               CW_USEDEFAULT, CW_USEDEFAULT,
+                               CW_USEDEFAULT, CW_USEDEFAULT,
+                               hwnd, NULL, (HINSTANCE)GetWindowLongPtrW(hwnd, GWLP_HINSTANCE), NULL);
+    if (tooltip_) {
+        TOOLINFOW ti = { sizeof(ti), TTF_TRACK | TTF_ABSOLUTE };
+        ti.hwnd = hwnd;
+        ti.uId  = 1;
+        ti.lpszText = L"";
+        SendMessageW(tooltip_, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+        SendMessageW(tooltip_, TTM_SETMAXTIPWIDTH, 0, 800);
+    }
+
     return 0;
 }
 
@@ -451,6 +482,7 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
 // ---------------------------------------------------------------------------
 void TerminalView::OnDestroy() {
     StopCursorTimer();
+    if (tooltip_) { DestroyWindow(tooltip_); tooltip_ = nullptr; }
     if (textFormat_) { textFormat_->Release(); textFormat_ = nullptr; }
     if (brush_)      { brush_->Release();      brush_      = nullptr; }
     ReleaseRenderTarget();
@@ -1114,18 +1146,30 @@ void TerminalView::OnLButtonDown(int px, int py) {
             if (col >= 0 && col < (int)line.size()) {
                 const auto& url = line[col].hyperlinkUrl;
                 if (!url.empty()) {
+                    auto openUrl = [](const std::wstring& target) -> bool {
+                        return (INT_PTR)ShellExecuteW(nullptr, L"open", target.c_str(),
+                                                      nullptr, nullptr, SW_SHOWNORMAL) > 32;
+                    };
+                    bool opened = false;
                     if (hyperlinkOpenCommand_.empty()) {
-                        ShellExecuteW(nullptr, L"open", url.c_str(),
-                                      nullptr, nullptr, SW_SHOWNORMAL);
+                        opened = openUrl(url);
+                        // file:// URI が ShellExecuteW で開けない場合、パスに変換して再試行
+                        if (!opened && url.find(L"file://") == 0) {
+                            std::wstring path = url.substr(7);
+                            // file:///C:/... → /C:/... → strip leading /
+                            if (path.size() >= 3 && path[0] == L'/' && path[2] == L':')
+                                path.erase(0, 1);
+                            opened = openUrl(path);
+                        }
                     } else {
                         std::wstring cmd = hyperlinkOpenCommand_;
                         size_t pos = cmd.find(L"{url}");
                         if (pos != std::wstring::npos)
                             cmd.replace(pos, 5, url);
-                        ShellExecuteW(nullptr, L"open", cmd.c_str(),
-                                      nullptr, nullptr, SW_SHOWNORMAL);
+                        opened = openUrl(cmd);
                     }
-                    return;
+                    if (opened)
+                        return;
                 }
             }
         }
@@ -1146,6 +1190,52 @@ void TerminalView::OnLButtonDown(int px, int py) {
 }
 
 void TerminalView::OnMouseMove(int px, int py) {
+    // Hyperlink tooltip
+    if (tooltip_) {
+        RECT rc; GetClientRect(hwnd_, &rc);
+        if (px >= 0 && py >= 0 && px < rc.right && py < rc.bottom) {
+            int row, col;
+            BufferCoordFromPoint(px, py, row, col);
+            const auto& line = buffer_.lineAt(row);
+            bool hasHl = col >= 0 && col < (int)line.size() && !line[col].hyperlinkUrl.empty();
+            if (hasHl) {
+                const auto& url = line[col].hyperlinkUrl;
+                if (url != tooltipText_) {
+                    tooltipText_ = url;
+                    TOOLINFOW ti = { sizeof(ti), TTF_TRACK | TTF_ABSOLUTE };
+                    ti.hwnd = hwnd_;
+                    ti.uId  = 1;
+                    ti.lpszText = const_cast<LPWSTR>(tooltipText_.c_str());
+                    SendMessageW(tooltip_, TTM_SETTOOLINFOW, 0, (LPARAM)&ti);
+                }
+                if (!tooltipActive_) {
+                    TOOLINFOW ti = { sizeof(ti), TTF_TRACK | TTF_ABSOLUTE };
+                    ti.hwnd = hwnd_;
+                    ti.uId  = 1;
+                    ti.lpszText = const_cast<LPWSTR>(tooltipText_.c_str());
+                    SendMessageW(tooltip_, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
+                    SendMessageW(tooltip_, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti);
+                    tooltipActive_ = true;
+                }
+                POINT screenPt = { px, py };
+                ClientToScreen(hwnd_, &screenPt);
+                screenPt.y += 24;
+                SendMessageW(tooltip_, TTM_TRACKPOSITION, 0,
+                            MAKELPARAM(screenPt.x, screenPt.y));
+                // skip selection update when hovering a hyperlink
+                return;
+            }
+        }
+        if (tooltipActive_) {
+            TOOLINFOW ti = { sizeof(ti), TTF_TRACK | TTF_ABSOLUTE };
+            ti.hwnd = hwnd_;
+            ti.uId  = 1;
+            SendMessageW(tooltip_, TTM_TRACKACTIVATE, FALSE, (LPARAM)&ti);
+            tooltipActive_ = false;
+            tooltipText_.clear();
+        }
+    }
+
     if (!selecting_) return;
     BufferCoordFromPoint(px, py, selEndRow_, selEndCol_);
     InvalidateRect(hwnd_, nullptr, FALSE);
