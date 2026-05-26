@@ -387,6 +387,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 
     CheckDlgButton(hDlg, IDC_NO_TITLE_BAR,
                    SettingsManager::Instance().IsNoTitleBar() ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(hDlg, IDC_REVERSE_SCROLL_DIRECTION,
+                   SettingsManager::Instance().IsReverseScrollDirection() ? BST_CHECKED : BST_UNCHECKED);
 
     return (INT_PTR)TRUE;
   }
@@ -464,6 +466,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       bool newNoTitleBar = IsDlgButtonChecked(hDlg, IDC_NO_TITLE_BAR) == BST_CHECKED;
       bool changed = newNoTitleBar != SettingsManager::Instance().IsNoTitleBar();
       SettingsManager::Instance().SetNoTitleBar(newNoTitleBar);
+      SettingsManager::Instance().SetReverseScrollDirection(
+          IsDlgButtonChecked(hDlg, IDC_REVERSE_SCROLL_DIRECTION) == BST_CHECKED);
 
       SettingsManager::Instance().Save();
 
@@ -941,6 +945,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hShell, CB_ADDSTRING, 0, (LPARAM)L"bash");
     SendMessage(hShell, CB_SETCURSEL, 2, 0);
     HWND hIcon = GetDlgItem(hDlg, IDC_CLI_ICON);
+    SendMessage(hIcon, CB_ADDSTRING, 0, (LPARAM)L"None");
     SendMessage(hIcon, CB_ADDSTRING, 0, (LPARAM)L"From exe");
     for (int i = 0; i < TAB_ICON_COUNT; ++i)
       SendMessage(hIcon, CB_ADDSTRING, 0, (LPARAM)g_tabIconNames[i]);
@@ -963,7 +968,7 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           if (st < 0 || st > 2) st = 2;
           SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_SETCURSEL, st, 0);
           int icn = entries[sel].iconIndex;
-          SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_SETCURSEL, icn < 0 ? 0 : icn + 1, 0);
+          SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_SETCURSEL, icn == -2 ? 0 : icn < 0 ? 1 : icn + 2, 0);
           SetDlgItemTextW(hDlg, IDC_CLI_LABEL, entries[sel].label.c_str());
         }
       }
@@ -982,7 +987,8 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       int enc = (int)SendDlgItemMessage(hDlg, IDC_CLI_ENCODING, CB_GETCURSEL, 0, 0);
       int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
       if (st < 0 || st > 2) st = 2;
-      int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0) - 1;
+      int icnSel = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0);
+      int icn = icnSel == 0 ? -2 : icnSel == 1 ? -1 : icnSel - 2;
       if (wcslen(cmd) > 0 && wcslen(folder) > 0) {
         SettingsManager::Instance().AddCliEntry(cmd, folder, enc, st, icn, lbl);
         SettingsManager::Instance().Save();
@@ -1026,7 +1032,8 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           if (enc < 0) enc = 0;
           int st = (int)SendDlgItemMessage(hDlg, IDC_CLI_SHELL, CB_GETCURSEL, 0, 0);
           if (st < 0 || st > 2) st = 2;
-          int icn = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0) - 1;
+          int icnSel = (int)SendDlgItemMessage(hDlg, IDC_CLI_ICON, CB_GETCURSEL, 0, 0);
+          int icn = icnSel == 0 ? -2 : icnSel == 1 ? -1 : icnSel - 2;
       wchar_t lbl[256];
       GetDlgItemTextW(hDlg, IDC_CLI_LABEL, lbl, 256);
       entries[sel].command   = cmd;

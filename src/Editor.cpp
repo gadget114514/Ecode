@@ -409,6 +409,7 @@ void Editor::Paste(HWND hwnd) {
           } else {
             active->Insert(active->GetCaretPos(), text.data());
             active->MoveCaret(static_cast<int>(strlen(text.data())));
+            active->SetSelectionAnchor(active->GetCaretPos());
           }
         }
       }
