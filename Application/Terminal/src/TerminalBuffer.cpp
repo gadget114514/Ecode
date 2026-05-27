@@ -477,6 +477,11 @@ void TerminalBuffer::setCursorBlink(bool v)                { cursorBlink_ = v; }
 bool TerminalBuffer::cursorBlink()                   const { return cursorBlink_; }
 void TerminalBuffer::setCursorShape(CursorShape s)         { cursorShape_ = s; }
 TerminalBuffer::CursorShape TerminalBuffer::cursorShape()  const { return cursorShape_; }
+void TerminalBuffer::setCursorFilled(bool v)               { cursorFilled_ = v; }
+bool TerminalBuffer::cursorFilled()                  const { return cursorFilled_; }
+void TerminalBuffer::setCursorScale(int wPct, int hPct)   { cursorWidthPct_ = std::clamp(wPct, 0, 100); cursorHeightPct_ = std::clamp(hPct, 0, 100); }
+int  TerminalBuffer::cursorWidthPct()               const { return cursorWidthPct_; }
+int  TerminalBuffer::cursorHeightPct()              const { return cursorHeightPct_; }
 
 // ---------------------------------------------------------------------------
 // OSC 4/10/11/12 colour overrides
@@ -534,7 +539,7 @@ void TerminalBuffer::savePrivateMode(int mode) {
     case 1049:
     case 1047:
     case 47:   savedPrivateMode1049_  = alternateScreenActive_; break;
-    case 2026: savedPrivateMode2026_  = syncOutputEnabled_;     break;
+    case 2026: savedPrivateMode2026_  = cursorFilled_;          break;
     }
 }
 
@@ -545,7 +550,7 @@ void TerminalBuffer::restorePrivateMode(int mode) {
     case 1049:
     case 1047:
     case 47:   useAlternateScreen(savedPrivateMode1049_); break;
-    case 2026: setSyncOutputEnabled(savedPrivateMode2026_); break;
+    case 2026: setCursorFilled(savedPrivateMode2026_); break;
     }
 }
 

@@ -132,6 +132,8 @@ void UpdateTabs(HWND hwnd) {
       if (pos != std::wstring::npos)
         name = name.substr(pos + 1);
     }
+    if (buffers[i]->IsDirty())
+      name += L" *";
 
     TCITEMW tie = {0};
     tie.mask = TCIF_TEXT | TCIF_IMAGE;
@@ -365,6 +367,7 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hHelp, MF_STRING, IDM_HELP_ABOUT, L10N("menu_help_about"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_COPYRIGHT, L10N("menu_help_copyright"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_MESSAGES, L"Show Messages");
+  AppendMenu(hHelp, MF_STRING, IDM_HELP_CLEAR_MESSAGES, L"Clear Messages");
 
   // AI Menu (hidden by default, only shown when IsShowAI)
   HMENU hAi = CreatePopupMenu();

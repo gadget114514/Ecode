@@ -412,6 +412,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL + 1, L"Kill Process");
         } else if (tabIndex >= 0 && tabIndex < static_cast<int>(bufCount)) {
           AppendMenu(hMenu, MF_STRING, IDM_TAB_COPY_PATH, L"Copy Full Path");
+          if (g_editor->GetBuffers()[tabIndex]->IsDirty())
+            AppendMenu(hMenu, MF_STRING, IDM_FILE_SAVE, L"Save");
         }
         int res = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_NONOTIFY | TPM_RETURNCMD, ptScreen.x, ptScreen.y, 0, hwnd, NULL);
         DestroyMenu(hMenu);
