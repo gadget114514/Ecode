@@ -60,6 +60,7 @@ bool PromptSaveBuffer(HWND hwnd, Buffer *buf);
 void HideMinibuffer();
 void ShowCliDialog(HWND hwnd);
 void ShowAppEntriesDialog(HWND hwnd);
+void ShowFolderEntriesDialog(HWND hwnd);
 void KillAppProcessByIndex(HWND hwnd, size_t idx);
 void KillActiveAppProcess(HWND hwnd);
 void ScanPlugins();
@@ -171,7 +172,10 @@ void HandleDestroy(HWND hwnd);
 #define IDM_APPS_CONFIGURE 708
 #define IDM_RECENT_START 2000
 #define IDM_CLI_START 3000
+#define IDM_FILE_OPEN_FOLDER 709
+#define IDM_FOLDER_CONFIGURE 710
 #define IDM_APPS_START 9000
+#define IDM_FOLDERS_START 9500
 #define IDM_TERMINALS_START 4000
 #define IDM_DIRED_START 5000
 #define IDM_DIRED_CONFIGURE 705

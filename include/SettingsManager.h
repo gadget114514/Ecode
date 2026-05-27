@@ -9,6 +9,11 @@ struct AppEntry {
   std::wstring label;
 };
 
+struct FolderEntry {
+  std::wstring path;
+  std::wstring label;
+};
+
 struct CliEntry {
   std::wstring command;
   std::wstring folder;
@@ -179,6 +184,13 @@ public:
   void RemoveAppEntry(size_t index);
   void SaveAppEntries();
 
+  // Folder entries
+  const std::vector<FolderEntry> &GetFolderEntries() const { return m_folderEntries; }
+  void AddFolderEntry(const std::wstring &path, const std::wstring &label);
+  void UpdateFolderEntry(size_t index, const std::wstring &path, const std::wstring &label);
+  void RemoveFolderEntry(size_t index);
+  void SaveFolderEntries();
+
   // Dired pairs
   const std::vector<DiredPair> &GetDiredPairs() const { return m_diredPairs; }
   void AddDiredPair(const std::wstring &label, const std::wstring &leftDir, const std::wstring &rightDir);
@@ -234,6 +246,7 @@ private:
   bool m_enableSessionManagement = false;
   std::vector<CliEntry> m_cliEntries;
   std::vector<AppEntry> m_appEntries;
+  std::vector<FolderEntry> m_folderEntries;
   std::vector<DiredPair> m_diredPairs;
 
   std::wstring m_aiVendor;
