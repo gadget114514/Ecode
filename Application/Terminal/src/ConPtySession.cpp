@@ -40,18 +40,25 @@ bool ConPtySession::Start(const std::wstring& shell, int cols, int rows,
 
     running_ = true;
     StartReader();
+    StartWriter();
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// Write
+// Write — queue data for background writer thread to avoid blocking main thread
+// when the pipe buffer is full.
 // ---------------------------------------------------------------------------
 bool ConPtySession::Write(const void* data, size_t len) {
     if (!running_ || inputWriteSide_ == INVALID_HANDLE_VALUE || len == 0)
         return false;
-    DWORD written = 0;
-    BOOL  ok = WriteFile(inputWriteSide_, data, (DWORD)len, &written, nullptr);
-    return ok && written == (DWORD)len;
+    std::vector<char> copy(static_cast<const char*>(data),
+                           static_cast<const char*>(data) + len);
+    {
+        std::lock_guard<std::mutex> lock(writeMutex_);
+        writeQueue_.push(std::move(copy));
+    }
+    SetEvent(writeWakeEvent_);
+    return true;
 }
 
 bool ConPtySession::Write(const std::wstring& text) {
@@ -86,11 +93,27 @@ void ConPtySession::Resize(int cols, int rows) {
 void ConPtySession::Close() {
     if (closing_.exchange(true)) return;
 
-    // Politely ask shell to exit
+    // Politely ask shell to exit — queue through writer thread
     if (running_ && inputWriteSide_ != INVALID_HANDLE_VALUE) {
         const char exitCmd[] = "exit\r\n";
-        DWORD w = 0;
-        WriteFile(inputWriteSide_, exitCmd, sizeof(exitCmd) - 1, &w, nullptr);
+        std::vector<char> cmd(exitCmd, exitCmd + sizeof(exitCmd) - 1);
+        {
+            std::lock_guard<std::mutex> lock(writeMutex_);
+            writeQueue_.push(std::move(cmd));
+        }
+        SetEvent(writeWakeEvent_);
+    }
+
+    // Signal writer thread to flush and exit, then wait briefly
+    if (writerThread_) {
+        SetEvent(writeWakeEvent_);
+        WaitForSingleObject(writerThread_, 1000);
+        CloseHandle(writerThread_);
+        writerThread_ = nullptr;
+    }
+    if (writeWakeEvent_) {
+        CloseHandle(writeWakeEvent_);
+        writeWakeEvent_ = nullptr;
     }
 
     // Close our write end so the PTY sees EOF on stdin
@@ -359,6 +382,38 @@ void ConPtySession::ReaderLoop() {
         if (onOutput_) onOutput_(buf, bytesRead);
     }
     running_ = false;
+}
+
+// ---------------------------------------------------------------------------
+// Writer thread — dequeues queued writes and writes to the pipe asynchronously.
+// ---------------------------------------------------------------------------
+static DWORD WINAPI WriterThreadProc(LPVOID param) {
+    reinterpret_cast<ConPtySession*>(param)->WriterLoop();
+    return 0;
+}
+
+void ConPtySession::StartWriter() {
+    writeWakeEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    DWORD threadId = 0;
+    writerThread_ = CreateThread(nullptr, 0, WriterThreadProc, this, 0, &threadId);
+}
+
+void ConPtySession::WriterLoop() {
+    while (true) {
+        WaitForSingleObject(writeWakeEvent_, INFINITE);
+        if (closing_) break;
+        while (true) {
+            std::vector<char> data;
+            {
+                std::lock_guard<std::mutex> lock(writeMutex_);
+                if (writeQueue_.empty()) break;
+                data = std::move(writeQueue_.front());
+                writeQueue_.pop();
+            }
+            DWORD written = 0;
+            WriteFile(inputWriteSide_, data.data(), (DWORD)data.size(), &written, nullptr);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -212,23 +212,9 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_GOTO, L"Go to Line...\tAlt+G");
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_TOGGLE_BOX,
              L"Box Selection Mode\tAlt+Shift+Drag");
+  AppendMenu(hEdit, MF_SEPARATOR, 0, NULL);
 
-  // ... (View, Config, Tools, Language, Buffers, Help omitted for brevity, but
-  // they'll be in the actual file) Actually, I should include everything since
-  // this is write_to_file.
-
-  // View Menu
-  HMENU hView = CreatePopupMenu();
-  AppendMenu(hView, MF_STRING, IDM_VIEW_TABSWITCHER, L"Tab Grid View\tCtrl+Shift+T");
-  AppendMenu(hView, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hView, MF_STRING, IDM_VIEW_TOGGLE_UI, L"Toggle UI\tF11");
-  AppendMenu(hView, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_IN, L"Zoom In\tCtrl++");
-  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_OUT, L"Zoom Out\tCtrl+-");
-  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_RESET,
-             L10N("menu_view_zoom_reset"));
-
-  // Config Menu
+  // Config Submenu
   HMENU hConfig = CreatePopupMenu();
   AppendMenu(hConfig, MF_STRING, IDM_CONFIG_SETTINGS,
              L10N("menu_config_settings"));
@@ -277,6 +263,19 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hEnc, MF_STRING | (currentEnc == 1 ? MF_CHECKED : 0),
              IDM_SHELL_ENC_SJIS, L"Shift-JIS");
   AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hEnc, L"Shell Encoding");
+
+  AppendMenu(hEdit, MF_POPUP, (UINT_PTR)hConfig, L10N("menu_config"));
+
+  // View Menu
+  HMENU hView = CreatePopupMenu();
+  AppendMenu(hView, MF_STRING, IDM_VIEW_TABSWITCHER, L"Tab Grid View\tCtrl+Shift+T");
+  AppendMenu(hView, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hView, MF_STRING, IDM_VIEW_TOGGLE_UI, L"Toggle UI\tF11");
+  AppendMenu(hView, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_IN, L"Zoom In\tCtrl++");
+  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_OUT, L"Zoom Out\tCtrl+-");
+  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_RESET,
+             L10N("menu_view_zoom_reset"));
 
   // Tools Menu (built-in tools + app launchers)
   HMENU hTools = CreatePopupMenu();
@@ -371,7 +370,6 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hFile, L10N("menu_file"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hEdit, L10N("menu_edit"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hView, L10N("menu_view"));
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hConfig, L10N("menu_config"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hTools, L10N("menu_tools"));
 
   // Plugins Menu
@@ -406,7 +404,7 @@ void UpdateMenu(HWND hwnd) {
     struct NamePopup { std::wstring name; HMENU popup; };
     NamePopup defs[] = {
       { L10N("menu_file"), hFile }, { L10N("menu_edit"), hEdit },
-      { L10N("menu_view"), hView }, { L10N("menu_config"), hConfig },
+      { L10N("menu_view"), hView },
       { L10N("menu_tools"), hTools }, { L"Plugins", hPlugins },
     };
     for (auto &d : defs)
