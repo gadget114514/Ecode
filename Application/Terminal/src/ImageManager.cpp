@@ -214,7 +214,7 @@ uint64_t ImageManager::StoreSixelImage(const std::vector<uint8_t>& sixelData) {
         return 0;
     }
 
-    // Convert indexed + RGB palette → premultiplied BGRA 32bpp
+    // Convert indexed + RGB palette -> premultiplied BGRA 32bpp
     // libsixel allocates palette as 3 bytes/color (RGB), despite the "ARGB"
     // comment in the header. Sixel has no alpha channel; all pixels are opaque.
     int dispW = width;

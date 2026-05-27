@@ -26,6 +26,7 @@ public:
 
   void Insert(size_t pos, const std::string &text);
   void Delete(size_t pos, size_t length);
+  void CompactAddedBuffer();
 
   std::string GetText(size_t pos, size_t length) const;
   size_t GetTotalLength() const;

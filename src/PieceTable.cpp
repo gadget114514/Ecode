@@ -416,3 +416,42 @@ void PieceTable::CompactPieces() {
 
   m_editsSinceCompaction = 0;
 }
+
+void PieceTable::CompactAddedBuffer() {
+  if (m_addedBuffer.empty() || m_pieces.empty()) {
+    m_addedBuffer.clear();
+    return;
+  }
+
+  // Find the range of m_addedBuffer that is actually referenced by pieces
+  size_t minStart = SIZE_MAX;
+  size_t maxEnd = 0;
+  for (const auto &p : m_pieces) {
+    if (p.bufferType == BufferType::Added) {
+      if (p.start < minStart) minStart = p.start;
+      size_t end = p.start + p.length;
+      if (end > maxEnd) maxEnd = end;
+    }
+  }
+
+  // If no Added pieces exist, clear the buffer entirely
+  if (minStart == SIZE_MAX) {
+    m_addedBuffer.clear();
+    return;
+  }
+
+  // If unreferenced data exists at the front or back, compact
+  if (minStart > 0 || maxEnd < m_addedBuffer.size()) {
+    std::string newBuffer = m_addedBuffer.substr(minStart, maxEnd - minStart);
+    for (auto &p : m_pieces) {
+      if (p.bufferType == BufferType::Added) {
+        p.start -= minStart;
+      }
+    }
+    m_addedBuffer = std::move(newBuffer);
+  }
+
+  // Clear undo/redo since their piece references are now invalid
+  m_undoStack.clear();
+  m_redoStack.clear();
+}
