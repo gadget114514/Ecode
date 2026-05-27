@@ -48,6 +48,7 @@ public:
 
   // OPTIMIZATION: Piece table compaction
   void CompactPieces();
+  void CompactAddedBuffer();
   size_t GetPieceCount() const { return m_pieces.size(); }
   void InvalidateLineCache() { m_lineCacheValid = false; }
 

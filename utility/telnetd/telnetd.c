@@ -52,6 +52,7 @@ static HMODULE g_hConPty = NULL;
 #define TELOPT_TERMINAL_TYPE 24
 #define TELOPT_NAWS          31
 #define TELOPT_LINEMODE      34
+#define TELOPT_BINARY         0
 
 /* ================================================================
  * Configuration
@@ -99,6 +100,76 @@ static void telnet_iac(SOCKET s, int cmd, int opt) {
 }
 
 /* ================================================================
+ * Build Unicode environment block with terminal identity vars
+ * ================================================================ */
+static wchar_t* build_env_block(void) {
+    wchar_t* env = GetEnvironmentStringsW();
+    if (!env) return NULL;
+
+    const wchar_t* overrides[] = {
+        L"TERM=xterm-256color",
+        L"COLORTERM=truecolor",
+        L"CLICOLOR_FORCE=1",
+        L"FORCE_COLOR=3",
+        L"LANG=en_US.UTF-8",
+        L"LC_ALL=en_US.UTF-8",
+        NULL
+    };
+
+    size_t total = 0;
+    const wchar_t* p = env;
+    while (*p) {
+        size_t len = wcslen(p);
+        int skip = 0;
+        for (int i = 0; overrides[i]; i++) {
+            const wchar_t* eq = wcschr(overrides[i], L'=');
+            if (!eq) continue;
+            ptrdiff_t klen = eq - overrides[i];
+            if ((int)len > klen && wcsncmp(p, overrides[i], klen) == 0 && p[klen] == L'=') {
+                skip = 1; break;
+            }
+        }
+        if (!skip) total += len + 1;
+        p += len + 1;
+    }
+    for (int i = 0; overrides[i]; i++)
+        total += wcslen(overrides[i]) + 1;
+    total += 1;
+
+    wchar_t* block = (wchar_t*)malloc(total * sizeof(wchar_t));
+    if (!block) { FreeEnvironmentStringsW(env); return NULL; }
+
+    wchar_t* wp = block;
+    p = env;
+    while (*p) {
+        size_t len = wcslen(p);
+        int skip = 0;
+        for (int i = 0; overrides[i]; i++) {
+            const wchar_t* eq = wcschr(overrides[i], L'=');
+            if (!eq) continue;
+            ptrdiff_t klen = eq - overrides[i];
+            if ((int)len > klen && wcsncmp(p, overrides[i], klen) == 0 && p[klen] == L'=') {
+                skip = 1; break;
+            }
+        }
+        if (!skip) {
+            wcscpy_s(wp, total - (wp - block), p);
+            wp += len + 1;
+        }
+        p += len + 1;
+    }
+    for (int i = 0; overrides[i]; i++) {
+        size_t len = wcslen(overrides[i]);
+        wcscpy_s(wp, total - (wp - block), overrides[i]);
+        wp += len + 1;
+    }
+    *wp = L'\0';
+
+    FreeEnvironmentStringsW(env);
+    return block;
+}
+
+/* ================================================================
  * Resolve shell path
  * ================================================================ */
 static const char *resolve_shell(const char *shell) {
@@ -120,6 +191,28 @@ static const char *resolve_shell(const char *shell) {
             strcpy_s(path, MAX_PATH, buf);
             return path;
         }
+        static const char *fallback_paths[] = {
+            "C:\\Program Files\\Git\\bin\\bash.exe",
+            "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+            NULL
+        };
+        for (int i = 0; fallback_paths[i]; i++) {
+            DWORD attr = GetFileAttributesA(fallback_paths[i]);
+            if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                strcpy_s(path, MAX_PATH, fallback_paths[i]);
+                return path;
+            }
+        }
+        char *local = getenv("LOCALAPPDATA");
+        if (local) {
+            char lp[MAX_PATH + 1];
+            sprintf_s(lp, MAX_PATH, "%s\\Programs\\Git\\bin\\bash.exe", local);
+            DWORD attr = GetFileAttributesA(lp);
+            if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                strcpy_s(path, MAX_PATH, lp);
+                return path;
+            }
+        }
         return NULL;
     }
     return shell;
@@ -130,9 +223,10 @@ static const char *resolve_shell(const char *shell) {
  * ================================================================ */
 static int process_iac(const unsigned char *in, int inlen,
                        unsigned char *out, int *outlen,
-                       SOCKET s)
+                       SOCKET s, CLIENT_CTX *ctx)
 {
     int i = 0, o = 0;
+    unsigned char sb_opt = 0;
 
     while (i < inlen) {
         if (in[i] != TEL_IAC) {
@@ -154,25 +248,57 @@ static int process_iac(const unsigned char *in, int inlen,
             switch (cmd) {
             case TEL_WILL:
                 telnet_iac(s, (opt == TELOPT_ECHO || opt == TELOPT_SUPPRESS_GA ||
-                               opt == TELOPT_STATUS || opt == TELOPT_TIMING_MARK)
-                           ? TEL_DO : TEL_DONT, opt);
+                               opt == TELOPT_STATUS || opt == TELOPT_TIMING_MARK ||
+                               opt == TELOPT_BINARY)
+                            ? TEL_DO : TEL_DONT, opt);
                 break;
             case TEL_DO:
                 telnet_iac(s, (opt == TELOPT_ECHO || opt == TELOPT_SUPPRESS_GA ||
-                               opt == TELOPT_NAWS || opt == TELOPT_TERMINAL_TYPE)
-                           ? TEL_WILL : TEL_WONT, opt);
+                               opt == TELOPT_NAWS || opt == TELOPT_TERMINAL_TYPE ||
+                               opt == TELOPT_BINARY)
+                            ? TEL_WILL : TEL_WONT, opt);
                 break;
             default: break;
             }
             i += 3;
         } else if (cmd == TEL_SB) {
             i += 2;
-            while (i < inlen) {
-                if (in[i] == TEL_IAC) {
-                    if (i + 1 < inlen && in[i + 1] == TEL_SE) { i += 2; break; }
-                    if (i + 1 < inlen && in[i + 1] == TEL_IAC) { i += 2; continue; }
+            sb_opt = (i < inlen) ? in[i] : 0;
+            if (sb_opt == TELOPT_NAWS) {
+                i++; /* skip option byte */
+                unsigned char sb_buf[4];
+                int sb_pos = 0;
+                while (i < inlen && sb_pos < 4) {
+                    if (in[i] == TEL_IAC && i + 1 < inlen && in[i + 1] == TEL_SE)
+                        break;
+                    if (in[i] == TEL_IAC && i + 1 < inlen && in[i + 1] == TEL_IAC) {
+                        sb_buf[sb_pos++] = TEL_IAC;
+                        i += 2;
+                        continue;
+                    }
+                    sb_buf[sb_pos++] = in[i++];
                 }
-                i++;
+                if (sb_pos == 4 && ctx && ctx->hpc && ConPtyResize) {
+                    int w = ((int)sb_buf[0] << 8) | sb_buf[1];
+                    int h = ((int)sb_buf[2] << 8) | sb_buf[3];
+                    COORD sz = { (SHORT)w, (SHORT)h };
+                    ConPtyResize(ctx->hpc, sz);
+                    VPRINT("NAWS resize to %dx%d", w, h);
+                }
+                /* skip to IAC SE */
+                while (i < inlen) {
+                    if (in[i] == TEL_IAC && i + 1 < inlen && in[i + 1] == TEL_SE) { i += 2; break; }
+                    i++;
+                }
+            } else {
+                /* unknown SB — skip to IAC SE */
+                while (i < inlen) {
+                    if (in[i] == TEL_IAC) {
+                        if (i + 1 < inlen && in[i + 1] == TEL_SE) { i += 2; break; }
+                        if (i + 1 < inlen && in[i + 1] == TEL_IAC) { i += 2; continue; }
+                    }
+                    i++;
+                }
             }
         } else {
             i += 2;
@@ -212,7 +338,7 @@ static int init_conpty(void) {
 /* ================================================================
  * Create ConPTY + launch shell
  * ================================================================ */
-static int create_conpty(CLIENT_CTX *ctx) {
+static int create_conpty(CLIENT_CTX *ctx, wchar_t *envBlock) {
     HANDLE hPipeInR = NULL, hPipeInW = NULL;
     HANDLE hPipeOutR = NULL, hPipeOutW = NULL;
     SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
@@ -259,22 +385,32 @@ static int create_conpty(CLIENT_CTX *ctx) {
         CloseHandle(hPipeOutR); CloseHandle(hPipeOutW);
         return 0;
     }
-    int wn = MultiByteToWideChar(CP_UTF8, 0, sh, -1, NULL, 0);
-    wchar_t *wsh = (wchar_t *)malloc(wn * sizeof(wchar_t));
-    MultiByteToWideChar(CP_UTF8, 0, sh, -1, wsh, wn);
 
     wchar_t cmdline[4096];
-    if (_stricmp(g_shell, "bash") == 0)
-        swprintf_s(cmdline, 4096, L"\"%s\" --login -i", wsh);
-    else
-        swprintf_s(cmdline, 4096, L"\"%s\"", wsh);
-    free(wsh);
+    if (_stricmp(g_shell, "bash") == 0) {
+        char buf[MAX_PATH + 1];
+        strcpy_s(buf, MAX_PATH, sh);
+        strcat_s(buf, MAX_PATH, " --login -i");
+        int wn = MultiByteToWideChar(CP_UTF8, 0, buf, -1, NULL, 0);
+        wchar_t *wbuf = (wchar_t *)malloc(wn * sizeof(wchar_t));
+        if (!wbuf) { free(si.lpAttributeList); ConPtyClose(hpc); CloseHandle(hPipeInR); CloseHandle(hPipeInW); CloseHandle(hPipeOutR); CloseHandle(hPipeOutW); return 0; }
+        MultiByteToWideChar(CP_UTF8, 0, buf, -1, wbuf, wn);
+        wcsncpy_s(cmdline, 4096, wbuf, _TRUNCATE);
+        free(wbuf);
+    } else {
+        int wn = MultiByteToWideChar(CP_UTF8, 0, sh, -1, NULL, 0);
+        wchar_t *wbuf = (wchar_t *)malloc(wn * sizeof(wchar_t));
+        if (!wbuf) { free(si.lpAttributeList); ConPtyClose(hpc); CloseHandle(hPipeInR); CloseHandle(hPipeInW); CloseHandle(hPipeOutR); CloseHandle(hPipeOutW); return 0; }
+        MultiByteToWideChar(CP_UTF8, 0, sh, -1, wbuf, wn);
+        swprintf_s(cmdline, 4096, L"\"%s\"", wbuf);
+        free(wbuf);
+    }
 
     VPRINT("shell=%s", sh);
     ok = CreateProcessW(
         NULL, cmdline, NULL, NULL, TRUE,
         EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
-        NULL, NULL, &si.StartupInfo, &pi);
+        envBlock, NULL, &si.StartupInfo, &pi);
     VPRINT("CreateProcessW=%d pid=%lu", ok, ok ? pi.dwProcessId : 0);
 
     free(si.lpAttributeList);
@@ -399,19 +535,26 @@ DWORD WINAPI client_thread(LPVOID param) {
     CLIENT_CTX *ctx = (CLIENT_CTX *)param;
 
     VPRINT("client thread started");
+
+    wchar_t *envBlock = build_env_block();
+    if (!envBlock) VPRINT("env block is NULL, using inherited environment");
+
     send_all(ctx->sock, "Windows Telnet Server (ConPTY)\r\n", 33);
     telnet_iac(ctx->sock, TEL_WILL, TELOPT_SUPPRESS_GA);
     telnet_iac(ctx->sock, TEL_WILL, TELOPT_ECHO);
+    telnet_iac(ctx->sock, TEL_WILL, TELOPT_BINARY);
 
     if (g_auth && !do_auth(ctx)) {
         VPRINT("auth failed");
+        free(envBlock);
         closesocket(ctx->sock);
         free(ctx);
         return 0;
     }
 
-    if (!create_conpty(ctx)) {
+    if (!create_conpty(ctx, envBlock)) {
         VPRINT("create_conpty failed");
+        free(envBlock);
         send_all(ctx->sock, "ERROR: shell not available\r\n", 28);
         closesocket(ctx->sock);
         free(ctx);
@@ -453,7 +596,7 @@ DWORD WINAPI client_thread(LPVOID param) {
         while (consumed < remain) {
             int datalen;
             int n = process_iac(buf + consumed, remain - consumed,
-                                data, &datalen, ctx->sock);
+                                data, &datalen, ctx->sock, ctx);
             if (n <= 0) break;
             consumed += n;
             if (datalen > 0) {
@@ -470,6 +613,8 @@ DWORD WINAPI client_thread(LPVOID param) {
 done:
     VPRINT("cleaning up client");
     InterlockedExchange(&ctx->running, 0);
+
+    free(envBlock);
 
     if (ctx->hPipeInWrite) { CloseHandle(ctx->hPipeInWrite); ctx->hPipeInWrite = NULL; }
     if (ctx->hPipeOutRead) { CloseHandle(ctx->hPipeOutRead); ctx->hPipeOutRead = NULL; }

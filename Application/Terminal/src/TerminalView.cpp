@@ -959,11 +959,21 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
 
     // Draw background first
     bool drawBlock = isCursor && cursorVisible
+                     && buffer_.cursorFilled()
                      && buffer_.cursorShape() == TerminalBuffer::CursorShape::Block;
     if (!bg.isDefault || drawBlock) {
         TermColor drawBg = drawBlock ? fg : bg;
-        if (auto* b = GetBrush(drawBg))
-            rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
+        if (auto* b = GetBrush(drawBg)) {
+            if (drawBlock && buffer_.cursorFilled() && (buffer_.cursorWidthPct() < 100 || buffer_.cursorHeightPct() < 100)) {
+                float cx = x + (w * (100 - buffer_.cursorWidthPct())) / 200.0f;
+                float cy = y + (h * (100 - buffer_.cursorHeightPct())) / 200.0f;
+                float cw = w * buffer_.cursorWidthPct() / 100.0f;
+                float ch = h * buffer_.cursorHeightPct() / 100.0f;
+                rt->FillRectangle(D2D1::RectF(cx, cy, cx + cw, cy + ch), b);
+            } else {
+                rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), b);
+            }
+        }
     }
 
     // Selection overlay (drawn after background so it's visible on any cell bg)
@@ -1020,9 +1030,12 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
         }
     }
 
-    // Cursor outline (when not blinking-invisible)
-    if (isCursor && cursorVisible) {
-        if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Underline) {
+    // Cursor outline (when not blinking-invisible, not filled)
+    if (isCursor && cursorVisible && !buffer_.cursorFilled()) {
+        if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Block) {
+            if (auto* b = GetBrush(fg))
+                rt->DrawRectangle(D2D1::RectF(x, y, x + w, y + h), b, 1.0f);
+        } else if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Underline) {
             if (auto* b = GetBrush(fg))
                 rt->DrawLine({x, y + h - 2}, {x + cellWidth_, y + h - 2}, b, 2.0f);
         } else if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Bar) {
@@ -1082,17 +1095,6 @@ bool TerminalView::IsHyperlinkAt(int px, int py) const {
 }
 
 void TerminalView::OnLButtonDown(int px, int py) {
-<<<<<<< Updated upstream
-    // Ctrl+click opens hyperlink
-    if (GetKeyState(VK_CONTROL) & 0x8000) {
-        int row, col;
-        BufferCoordFromPoint(px, py, row, col);
-        if (row >= 0 && col >= 0) {
-            const auto& line = buffer_.lineAt(row);
-            if (col < (int)line.size() && !line[col].hyperlinkUrl.empty()) {
-                ShellExecuteW(nullptr, L"open", line[col].hyperlinkUrl.c_str(),
-                              nullptr, nullptr, SW_SHOWNORMAL);
-                return;
     // Ctrl+Click / modifier+Click: open hyperlink if present
     if (clickToOpenHyperlink_) {
         bool modHeld = false;
