@@ -695,6 +695,7 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         }
       } else {
         buf->SaveFile(buf->GetPath());
+        UpdateMenu(hwnd);
       }
     }
     break;
@@ -919,6 +920,15 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           break;
         }
       }
+    }
+    break;
+  }
+  case IDM_HELP_CLEAR_MESSAGES: {
+    Buffer *msgBuf = g_editor->GetBufferByName(L"*Messages*");
+    if (msgBuf) {
+      msgBuf->Delete(0, msgBuf->GetTotalLength());
+      msgBuf->CompactAddedBuffer();
+      UpdateMenu(hwnd);
     }
     break;
   }
