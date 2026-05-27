@@ -25,6 +25,7 @@
 
 static SOCKET sock = INVALID_SOCKET;
 static int use_ctrlc = 0;
+static int force_noecho = 0;
 static volatile int running = 1;
 static HANDLE hConsole = INVALID_HANDLE_VALUE;
 static DWORD original_mode = 0;
@@ -39,8 +40,10 @@ static void restore_console(void) {
 }
 
 static BOOL WINAPI ctrl_handler(DWORD type) {
-    if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT || type == CTRL_CLOSE_EVENT) {
+    if (type == CTRL_BREAK_EVENT || type == CTRL_CLOSE_EVENT) {
         restore_console();
+        printf("\033[0m\033[?25h");
+        fflush(stdout);
         running = 0;
         if (sock != INVALID_SOCKET) {
             shutdown(sock, SD_BOTH);
@@ -96,7 +99,7 @@ static void process_telnet_data(unsigned char* data, int len) {
         case 2:
             if (c == TELOPT_ECHO) {
                 send_iac(sock, DO, c);
-                local_echo = 0;
+                if (!force_noecho) local_echo = 0;
             } else if (c == TELOPT_SGA) {
                 send_iac(sock, DO, c);
             } else {
@@ -105,14 +108,14 @@ static void process_telnet_data(unsigned char* data, int len) {
             state = 0;
             break;
         case 3:
-            if (c == TELOPT_ECHO) local_echo = 1;
+            if (c == TELOPT_ECHO && !force_noecho) local_echo = 1;
             send_iac(sock, DONT, c);
             state = 0;
             break;
         case 4:
             if (c == TELOPT_ECHO) {
                 send_iac(sock, WILL, c);
-                local_echo = 1;
+                if (!force_noecho) local_echo = 1;
             } else if (c == TELOPT_SGA) {
                 send_iac(sock, WILL, c);
             } else {
@@ -121,7 +124,7 @@ static void process_telnet_data(unsigned char* data, int len) {
             state = 0;
             break;
         case 5:
-            if (c == TELOPT_ECHO) local_echo = 0;
+            if (c == TELOPT_ECHO && !force_noecho) local_echo = 0;
             send_iac(sock, WONT, c);
             state = 0;
             break;
@@ -146,24 +149,37 @@ static void process_telnet_data(unsigned char* data, int len) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 3 || argc > 4) {
-        fprintf(stderr, "Usage: mytelnet <host> <port> [--c]\n");
-        fprintf(stderr, "  --c    Use Ctrl+C to exit (instead of Ctrl+])\n");
-        return 1;
-    }
+    remote_host = "127.0.0.1";
+    remote_port = 23;
+    const char* port_arg = NULL;
+    int host_set = 0;
 
-    remote_host = argv[1];
-    remote_port = atoi(argv[2]);
-    if (remote_port <= 0 || remote_port > 65535) {
-        fprintf(stderr, "Invalid port: %s\n", argv[2]);
-        return 1;
-    }
-
-    if (argc == 4) {
-        if (strcmp(argv[3], "--c") == 0) {
-            use_ctrlc = 1;
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-' && argv[i][1] == '-') {
+            if (strcmp(argv[i], "--c") == 0) {
+                use_ctrlc = 1;
+            } else if (strcmp(argv[i], "--noecho") == 0) {
+                force_noecho = 1;
+                local_echo = 0;
+            } else {
+                fprintf(stderr, "Unknown option: %s\n", argv[i]);
+                return 1;
+            }
+        } else if (!host_set) {
+            remote_host = argv[i];
+            host_set = 1;
+        } else if (!port_arg) {
+            port_arg = argv[i];
         } else {
-            fprintf(stderr, "Unknown option: %s\n", argv[3]);
+            fprintf(stderr, "Unexpected argument: %s\n", argv[i]);
+            return 1;
+        }
+    }
+
+    if (port_arg) {
+        remote_port = atoi(port_arg);
+        if (remote_port <= 0 || remote_port > 65535) {
+            fprintf(stderr, "Invalid port: %s\n", port_arg);
             return 1;
         }
     }
@@ -178,7 +194,7 @@ int main(int argc, char* argv[]) {
 
     hConsole = GetStdHandle(STD_INPUT_HANDLE);
     GetConsoleMode(hConsole, &original_mode);
-    SetConsoleMode(hConsole, original_mode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
+    SetConsoleMode(hConsole, original_mode & ~(ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
 
     struct addrinfo hints, *res = NULL;
     memset(&hints, 0, sizeof(hints));
@@ -225,6 +241,8 @@ int main(int argc, char* argv[]) {
         printf("Press Ctrl+C to exit.\n");
     else
         printf("Escape character is 'Ctrl+]'.\n");
+    if (force_noecho)
+        printf("Local echo is off.\n");
     fflush(stdout);
 
     unsigned char buf[BUFSIZE];
@@ -233,13 +251,16 @@ int main(int argc, char* argv[]) {
     int exit_code = 0;
 
     while (running) {
-        if (_kbhit()) {
-            int ch = _getch();
-
-            if (ch == 0xE0 || ch == 0x00) {
-                _getch();
+        INPUT_RECORD ir;
+        DWORD nread;
+        if (PeekConsoleInput(hConsole, &ir, 1, &nread) && nread > 0) {
+            if (ir.EventType != KEY_EVENT || !ir.Event.KeyEvent.bKeyDown) {
+                ReadConsoleInput(hConsole, &ir, 1, &nread);
                 continue;
             }
+            int ch = ir.Event.KeyEvent.uChar.AsciiChar;
+            ReadConsoleInput(hConsole, &ir, 1, &nread);
+            if (ch == 0) continue;
 
             if (escape_mode) {
                 if (ch == '\r' || ch == '\n') {
@@ -308,7 +329,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (sock == INVALID_SOCKET) {
-            exit_msg = "Connection terminated (Ctrl+C or Ctrl+Break)";
+            exit_msg = "Connection terminated (Ctrl+Break or Close)";
             exit_code = 1;
             break;
         }
@@ -336,6 +357,10 @@ int main(int argc, char* argv[]) {
     }
 
     restore_console();
+    FlushConsoleInputBuffer(hConsole);
+
+    printf("\033[0m\033[?25h");
+    fflush(stdout);
 
     if (sock != INVALID_SOCKET) {
         shutdown(sock, SD_SEND);
@@ -344,13 +369,14 @@ int main(int argc, char* argv[]) {
 
     WSACleanup();
 
+    printf("\n");
     if (exit_code) {
-        printf("\r\nConnection to %s:%d terminated"
-               " (sent %lu, received %lu bytes)\r\n",
+        printf("Connection to %s:%d terminated"
+               " (sent %lu, received %lu bytes)\n",
                remote_host, remote_port, bytes_sent, bytes_recv);
     } else {
-        printf("\r\nConnection to %s:%d closed"
-               " (sent %lu, received %lu bytes)\r\n",
+        printf("Connection to %s:%d closed"
+               " (sent %lu, received %lu bytes)\n",
                remote_host, remote_port, bytes_sent, bytes_recv);
     }
     fflush(stdout);
