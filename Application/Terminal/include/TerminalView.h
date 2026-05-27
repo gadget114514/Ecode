@@ -50,6 +50,7 @@ public:
     // Lazy-start the ConPTY session.  Safe to call multiple times.
     bool StartSession(
         const std::wstring& shell = L"powershell.exe",
+        UINT codePage = CP_UTF8,
         const std::vector<std::pair<std::wstring,std::wstring>>& extraEnv = {});
 
     bool IsStarted() const { return session_.IsRunning(); }
@@ -172,6 +173,9 @@ private:
     // but we need one for the chunk pointer lifetime)
     std::mutex outputMutex_;
 
+    // Code page for MultiByteToWideChar/WideCharToMultiByte (from settings.ini / --codepage)
+    UINT codePage_ = CP_UTF8;
+
     // Hyperlink config (from settings.ini [Terminal] section)
     bool clickToOpenHyperlink_ = true;
     int  hyperlinkModifier_    = 3;     // 0=Ctrl, 1=Alt, 2=Shift, 3=no modifier
@@ -204,7 +208,7 @@ private:
     // Progress callback (OSC 9;4)
     std::function<void(float)> onProgress_;
 
-    // UTF-8 partial sequence buffer (跨ぐチャンク間の不完全なUTF-8シーケンス)
-    std::string pendingUtf8_;
+    // Partial multi-byte sequence buffer (跨ぐチャンク間の不完全なマルチバイトシーケンス)
+    std::string pendingPartial_;
 
 };

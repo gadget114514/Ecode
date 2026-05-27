@@ -7,6 +7,7 @@
 
 static TerminalView* g_view  = nullptr;
 static std::wstring  g_shell = L"powershell.exe";
+static UINT          g_codePage = CP_UTF8;
 
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
@@ -47,6 +48,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     if (argv && argc >= 2 && wcscmp(argv[1], L"--embedded") == 0) {
         embedded = true;
         argIdx = 2;
+    }
+
+    // Parse --codepage <id> (overrides settings.ini [Terminal] CodePage)
+    if (argv && argc >= argIdx + 2 && wcscmp(argv[argIdx], L"--codepage") == 0) {
+        g_codePage = (UINT)wcstoul(argv[argIdx + 1], nullptr, 10);
+        argIdx += 2;
     }
 
     // Register classes
@@ -92,7 +99,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     }
 
     if (g_view)
-        g_view->StartSession(g_shell);
+        g_view->StartSession(g_shell, g_codePage);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {

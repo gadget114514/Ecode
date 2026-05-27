@@ -48,10 +48,13 @@ public:
                int cols, int rows,
                const std::vector<std::pair<std::wstring,std::wstring>>& extraEnv = {});
 
+    // Set code page for Write(const std::wstring&) conversion (default CP_UTF8).
+    void SetCodePage(UINT cp) { codePage_ = cp; }
+
     // Write raw bytes to the PTY input (inputWriteSide_).
     bool Write(const void* data, size_t len);
     bool Write(const std::string& text) { return Write(text.data(), text.size()); }
-    bool Write(const std::wstring& text); // UTF-16 → UTF-8 then Write(void*)
+    bool Write(const std::wstring& text); // UTF-16 → codePage_ then Write(void*)
 
     // Resize the pseudo-console.
     void Resize(int cols, int rows);
@@ -125,4 +128,6 @@ private:
 
     std::function<void(const char*, size_t)> onOutput_;
     std::wstring lastError_;
+
+    UINT codePage_ = CP_UTF8;
 };
