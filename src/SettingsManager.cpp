@@ -195,6 +195,18 @@ void SettingsManager::Load() {
     }
   }
 
+  // Load folder entries
+  m_folderEntries.clear();
+  for (int i = 0; i < 50; ++i) {
+    std::wstring keyPath = L"Folder_Path_" + std::to_wstring(i);
+    std::wstring keyLbl = L"Folder_Lbl_" + std::to_wstring(i);
+    wchar_t pathBuf[MAX_PATH], lblBuf[256];
+    if (GetPrivateProfileStringW(L"FolderEntries", keyPath.c_str(), L"", pathBuf, MAX_PATH, path.c_str()) > 0) {
+      GetPrivateProfileStringW(L"FolderEntries", keyLbl.c_str(), L"", lblBuf, 256, path.c_str());
+      m_folderEntries.push_back({pathBuf, lblBuf});
+    }
+  }
+
   // Load CLI entries
   m_cliEntries.clear();
   for (int i = 0; i < 50; ++i) {
@@ -438,6 +450,7 @@ void SettingsManager::Save() {
 
   SaveCliEntries();
   SaveAppEntries();
+  SaveFolderEntries();
   SaveHiddenPlugins();
   SaveThemes();
 }
@@ -620,6 +633,33 @@ void SettingsManager::SaveAppEntries() {
     std::wstring keyLbl = L"App_Lbl_" + std::to_wstring(i);
     WritePrivateProfileStringW(L"AppEntries", keyPath.c_str(), m_appEntries[i].path.c_str(), path.c_str());
     WritePrivateProfileStringW(L"AppEntries", keyLbl.c_str(), m_appEntries[i].label.c_str(), path.c_str());
+  }
+}
+
+void SettingsManager::AddFolderEntry(const std::wstring &path, const std::wstring &label) {
+  m_folderEntries.push_back({path, label});
+}
+
+void SettingsManager::UpdateFolderEntry(size_t index, const std::wstring &path, const std::wstring &label) {
+  if (index < m_folderEntries.size()) {
+    m_folderEntries[index] = {path, label};
+  }
+}
+
+void SettingsManager::RemoveFolderEntry(size_t index) {
+  if (index < m_folderEntries.size()) {
+    m_folderEntries.erase(m_folderEntries.begin() + index);
+  }
+}
+
+void SettingsManager::SaveFolderEntries() {
+  std::wstring path = GetSettingsPath();
+  WritePrivateProfileStringW(L"FolderEntries", NULL, NULL, path.c_str());
+  for (size_t i = 0; i < m_folderEntries.size(); ++i) {
+    std::wstring keyPath = L"Folder_Path_" + std::to_wstring(i);
+    std::wstring keyLbl = L"Folder_Lbl_" + std::to_wstring(i);
+    WritePrivateProfileStringW(L"FolderEntries", keyPath.c_str(), m_folderEntries[i].path.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"FolderEntries", keyLbl.c_str(), m_folderEntries[i].label.c_str(), path.c_str());
   }
 }
 
