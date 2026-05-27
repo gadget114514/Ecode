@@ -187,6 +187,21 @@ void UpdateMenu(HWND hwnd) {
   }
   AppendMenu(hFile, MF_POPUP, (UINT_PTR)hRecent, L10N("menu_file_recent"));
   AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hFile, MF_STRING, IDM_FILE_OPEN_FOLDER, L"Open Folder in Explorer");
+  // Folder entries submenu
+  {
+    HMENU hFolders = CreatePopupMenu();
+    const auto &folderEntries = SettingsManager::Instance().GetFolderEntries();
+    for (size_t i = 0; i < folderEntries.size(); ++i) {
+      std::wstring text = folderEntries[i].label + L"  \u2192  " + folderEntries[i].path;
+      AppendMenu(hFolders, MF_STRING, IDM_FOLDERS_START + i, text.c_str());
+    }
+    if (!folderEntries.empty())
+      AppendMenu(hFolders, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hFolders, MF_STRING, IDM_FOLDER_CONFIGURE, L"Configure Folder Entries...");
+    AppendMenu(hFile, MF_POPUP, (UINT_PTR)hFolders, L"Folders");
+  }
+  AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
   AppendMenu(hFile, MF_STRING, IDM_FILE_EXIT, L"Exit\tC-x C-c");
 
   // Edit Menu

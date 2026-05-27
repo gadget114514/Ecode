@@ -934,6 +934,107 @@ void ShowAppEntriesDialog(HWND hwnd) {
              AppEntriesDlgProc);
 }
 
+// ---------------------------------------------------------------------------
+// Folder Entries Dialog
+// ---------------------------------------------------------------------------
+static void RefreshFolderList(HWND hDlg) {
+  HWND hList = GetDlgItem(hDlg, IDC_FE_LIST);
+  SendMessage(hList, LB_RESETCONTENT, 0, 0);
+  const auto &entries = SettingsManager::Instance().GetFolderEntries();
+  for (size_t i = 0; i < entries.size(); ++i) {
+    std::wstring text = entries[i].label + L"  \u2192  " + entries[i].path;
+    SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)text.c_str());
+  }
+}
+
+INT_PTR CALLBACK FolderEntriesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
+                                       LPARAM lParam) {
+  switch (message) {
+  case WM_INITDIALOG: {
+    RefreshFolderList(hDlg);
+    return (INT_PTR)TRUE;
+  }
+  case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_FE_LIST && HIWORD(wParam) == LBN_SELCHANGE) {
+      HWND hList = GetDlgItem(hDlg, IDC_FE_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        const auto &entries = SettingsManager::Instance().GetFolderEntries();
+        if (sel >= 0 && sel < (int)entries.size()) {
+          SetDlgItemTextW(hDlg, IDC_FE_PATH, entries[sel].path.c_str());
+          SetDlgItemTextW(hDlg, IDC_FE_LABEL, entries[sel].label.c_str());
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_FE_BROWSE) {
+      wchar_t path[MAX_PATH];
+      BROWSEINFOW bi = { 0 };
+      bi.hwndOwner = hDlg;
+      bi.lpszTitle = L"Select a folder:";
+      bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+      LPITEMIDLIST pidl = SHBrowseForFolderW(&bi);
+      if (pidl) {
+        SHGetPathFromIDListW(pidl, path);
+        SetDlgItemTextW(hDlg, IDC_FE_PATH, path);
+        std::wstring label = path;
+        size_t pos = label.find_last_of(L"\\/");
+        if (pos != std::wstring::npos) label = label.substr(pos + 1);
+        SetDlgItemTextW(hDlg, IDC_FE_LABEL, label.c_str());
+        CoTaskMemFree(pidl);
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_FE_ADD) {
+      wchar_t path[MAX_PATH], label[256];
+      GetDlgItemTextW(hDlg, IDC_FE_PATH, path, MAX_PATH);
+      GetDlgItemTextW(hDlg, IDC_FE_LABEL, label, 256);
+      if (wcslen(path) > 0) {
+        SettingsManager::Instance().AddFolderEntry(path, label);
+        SettingsManager::Instance().Save();
+        RefreshFolderList(hDlg);
+        SetDlgItemTextW(hDlg, IDC_FE_PATH, L"");
+        SetDlgItemTextW(hDlg, IDC_FE_LABEL, L"");
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_FE_UPDATE) {
+      HWND hList = GetDlgItem(hDlg, IDC_FE_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        wchar_t path[MAX_PATH], label[256];
+        GetDlgItemTextW(hDlg, IDC_FE_PATH, path, MAX_PATH);
+        GetDlgItemTextW(hDlg, IDC_FE_LABEL, label, 256);
+        if (wcslen(path) > 0) {
+          SettingsManager::Instance().UpdateFolderEntry(sel, path, label);
+          SettingsManager::Instance().Save();
+          RefreshFolderList(hDlg);
+          SendMessage(hList, LB_SETCURSEL, sel, 0);
+        }
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_FE_REMOVE) {
+      HWND hList = GetDlgItem(hDlg, IDC_FE_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        SettingsManager::Instance().RemoveFolderEntry(sel);
+        SettingsManager::Instance().Save();
+        RefreshFolderList(hDlg);
+        SetDlgItemTextW(hDlg, IDC_FE_PATH, L"");
+        SetDlgItemTextW(hDlg, IDC_FE_LABEL, L"");
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDCANCEL) {
+      EndDialog(hDlg, IDCANCEL);
+      return (INT_PTR)TRUE;
+    }
+    break;
+  }
+  return (INT_PTR)FALSE;
+}
+
+void ShowFolderEntriesDialog(HWND hwnd) {
+  DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDD_FOLDER_ENTRIES), hwnd,
+             FolderEntriesDlgProc);
+}
+
 static void RefreshCliList(HWND hDlg) {
   HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
   SendMessage(hList, LB_RESETCONTENT, 0, 0);
