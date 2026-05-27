@@ -156,6 +156,18 @@ int main(int argc, char* argv[]) {
     int host_set = 0;
 
     for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') {
+            if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+                printf("Usage: %s [host] [port] [options]\r\n"
+                       "  host        Remote host (default 127.0.0.1)\r\n"
+                       "  port        Remote port (default 23)\r\n"
+                       "  --c         Use Ctrl+C to exit (default: Ctrl+])\r\n"
+                       "  --noecho    Disable local echo\r\n"
+                       "  -h, --help  Display this help and exit\r\n",
+                       argv[0]);
+                return 0;
+            }
+        }
         if (argv[i][0] == '-' && argv[i][1] == '-') {
             if (strcmp(argv[i], "--c") == 0) {
                 use_ctrlc = 1;

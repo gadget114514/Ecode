@@ -62,6 +62,7 @@ static char      g_addr[64]     = "0.0.0.0";
 static char      g_password[256] = "";
 static int       g_auth         = 0;
 static char      g_shell[64]    = "cmd";
+static char      g_term[64]     = "xterm-256color";
 static int       g_verbose      = 0;
 static volatile int g_running   = 1;
 
@@ -106,8 +107,11 @@ static wchar_t* build_env_block(void) {
     wchar_t* env = GetEnvironmentStringsW();
     if (!env) return NULL;
 
+    wchar_t termVar[128];
+    swprintf_s(termVar, 128, L"TERM=%hs", g_term);
+
     const wchar_t* overrides[] = {
-        L"TERM=xterm-256color",
+        termVar,
         L"COLORTERM=truecolor",
         L"CLICOLOR_FORCE=1",
         L"FORCE_COLOR=3",
@@ -665,16 +669,31 @@ int main(int argc, char **argv) {
             g_auth = 1;
         } else if (!strcmp(argv[argi], "-s") && argi + 1 < argc) {
             strncpy_s(g_shell, sizeof(g_shell), argv[++argi], _TRUNCATE);
+        } else if (!strcmp(argv[argi], "-t") && argi + 1 < argc) {
+            strncpy_s(g_term, sizeof(g_term), argv[++argi], _TRUNCATE);
         } else if (!strcmp(argv[argi], "-fg")) {
             /* foreground mode (default) */
         } else if (!strcmp(argv[argi], "-V")) {
             g_verbose = 1;
-        } else {
-            printf("Usage: %s [address] [-p port] [-k password] [-s cmd|powershell|bash] [-fg] [-V]\r\n"
+        } else if (!strcmp(argv[argi], "-h")) {
+            printf("Usage: %s [address] [-p port] [-k password] [-s cmd|powershell|bash] [-t term] [-fg] [-V]\r\n"
                    "  address     Listening address (default 0.0.0.0)\r\n"
                    "  -p port     Listening port (default 23)\r\n"
                    "  -k password Require password authentication\r\n"
                    "  -s shell    Shell to launch (default cmd)\r\n"
+                   "  -t term     TERM variable value (default xterm-256color)\r\n"
+                   "  -fg         Run in foreground (default)\r\n"
+                   "  -V          Verbose/debug output\r\n"
+                   "  -h          Display this help and exit\r\n",
+                   argv[0]);
+            return 0;
+        } else {
+            printf("Usage: %s [address] [-p port] [-k password] [-s cmd|powershell|bash] [-t term] [-fg] [-V]\r\n"
+                   "  address     Listening address (default 0.0.0.0)\r\n"
+                   "  -p port     Listening port (default 23)\r\n"
+                   "  -k password Require password authentication\r\n"
+                   "  -s shell    Shell to launch (default cmd)\r\n"
+                   "  -t term     TERM variable value (default xterm-256color)\r\n"
                    "  -fg         Run in foreground (default)\r\n"
                    "  -V          Verbose/debug output\r\n",
                    argv[0]);
@@ -720,6 +739,7 @@ int main(int argc, char **argv) {
 
     printf("Listening on %s:%d ...\r\n", g_addr, g_port);
     printf("Shell: %s\r\n", g_shell);
+    printf("TERM:  %s\r\n", g_term);
     printf("Auth:  %s\r\n\r\n", g_auth ? "enabled" : "disabled");
 
     SetConsoleCtrlHandler(on_ctrl, TRUE);
