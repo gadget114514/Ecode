@@ -618,7 +618,8 @@ static INT_PTR CALLBACK CopyrightDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPA
     wchar_t wbuf[4096];
     MultiByteToWideChar(CP_UTF8, 0, g_copyrightText, -1, wbuf, 4096);
     SetDlgItemTextW(hDlg, IDC_COPYRIGHT_TEXT, wbuf);
-    return (INT_PTR)TRUE;
+    SetFocus(GetDlgItem(hDlg, IDOK));
+    return (INT_PTR)FALSE;
   }
   case WM_COMMAND:
     if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
@@ -1162,8 +1163,11 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         std::wstring termExe = exeDir + L"\\plugins\\Terminal.exe";
         if (GetFileAttributesW(termExe.c_str()) == INVALID_FILE_ATTRIBUTES)
           termExe = exeDir + L"\\Terminal.exe";
-        if (g_editor) g_editor->LogMessage("[Launch] CLI Terminal: " + WStringToString(shellArgs));
-        LaunchApp(hwnd, termExe, shellArgs, label, TAB_TYPE_TERMINAL, entries[idx].iconIndex);
+        // Pass the codepage to Terminal.exe based on CLI entry's encoding setting
+        std::wstring cpArg = (enc == 1) ? L"--codepage 932 " : L"--codepage 65001 ";
+        std::wstring launchArgs = cpArg + shellArgs;
+        if (g_editor) g_editor->LogMessage("[Launch] CLI Terminal: " + WStringToString(launchArgs));
+        LaunchApp(hwnd, termExe, launchArgs, label, TAB_TYPE_TERMINAL, entries[idx].iconIndex);
       }
     } else if (LOWORD(wParam) >= IDM_APPS_START && LOWORD(wParam) < IDM_APPS_START + 100) {
       size_t idx = LOWORD(wParam) - IDM_APPS_START;
