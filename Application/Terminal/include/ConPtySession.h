@@ -10,6 +10,8 @@
 
 #include <atomic>
 #include <functional>
+#include <mutex>
+#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
@@ -75,7 +77,11 @@ private:
     void StartReader();
     void ReaderLoop();
 
+    void StartWriter();
+    void WriterLoop();
+
     friend DWORD WINAPI ReaderThreadProc(LPVOID param);
+    friend DWORD WINAPI WriterThreadProc(LPVOID param);
 
     std::wstring BuildEnvBlock(const std::vector<std::pair<std::wstring,std::wstring>>& extra);
     void CloseHandle_(HANDLE& h);
@@ -108,6 +114,12 @@ private:
     DWORD  processId_     = 0;
 
     HANDLE readerThread_  = nullptr;  // Win32 reader thread (avoids std::thread issues)
+    HANDLE writerThread_  = nullptr;  // Win32 writer thread
+    HANDLE writeWakeEvent_ = nullptr; // auto-reset event to wake writer
+
+    std::mutex writeMutex_;
+    std::queue<std::vector<char>> writeQueue_;
+
     std::atomic<bool> running_{false};
     std::atomic<bool> closing_{false};
 
