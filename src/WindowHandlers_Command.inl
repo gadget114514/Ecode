@@ -536,8 +536,13 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
     return;
 
   HWND foundHwnd = nullptr;
-  for (int i = 0; i < 50 && !foundHwnd; ++i) {
-    Sleep(100);
+  for (int i = 0; i < 20 && !foundHwnd; ++i) {
+    MSG msg;
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+      TranslateMessage(&msg);
+      DispatchMessage(&msg);
+    }
+    Sleep(50);
     EnumData data = { pi.dwProcessId, nullptr };
     EnumWindows(EnumWindowsProc, (LPARAM)&data);
     foundHwnd = data.hwnd;
@@ -685,13 +690,13 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           if (buf->SaveFile(path)) {
             buf->SetPath(path);
             SettingsManager::Instance().AddRecentFile(path);
+            UpdateMenu(hwnd);
           }
         }
       } else {
         buf->SaveFile(buf->GetPath());
       }
     }
-    UpdateMenu(hwnd);
     break;
   }
   case IDM_FILE_SAVE_AS: {
@@ -702,8 +707,8 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         if (buf->SaveFile(path)) {
           buf->SetPath(path);
           SettingsManager::Instance().AddRecentFile(path);
+          UpdateMenu(hwnd);
         }
-        UpdateMenu(hwnd);
       }
     }
     break;

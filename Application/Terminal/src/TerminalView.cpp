@@ -387,8 +387,20 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_TIMER:
         if (wp == cursorTimer_) {
-            cursorBlink_ = !cursorBlink_;
-            InvalidateRect(hwnd, nullptr, FALSE);
+            if (buffer_.cursorBlink() && buffer_.cursorVisible()) {
+                cursorBlink_ = !cursorBlink_;
+                int cx = buffer_.cursorColumn();
+                int cy = buffer_.cursorRow();
+                RECT rc = {
+                    (LONG)(cx * cellWidth_),
+                    (LONG)(cy * cellHeight_),
+                    (LONG)((cx + 1) * cellWidth_),
+                    (LONG)((cy + 1) * cellHeight_)
+                };
+                InvalidateRect(hwnd, &rc, FALSE);
+            } else {
+                cursorBlink_ = true;
+            }
         }
         return 0;
     }
@@ -602,13 +614,20 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
         InvalidateRect(hwnd_, nullptr, FALSE);
 
     // VT debug: send raw ESC sequences to parent's *Messages* buffer
-    bool vtDebug = false;
+    // Cache the value to avoid reading settings.ini from disk on every chunk.
+    static bool vtDebugCached = false;
+    static bool vtDebug = false;
     {
-        wchar_t appdata[MAX_PATH] = {};
-        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
-            std::wstring iniPath = std::wstring(appdata) + L"\\Ecode\\settings.ini";
-            vtDebug = GetPrivateProfileIntW(
-                L"Editor", L"VTDebug", 0, iniPath.c_str()) != 0;
+        static bool vtDebugInit = false;
+        if (!vtDebugInit) {
+            wchar_t appdata[MAX_PATH] = {};
+            if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
+                std::wstring iniPath = std::wstring(appdata) + L"\\Ecode\\settings.ini";
+                vtDebug = GetPrivateProfileIntW(
+                    L"Editor", L"VTDebug", 0, iniPath.c_str()) != 0;
+            }
+            vtDebugCached = vtDebug;
+            vtDebugInit = true;
         }
     }
     if (vtDebug) {
