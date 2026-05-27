@@ -196,6 +196,7 @@ static const char *resolve_shell(const char *shell) {
             return path;
         }
         static const char *fallback_paths[] = {
+        	"C:\\Program Files\\Git\\usr\\bin\\bash.exe",
             "C:\\Program Files\\Git\\bin\\bash.exe",
             "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
             NULL
@@ -382,7 +383,7 @@ static int create_conpty(CLIENT_CTX *ctx, wchar_t *envBlock) {
 
     const char *sh = resolve_shell(g_shell);
     if (!sh) {
-        VPRINT("shell not found");
+        VPRINT("shell not found %s", g_shell);
         free(si.lpAttributeList);
         ConPtyClose(hpc);
         CloseHandle(hPipeInR); CloseHandle(hPipeInW);
