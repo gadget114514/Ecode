@@ -462,6 +462,11 @@ void TerminalBuffer::setCursorBlink(bool v)                { cursorBlink_ = v; }
 bool TerminalBuffer::cursorBlink()                   const { return cursorBlink_; }
 void TerminalBuffer::setCursorShape(CursorShape s)         { cursorShape_ = s; }
 TerminalBuffer::CursorShape TerminalBuffer::cursorShape()  const { return cursorShape_; }
+void TerminalBuffer::setCursorFilled(bool v)               { cursorFilled_ = v; }
+bool TerminalBuffer::cursorFilled()                  const { return cursorFilled_; }
+void TerminalBuffer::setCursorScale(int wPct, int hPct)   { cursorWidthPct_ = std::clamp(wPct, 0, 100); cursorHeightPct_ = std::clamp(hPct, 0, 100); }
+int  TerminalBuffer::cursorWidthPct()               const { return cursorWidthPct_; }
+int  TerminalBuffer::cursorHeightPct()              const { return cursorHeightPct_; }
 
 // ---------------------------------------------------------------------------
 // alternate screen

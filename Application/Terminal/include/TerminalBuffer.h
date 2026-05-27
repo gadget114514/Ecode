@@ -143,6 +143,11 @@ public:
     bool cursorBlink()    const;
     void setCursorShape(CursorShape shape);
     CursorShape cursorShape() const;
+    void setCursorFilled(bool v);
+    bool cursorFilled()   const;
+    void setCursorScale(int wPct, int hPct);
+    int  cursorWidthPct()  const;
+    int  cursorHeightPct() const;
 
     // alternate screen (?47 / ?1049)
     void useAlternateScreen(bool enabled);
@@ -194,6 +199,9 @@ private:
     // cursor appearance
     bool cursorVisible_ = true;
     bool cursorBlink_   = true;
+    bool cursorFilled_  = true;
+    int  cursorWidthPct_  = 100;
+    int  cursorHeightPct_ = 100;
     CursorShape cursorShape_ = CursorShape::Block;
 
     // modes

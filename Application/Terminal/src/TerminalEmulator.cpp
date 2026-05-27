@@ -320,6 +320,10 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
             emitResponse(L"\x1b[>0;10;1c"); // secondary DA — pretend VT100
             return;
         }
+        if (prefix == L'?' && fin == L'c') {
+            // Incoming primary DA response (e.g. ESC[?1;2c) — ignore, not a request
+            return;
+        }
         if (prefix == L'>' && fin == L'm') {
             handleKeyModifierOptions(rest);
             return;
@@ -487,9 +491,9 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enabled) {
     auto modes = splitParams(params);
-    for (auto& m : modes) {
+    for (size_t i = 0; i < modes.size(); ++i) {
         int value = 0;
-        try { value = std::stoi(m); } catch(...) { continue; }
+        try { value = std::stoi(modes[i]); } catch(...) { continue; }
         switch (value) {
         case 1:    buffer_->setApplicationCursorMode(enabled);       break; // DECCKM (terminalpp)
         case 6:    buffer_->setOriginMode(enabled);                   break;
@@ -513,9 +517,17 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
             else         buffer_->restoreCursor();
             break;
         case 2004: buffer_->setBracketedPasteEnabled(enabled);        break;
-        // Windows Terminal extensions – not implemented
-        case 2026:
+        // Windows Terminal extensions
+        case 2026: {
+            buffer_->setCursorFilled(enabled);
+            if (i + 2 < modes.size()) {
+                int cw = 0, ch = 0;
+                try { cw = std::stoi(modes[i + 1]); } catch(...) {}
+                try { ch = std::stoi(modes[i + 2]); } catch(...) {}
+                buffer_->setCursorScale(cw, ch);
+            }
             break;
+        }
         case 2027:
             break;
         case 2031:

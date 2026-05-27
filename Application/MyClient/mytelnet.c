@@ -20,6 +20,7 @@
 #define NOP     241
 #define AYT     246
 
+#define TELOPT_BINARY 0
 #define TELOPT_ECHO  1
 #define TELOPT_SGA   3
 
@@ -100,7 +101,7 @@ static void process_telnet_data(unsigned char* data, int len) {
             if (c == TELOPT_ECHO) {
                 send_iac(sock, DO, c);
                 if (!force_noecho) local_echo = 0;
-            } else if (c == TELOPT_SGA) {
+            } else if (c == TELOPT_SGA || c == TELOPT_BINARY) {
                 send_iac(sock, DO, c);
             } else {
                 send_iac(sock, DONT, c);
@@ -116,7 +117,7 @@ static void process_telnet_data(unsigned char* data, int len) {
             if (c == TELOPT_ECHO) {
                 send_iac(sock, WILL, c);
                 if (!force_noecho) local_echo = 1;
-            } else if (c == TELOPT_SGA) {
+            } else if (c == TELOPT_SGA || c == TELOPT_BINARY) {
                 send_iac(sock, WILL, c);
             } else {
                 send_iac(sock, WONT, c);
