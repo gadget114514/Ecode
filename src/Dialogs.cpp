@@ -10,6 +10,7 @@
 #include <commdlg.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <shlguid.h>
 #include <string>
 
 #include "Globals.inl"
@@ -875,6 +876,39 @@ void Dialogs::ShowFindFileDialog(HWND hwnd) {
 
 static const wchar_t* kShellNames[] = { L"cmd", L"powershell", L"bash" };
 
+static std::wstring ResolveLnkFile(const std::wstring &lnkPath) {
+  std::wstring result;
+  HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+  bool needsUninit = (hr == S_OK);
+  if (SUCCEEDED(hr) || hr == S_FALSE) {
+    IShellLinkW *psl = nullptr;
+    hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
+                          IID_IShellLinkW, (LPVOID *)&psl);
+    if (SUCCEEDED(hr) && psl) {
+      IPersistFile *ppf = nullptr;
+      hr = psl->QueryInterface(IID_IPersistFile, (LPVOID *)&ppf);
+      if (SUCCEEDED(hr) && ppf) {
+        hr = ppf->Load(lnkPath.c_str(), STGM_READ);
+        if (SUCCEEDED(hr)) {
+          hr = psl->Resolve(NULL, SLR_NO_UI | SLR_UPDATE);
+          if (SUCCEEDED(hr)) {
+            wchar_t exePath[MAX_PATH];
+            hr = psl->GetPath(exePath, MAX_PATH, NULL, 0);
+            if (SUCCEEDED(hr)) {
+              result = exePath;
+            }
+          }
+        }
+        ppf->Release();
+      }
+      psl->Release();
+    }
+    if (needsUninit)
+      CoUninitialize();
+  }
+  return result;
+}
+
 static void RefreshAppList(HWND hDlg) {
   HWND hList = GetDlgItem(hDlg, IDC_AE_LIST);
   SendMessage(hList, LB_RESETCONTENT, 0, 0);
@@ -890,6 +924,36 @@ INT_PTR CALLBACK AppEntriesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
   switch (message) {
   case WM_INITDIALOG: {
     RefreshAppList(hDlg);
+    DragAcceptFiles(hDlg, TRUE);
+    return (INT_PTR)TRUE;
+  }
+  case WM_DROPFILES: {
+    HDROP hDrop = (HDROP)wParam;
+    wchar_t droppedPath[MAX_PATH];
+    DragQueryFile(hDrop, 0, droppedPath, MAX_PATH);
+    DragFinish(hDrop);
+
+    std::wstring path = droppedPath;
+    std::wstring ext = path.substr(path.find_last_of(L'.'));
+    std::wstring finalPath;
+
+    if (_wcsicmp(ext.c_str(), L".lnk") == 0) {
+      finalPath = ResolveLnkFile(path);
+    } else {
+      finalPath = path;
+    }
+
+    if (!finalPath.empty()) {
+      SetDlgItemTextW(hDlg, IDC_AE_PATH, finalPath.c_str());
+      std::wstring label = finalPath;
+      size_t pos = label.find_last_of(L"\\/");
+      if (pos != std::wstring::npos)
+        label = label.substr(pos + 1);
+      pos = label.find_last_of(L'.');
+      if (pos != std::wstring::npos)
+        label = label.substr(0, pos);
+      SetDlgItemTextW(hDlg, IDC_AE_LABEL, label.c_str());
+    }
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
