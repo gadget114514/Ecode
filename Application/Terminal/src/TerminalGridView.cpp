@@ -133,7 +133,6 @@ HBITMAP TerminalGridView::CaptureSnapshot(HWND src) {
                 DispatchMessageW(&msg);
             }
         }
-        Sleep(30);
     }
 
     RECT rc;
