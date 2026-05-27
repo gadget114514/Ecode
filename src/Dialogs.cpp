@@ -435,6 +435,32 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       }
       return (INT_PTR)TRUE;
     }
+    if (LOWORD(wParam) == IDC_FONT_BROWSE) {
+      CHOOSEFONTW cf = {0};
+      cf.lStructSize = sizeof(cf);
+      cf.hwndOwner = hDlg;
+      LOGFONTW lf = {0};
+      wchar_t family[256];
+      GetDlgItemTextW(hDlg, IDC_FONT_FAMILY, family, 256);
+      wcscpy_s(lf.lfFaceName, family);
+      UINT fontSize = GetDlgItemInt(hDlg, IDC_FONT_SIZE, NULL, FALSE);
+      if (fontSize < 1) fontSize = 12;
+      HDC hdc = GetDC(hDlg);
+      lf.lfHeight = -MulDiv((int)fontSize, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+      ReleaseDC(hDlg, hdc);
+      lf.lfWeight = (LONG)GetDlgItemInt(hDlg, IDC_FONT_WEIGHT, NULL, FALSE);
+      cf.lpLogFont = &lf;
+      cf.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT | CF_NOVERTFONTS;
+      if (ChooseFontW(&cf)) {
+        SetDlgItemTextW(hDlg, IDC_FONT_FAMILY, lf.lfFaceName);
+        HDC hdc2 = GetDC(hDlg);
+        int newSize = MulDiv(abs(lf.lfHeight), 72, GetDeviceCaps(hdc2, LOGPIXELSY));
+        ReleaseDC(hDlg, hdc2);
+        SetDlgItemInt(hDlg, IDC_FONT_SIZE, newSize, FALSE);
+        SetDlgItemInt(hDlg, IDC_FONT_WEIGHT, lf.lfWeight, FALSE);
+      }
+      return (INT_PTR)TRUE;
+    }
     if (LOWORD(wParam) == IDOK) {
       wchar_t fontFamily[256];
       GetDlgItemTextW(hDlg, IDC_FONT_FAMILY, fontFamily, 256);
@@ -805,13 +831,14 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         // Nested message loop while search is active
         MSG msg;
         while (g_grepSearchActive) {
-          while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+          if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (!IsDialogMessage(hDlg, &msg)) {
               TranslateMessage(&msg);
               DispatchMessage(&msg);
             }
+          } else {
+            WaitMessage();
           }
-          Sleep(10);
         }
       }
       EndDialog(hDlg, IDOK);

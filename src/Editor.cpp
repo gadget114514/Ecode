@@ -252,6 +252,11 @@ void Editor::FindFile(const std::wstring &pattern, const std::wstring &dir) {
   try {
     if (fs::exists(dir) && fs::is_directory(dir)) {
       for (const auto &entry : fs::recursive_directory_iterator(dir)) {
+        MSG msg;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+          TranslateMessage(&msg);
+          DispatchMessage(&msg);
+        }
         if (!fs::is_regular_file(entry.status())) continue;
         std::wstring fname = entry.path().filename().wstring();
         if (fname.find(pattern) == std::wstring::npos) continue;
