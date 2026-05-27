@@ -278,7 +278,7 @@ void UpdateMenu(HWND hwnd) {
              IDM_SHELL_ENC_SJIS, L"Shift-JIS");
   AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hEnc, L"Shell Encoding");
 
-  // Tools Menu (built-in tools only; app launchers moved to Plugins menu)
+  // Tools Menu (built-in tools + app launchers)
   HMENU hTools = CreatePopupMenu();
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_RUN_MACRO,
              L10N("menu_tools_run_macro"));
@@ -291,7 +291,20 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
-  // Buffers Menu - integrated buffer/app tabs with type indicators
+  // App entries (external applications, like CLI entries)
+  {
+    const auto &appEntries = SettingsManager::Instance().GetAppEntries();
+    if (!appEntries.empty()) {
+      AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
+      for (size_t i = 0; i < appEntries.size(); ++i) {
+        std::wstring text = appEntries[i].label + L"  \u2192  " + appEntries[i].path;
+        AppendMenu(hTools, MF_STRING, IDM_APPS_START + i, text.c_str());
+      }
+    }
+    AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hTools, MF_STRING, IDM_APPS_CONFIGURE, L"Configure App Entries...");
+  }
+  // Buffers Menu - integrated buffer/app tabs with type indicators and kill actions
   HMENU hBuffers = CreatePopupMenu();
   const auto &buffers = g_editor->GetBuffers();
   for (size_t i = 0; i < buffers.size(); ++i) {
@@ -316,6 +329,18 @@ void UpdateMenu(HWND hwnd) {
     UINT flags = MF_STRING;
     if (g_activeAppTab == static_cast<int>(i)) flags |= MF_CHECKED;
     AppendMenu(hBuffers, flags, IDM_BUFFERS_START + 200 + i, name.c_str());
+  }
+  // Kill entries for running processes
+  if (!g_appTabs.empty()) {
+    AppendMenu(hBuffers, MF_SEPARATOR, 0, NULL);
+    for (size_t i = 0; i < g_appTabs.size(); ++i) {
+      UINT flags = MF_STRING;
+      if (g_activeAppTab == static_cast<int>(i)) flags |= MF_CHECKED;
+      std::wstring tag = (g_appTabs[i].type == TAB_TYPE_TERMINAL) ? L" [Terminal]" : L" [App]";
+      AppendMenu(hBuffers, flags, IDM_PROCESS_KILL_START + i, (L"Kill " + g_appTabs[i].label + tag).c_str());
+    }
+    AppendMenu(hBuffers, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hBuffers, MF_STRING, IDM_PROCESS_KILL, L"Kill Active Process");
   }
 
   // Help Menu
@@ -374,37 +399,6 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
 
-  // Apps Menu
-  HMENU hApps = CreatePopupMenu();
-  {
-    const auto &appEntries = SettingsManager::Instance().GetAppEntries();
-    for (size_t i = 0; i < appEntries.size(); ++i) {
-      std::wstring text = appEntries[i].label + L"  \u2192  " + appEntries[i].path;
-      AppendMenu(hApps, MF_STRING, IDM_APPS_START + i, text.c_str());
-    }
-    if (!appEntries.empty())
-      AppendMenu(hApps, MF_SEPARATOR, 0, NULL);
-    AppendMenu(hApps, MF_STRING, IDM_APPS_CONFIGURE, L"Configure App Entries...");
-  }
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hApps, L"Apps");
-
-  // Process Menu - kill process-bound apps and terminals
-  HMENU hProcess = CreatePopupMenu();
-  bool hasProcesses = false;
-  for (size_t i = 0; i < g_appTabs.size(); ++i) {
-    UINT flags = MF_STRING;
-    if (g_activeAppTab == static_cast<int>(i)) flags |= MF_CHECKED;
-    std::wstring tag = (g_appTabs[i].type == TAB_TYPE_TERMINAL) ? L" [Terminal]" : L" [App]";
-    AppendMenu(hProcess, flags, IDM_PROCESS_KILL_START + i, (L"Kill " + g_appTabs[i].label + tag).c_str());
-    hasProcesses = true;
-  }
-  if (hasProcesses) {
-    AppendMenu(hProcess, MF_SEPARATOR, 0, NULL);
-    AppendMenu(hProcess, MF_STRING, IDM_PROCESS_KILL, L"Kill Active Process");
-  } else {
-    AppendMenu(hProcess, MF_GRAYED, 0, L"(No running processes)");
-  }
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hProcess, L"Process");
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hHelp, L10N("menu_help"));
 
   if (g_noTitleBar) {
@@ -423,7 +417,6 @@ void UpdateMenu(HWND hwnd) {
       DestroyMenu(hAi);
     g_menuLabels.push_back({ L10N("menu_buffers"), hBuffers, {0,0,0,0} });
     g_menuLabels.push_back({ L"CLI", hCli, {0,0,0,0} });
-    g_menuLabels.push_back({ L"Process", hProcess, {0,0,0,0} });
     g_menuLabels.push_back({ L10N("menu_help"), hHelp, {0,0,0,0} });
     static HMENU s_prevMenuBar = NULL;
     if (s_prevMenuBar) DestroyMenu(s_prevMenuBar);

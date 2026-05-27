@@ -183,6 +183,17 @@ void SettingsManager::Load() {
       m_appEntries.push_back({pathBuf, lblBuf});
     }
   }
+  // Add default FastFileSearch if no entries exist
+  if (m_appEntries.empty()) {
+    wchar_t modPath[MAX_PATH];
+    GetModuleFileNameW(nullptr, modPath, MAX_PATH);
+    std::wstring exeDir = modPath;
+    exeDir = exeDir.substr(0, exeDir.find_last_of(L"\\/"));
+    std::wstring ffsPath = exeDir + L"\\apps\\FastFileSearch.exe";
+    if (GetFileAttributesW(ffsPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+      m_appEntries.push_back({ffsPath, L"FastFileSearch"});
+    }
+  }
 
   // Load CLI entries
   m_cliEntries.clear();
