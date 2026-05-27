@@ -27,6 +27,14 @@ public:
     // Feed decoded UTF-16 output from the PTY.
     void process(const std::wstring& text);
 
+    // Returns true if any unsupported escape sequence was encountered
+    // during the last process() call, and resets the flag.
+    bool consumeUnsupportedFlag() {
+        bool v = unsupportedFlag_;
+        unsupportedFlag_ = false;
+        return v;
+    }
+
     // --- callbacks (replace Qt signals) ---
 
     // Terminal → PTY response (device reports, hyperlink queries, etc.)
@@ -125,8 +133,11 @@ private:
     // DCS (Sixel) handler
     void handleDcs(const std::string& data);
 
+    void markUnsupported() { unsupportedFlag_ = true; }
+
     // --- state ---
     TerminalBuffer* buffer_ = nullptr;
+    bool unsupportedFlag_ = false;
     State state_            = State::Ground;
     std::wstring csiParams_;
     std::wstring oscText_;

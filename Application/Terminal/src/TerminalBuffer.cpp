@@ -539,7 +539,7 @@ void TerminalBuffer::savePrivateMode(int mode) {
     case 1049:
     case 1047:
     case 47:   savedPrivateMode1049_  = alternateScreenActive_; break;
-    case 2026: savedPrivateMode2026_  = syncOutputEnabled_;     break;
+    case 2026: savedPrivateMode2026_  = cursorFilled_;          break;
     }
 }
 
@@ -550,7 +550,7 @@ void TerminalBuffer::restorePrivateMode(int mode) {
     case 1049:
     case 1047:
     case 47:   useAlternateScreen(savedPrivateMode1049_); break;
-    case 2026: setSyncOutputEnabled(savedPrivateMode2026_); break;
+    case 2026: setCursorFilled(savedPrivateMode2026_); break;
     }
 }
 
