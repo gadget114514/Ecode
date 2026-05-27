@@ -117,6 +117,7 @@ private:
 
     // Mouse
     void SendMouseWheelToPty(int direction, int px, int py); // direction: +1=up -1=down
+    void SendMouseClickToPty(int button, int px, int py, bool release);
 
     // Scrollback
     static constexpr int kScrollBarWidth = 8;
