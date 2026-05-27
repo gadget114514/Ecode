@@ -136,8 +136,14 @@ HWND TerminalView::Create(HWND parent) {
 // StartSession
 // ---------------------------------------------------------------------------
 bool TerminalView::StartSession(const std::wstring& shell,
+                                UINT codePage,
                                 const std::vector<std::pair<std::wstring,std::wstring>>& extraEnv) {
     if (session_.IsRunning()) return true;
+
+    // Command-line --codepage overrides settings.ini value
+    if (codePage != CP_UTF8 || codePage_ == CP_UTF8)
+        codePage_ = codePage;
+    session_.SetCodePage(codePage_);
 
     // Initial size from window, or reasonable default
     int cols = (int)(buffer_.columns());
@@ -275,16 +281,16 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     std::wstring result(bytes / sizeof(wchar_t), L'\0');
                     ImmGetCompositionStringW(hImc, GCS_RESULTSTR,
                                              result.data(), bytes);
-                    int need = WideCharToMultiByte(CP_UTF8, 0,
+                    int need = WideCharToMultiByte(codePage_, 0,
                         result.c_str(), (int)result.size(),
                         nullptr, 0, nullptr, nullptr);
                     if (need > 0) {
-                        std::string utf8(need, '\0');
-                        WideCharToMultiByte(CP_UTF8, 0,
+                        std::string encoded(need, '\0');
+                        WideCharToMultiByte(codePage_, 0,
                             result.c_str(), (int)result.size(),
-                            utf8.data(), need, nullptr, nullptr);
+                            encoded.data(), need, nullptr, nullptr);
                         if (scrollOffset_ > 0) ScrollToBottom();
-                        session_.Write(utf8.data(), utf8.size());
+                        session_.Write(encoded.data(), encoded.size());
                     }
                 }
             }
@@ -465,6 +471,10 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
             GetPrivateProfileStringW(L"Terminal", L"HyperlinkOpenCommand",
                 L"", buf, 1024, iniPath.c_str());
             hyperlinkOpenCommand_ = buf;
+
+            int cp = (int)GetPrivateProfileIntW(
+                L"Terminal", L"CodePage", CP_UTF8, iniPath.c_str());
+            if (cp > 0) codePage_ = (UINT)cp;
         }
     }
 
@@ -549,62 +559,71 @@ void TerminalView::OnSize(int w, int h) {
 // OnTerminalOutput — called on UI thread via PostMessage
 // ---------------------------------------------------------------------------
 void TerminalView::OnTerminalOutput(const char* data, size_t len) {
-    // Combine with any partial UTF-8 sequence from the previous chunk,
-    // so that multi-byte sequences split across pipe reads are not corrupted.
+    // Combine with any partial multi-byte sequence from the previous chunk.
     std::string combined;
-    if (!pendingUtf8_.empty()) {
-        combined = std::move(pendingUtf8_);
-        pendingUtf8_.clear();
+    if (!pendingPartial_.empty()) {
+        combined = std::move(pendingPartial_);
+        pendingPartial_.clear();
     }
     combined.append(data, len);
 
-    // Scan from the end to detect an incomplete trailing UTF-8 sequence
-    // and save it for the next chunk.
     size_t validLen = combined.size();
-    if (validLen > 0) {
-        const unsigned char* u = (const unsigned char*)combined.data();
-        size_t pos = validLen;
-        int contCount = 0;
-        // Count trailing continuation bytes (10xxxxxx)
-        while (pos > 0 && (u[pos - 1] & 0xC0) == 0x80) {
-            ++contCount;
-            --pos;
-        }
-        if (pos > 0) {
-            unsigned char lead = u[pos - 1];
-            if ((lead & 0xE0) == 0xC0) {
-                // 2-byte sequence: lead + 1 continuation
-                if (contCount < 1) {
-                    pendingUtf8_ = combined.substr(pos - 1);
-                    validLen = pos - 1;
-                }
-            } else if ((lead & 0xF0) == 0xE0) {
-                // 3-byte sequence: lead + 2 continuations
-                if (contCount < 2) {
-                    pendingUtf8_ = combined.substr(pos - 1);
-                    validLen = pos - 1;
-                }
-            } else if ((lead & 0xF8) == 0xF0) {
-                // 4-byte sequence: lead + 3 continuations
-                if (contCount < 3) {
-                    pendingUtf8_ = combined.substr(pos - 1);
-                    validLen = pos - 1;
-                }
+    if (codePage_ == CP_UTF8) {
+        // UTF-8: scan from the end to detect an incomplete trailing sequence.
+        if (validLen > 0) {
+            const unsigned char* u = (const unsigned char*)combined.data();
+            size_t pos = validLen;
+            int contCount = 0;
+            while (pos > 0 && (u[pos - 1] & 0xC0) == 0x80) {
+                ++contCount;
+                --pos;
             }
-            // else: ASCII or invalid lead → no pending
-        } else if (contCount > 0) {
-            // Only continuation bytes with no lead byte → all are pending
-            pendingUtf8_ = std::move(combined);
-            return;
+            if (pos > 0) {
+                unsigned char lead = u[pos - 1];
+                if ((lead & 0xE0) == 0xC0) {
+                    if (contCount < 1) {
+                        pendingPartial_ = combined.substr(pos - 1);
+                        validLen = pos - 1;
+                    }
+                } else if ((lead & 0xF0) == 0xE0) {
+                    if (contCount < 2) {
+                        pendingPartial_ = combined.substr(pos - 1);
+                        validLen = pos - 1;
+                    }
+                } else if ((lead & 0xF8) == 0xF0) {
+                    if (contCount < 3) {
+                        pendingPartial_ = combined.substr(pos - 1);
+                        validLen = pos - 1;
+                    }
+                }
+            } else if (contCount > 0) {
+                pendingPartial_ = std::move(combined);
+                return;
+            }
         }
+    } else {
+        // Non-UTF-8 codepage (e.g. CP_932=Shift_JIS):
+        // try-convert with MB_ERR_INVALID_CHARS, truncating from the end
+        // until we find a suffix that decodes successfully.
+        while (validLen > 0) {
+            int needed = MultiByteToWideChar(codePage_, MB_ERR_INVALID_CHARS,
+                combined.data(), (int)validLen, nullptr, 0);
+            if (needed > 0) break;
+            // last byte may be an incomplete lead byte — save it
+            --validLen;
+        }
+        if (validLen < combined.size())
+            pendingPartial_ = combined.substr(validLen);
+        if (validLen == 0)
+            return; // nothing decodable yet
     }
 
-    // Decode the valid portion only (UTF-8 → UTF-16)
-    int needed = MultiByteToWideChar(CP_UTF8, 0,
+    // Decode the valid portion
+    int needed = MultiByteToWideChar(codePage_, 0,
         combined.data(), (int)validLen, nullptr, 0);
     if (needed <= 0) return;
     std::wstring ws(needed, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0,
+    MultiByteToWideChar(codePage_, 0,
         combined.data(), (int)validLen, ws.data(), needed);
 
     emulator_.process(ws);
@@ -1511,19 +1530,19 @@ void TerminalView::PasteFromClipboard() {
     if (hData) {
         const wchar_t* text = (const wchar_t*)GlobalLock(hData);
         if (text) {
-            // Convert UTF-16 → UTF-8 and send to PTY
-            int need = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+            // Convert UTF-16 → codePage_ and send to PTY
+            int need = WideCharToMultiByte(codePage_, 0, text, -1, nullptr, 0, nullptr, nullptr);
             if (need > 1) { // need includes null terminator
-                std::string utf8(need - 1, '\0');
-                WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8.data(), need - 1, nullptr, nullptr);
+                std::string encoded(need - 1, '\0');
+                WideCharToMultiByte(codePage_, 0, text, -1, encoded.data(), need - 1, nullptr, nullptr);
                 // Replace bare \n with \r (terminal convention)
                 std::string out;
-                out.reserve(utf8.size());
-                for (size_t i = 0; i < utf8.size(); ++i) {
-                    if (utf8[i] == '\n' && (i == 0 || utf8[i-1] != '\r'))
+                out.reserve(encoded.size());
+                for (size_t i = 0; i < encoded.size(); ++i) {
+                    if (encoded[i] == '\n' && (i == 0 || encoded[i-1] != '\r'))
                         out += '\r';
                     else
-                        out += utf8[i];
+                        out += encoded[i];
                 }
                 scrollOffset_ = 0;
                 if (buffer_.bracketedPasteEnabled()) {
@@ -1645,13 +1664,13 @@ void TerminalView::OnChar(wchar_t ch) {
 
     if (scrollOffset_ > 0) ScrollToBottom();
 
-    // UTF-16 → UTF-8
+    // UTF-16 → codePage_
     wchar_t ws[3] = { ch, 0, 0 };
-    int need = WideCharToMultiByte(CP_UTF8, 0, ws, 1, nullptr, 0, nullptr, nullptr);
+    int need = WideCharToMultiByte(codePage_, 0, ws, 1, nullptr, 0, nullptr, nullptr);
     if (need > 0) {
-        std::string utf8(need, '\0');
-        WideCharToMultiByte(CP_UTF8, 0, ws, 1, utf8.data(), need, nullptr, nullptr);
-        session_.Write(utf8.data(), utf8.size());
+        std::string encoded(need, '\0');
+        WideCharToMultiByte(codePage_, 0, ws, 1, encoded.data(), need, nullptr, nullptr);
+        session_.Write(encoded.data(), encoded.size());
     }
 }
 

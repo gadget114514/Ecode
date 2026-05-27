@@ -62,13 +62,13 @@ bool ConPtySession::Write(const void* data, size_t len) {
 }
 
 bool ConPtySession::Write(const std::wstring& text) {
-    int need = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
+    int need = WideCharToMultiByte(codePage_, 0, text.c_str(), (int)text.size(),
                                    nullptr, 0, nullptr, nullptr);
     if (need <= 0) return false;
-    std::string utf8(need, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
-                        utf8.data(), need, nullptr, nullptr);
-    return Write(utf8.data(), utf8.size());
+    std::string encoded(need, '\0');
+    WideCharToMultiByte(codePage_, 0, text.c_str(), (int)text.size(),
+                        encoded.data(), need, nullptr, nullptr);
+    return Write(encoded.data(), encoded.size());
 }
 
 // ---------------------------------------------------------------------------
