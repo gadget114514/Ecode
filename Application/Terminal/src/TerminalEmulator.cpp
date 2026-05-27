@@ -290,6 +290,7 @@ void TerminalEmulator::handleEscape(wchar_t ch) {
         reset(buffer_);
         break;
     default:
+        markUnsupported();
         break;
     }
 }
@@ -426,7 +427,7 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
                 case 1047:
                 case 1049: enabled = buffer_->alternateScreenActive();       break;
                 case 2004: enabled = buffer_->bracketedPasteEnabled();        break;
-                case 2026: enabled = buffer_->syncOutputEnabled();            break;
+                case 2026: enabled = buffer_->cursorFilled();                break;
                 }
                 wchar_t buf[64];
                 swprintf(buf, 64, L"\x1b[?%d;%d$y", ps, enabled ? 1 : 2);
@@ -517,6 +518,7 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
         break;
 
     default:
+        markUnsupported();
         break;
     }
 }
@@ -526,9 +528,9 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
 // ---------------------------------------------------------------------------
 void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enabled) {
     auto modes = splitParams(params);
-    for (auto& m : modes) {
+    for (size_t i = 0; i < modes.size(); ++i) {
         int value = 0;
-        try { value = std::stoi(m); } catch(...) { continue; }
+        try { value = std::stoi(modes[i]); } catch(...) { continue; }
         switch (value) {
         case 1:    buffer_->setApplicationCursorMode(enabled);       break; // DECCKM (terminalpp)
         case 6:    buffer_->setOriginMode(enabled);                   break;
@@ -552,17 +554,27 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
             else         buffer_->restoreCursor();
             break;
         case 2004: buffer_->setBracketedPasteEnabled(enabled);        break;
-        // Windows Terminal extensions – 2026 implemented, rest no-op
-        case 2026: // synchronised output
-            buffer_->setSyncOutputEnabled(enabled);
+        // Windows Terminal extensions
+        case 2026: {
+            buffer_->setCursorFilled(enabled);
+            if (i + 2 < modes.size()) {
+                int cw = 0, ch = 0;
+                try { cw = std::stoi(modes[i + 1]); } catch(...) {}
+                try { ch = std::stoi(modes[i + 2]); } catch(...) {}
+                buffer_->setCursorScale(cw, ch);
+            }
             break;
+        }
         case 2027:
+            markUnsupported();
             break;
         case 2031:
+            markUnsupported();
             break;
         case 9001:
             break;
     default:
+        markUnsupported();
         break;
     }
 }
@@ -821,6 +833,7 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
             try { idx = std::stoi(arg1.substr(0, sep2)); } catch(...) { idx = -1; }
             if (idx >= 0 && idx < 16) {
                 std::wstring val = arg1.substr(sep2 + 1);
+                if (val == L"?") { markUnsupported(); break; }
                 uint8_t r, g, b;
                 if (parseRgbColor(val, r, g, b))
                     buffer_->setPaletteColor(idx, TermColor::fromRgb(r, g, b));
@@ -830,6 +843,7 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
     }
 
     case 10: { // set default foreground: OSC 10 ; #RRGGBB
+        if (arg1 == L"?") { markUnsupported(); break; }
         uint8_t r, g, b;
         if (parseRgbColor(arg1, r, g, b))
             buffer_->setDefaultFgColor(TermColor::fromRgb(r, g, b));
@@ -837,6 +851,7 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
     }
 
     case 11: { // set default background: OSC 11 ; #RRGGBB
+        if (arg1 == L"?") { markUnsupported(); break; }
         uint8_t r, g, b;
         if (parseRgbColor(arg1, r, g, b))
             buffer_->setDefaultBgColor(TermColor::fromRgb(r, g, b));
@@ -859,6 +874,7 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
         break;
 
     default:
+        markUnsupported();
         break;
     }
 }
@@ -879,8 +895,9 @@ void TerminalEmulator::handleOsc1337(const std::wstring& params) {
         handleOsc1337FilePart(params.substr(9));
     } else if (params.find(L"FileEnd") == 0) {
         handleOsc1337FileEnd();
+    } else {
+        markUnsupported();
     }
-    // Other OSC 1337 sub-commands (SetUserVar, SetBadgeFormat, etc.) are ignored
 }
 
 // Parse key=value;key=value format into a map

@@ -596,6 +596,7 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
         combined.data(), (int)validLen, ws.data(), needed);
 
     emulator_.process(ws);
+    bool hadUnsupported = emulator_.consumeUnsupportedFlag();
 
     // flush if not inside a synchronised update (?2026)
     if (!buffer_.syncOutputEnabled())
@@ -632,7 +633,8 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
                 escaped += (char)c;
             }
         }
-        std::string msg = "[VT] " + escaped;
+        std::string prefix = hadUnsupported ? "[VTX] " : "[VT] ";
+        std::string msg = prefix + escaped;
         COPYDATASTRUCT cds;
         cds.dwData = 0x5654;
         cds.cbData = (DWORD)msg.size() + 1;
@@ -1043,9 +1045,6 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
         fg.isDefault = false;
     }
 
-    // Cursor colour override (OSC 12)
-    bool hasCursorColor = isCursor && cursorVisible && !buffer_.cursorColor().isDefault;
-
     // Cell background at original column position
     if (!bg.isDefault) {
         if (auto* b = GetBrush(bg))
@@ -1058,12 +1057,22 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
 
     const float textX = visualCol * cellWidth_;
 
-    // Block cursor at text position (overwrites whatever background occupies textX)
+    // Block cursor filled fill at text position
     bool drawBlock = isCursor && cursorVisible
+                     && buffer_.cursorFilled()
                      && buffer_.cursorShape() == TerminalBuffer::CursorShape::Block;
     if (drawBlock) {
-        if (auto* b = GetBrush(fg))
-            rt->FillRectangle(D2D1::RectF(textX, y, textX + w, y + h), b);
+        if (auto* b = GetBrush(fg)) {
+            if (buffer_.cursorWidthPct() < 100 || buffer_.cursorHeightPct() < 100) {
+                float cx = textX + (w * (100 - buffer_.cursorWidthPct())) / 200.0f;
+                float cy = y + (h * (100 - buffer_.cursorHeightPct())) / 200.0f;
+                float cw = w * buffer_.cursorWidthPct() / 100.0f;
+                float ch = h * buffer_.cursorHeightPct() / 100.0f;
+                rt->FillRectangle(D2D1::RectF(cx, cy, cx + cw, cy + ch), b);
+            } else {
+                rt->FillRectangle(D2D1::RectF(textX, y, textX + w, y + h), b);
+            }
+        }
     }
 
     // Selection overlay at text position
@@ -1119,10 +1128,13 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
         }
     }
 
-    // Cursor outline at text position
-    if (isCursor && cursorVisible) {
-        TermColor cursorFg = hasCursorColor ? buffer_.cursorColor() : fg;
-        if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Underline) {
+    // Cursor outline (when not blinking-invisible, not filled)
+    if (isCursor && cursorVisible && !buffer_.cursorFilled()) {
+        TermColor cursorFg = buffer_.cursorColor().isDefault ? fg : buffer_.cursorColor();
+        if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Block) {
+            if (auto* b = GetBrush(cursorFg))
+                rt->DrawRectangle(D2D1::RectF(bgX, y, bgX + w, y + h), b, 1.0f);
+        } else if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Underline) {
             if (auto* b = GetBrush(cursorFg))
                 rt->DrawLine({textX, y + h - 2}, {textX + cellWidth_, y + h - 2}, b, 2.0f);
         } else if (buffer_.cursorShape() == TerminalBuffer::CursorShape::Bar) {
