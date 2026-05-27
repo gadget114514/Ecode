@@ -1010,6 +1010,25 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     UpdateMenu(hwnd);
     break;
   }
+  case IDM_FILE_OPEN_FOLDER: {
+    Buffer *buf = g_editor ? g_editor->GetActiveBuffer() : nullptr;
+    if (buf && !buf->GetPath().empty()) {
+      std::wstring filePath = buf->GetPath();
+      std::wstring param = L"/select,\"" + filePath + L"\"";
+      ShellExecuteW(NULL, L"open", L"explorer.exe", param.c_str(), NULL, SW_SHOW);
+    } else {
+      const auto &entries = SettingsManager::Instance().GetFolderEntries();
+      if (!entries.empty()) {
+        ShellExecuteW(NULL, L"open", L"explorer.exe", entries[0].path.c_str(), NULL, SW_SHOW);
+      }
+    }
+    break;
+  }
+  case IDM_FOLDER_CONFIGURE: {
+    ShowFolderEntriesDialog(hwnd);
+    UpdateMenu(hwnd);
+    break;
+  }
   case IDM_DIRED_CONFIGURE: {
     Dialogs::ShowDiredPairsDialog(hwnd);
     UpdateMenu(hwnd);
@@ -1153,6 +1172,12 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
           if (g_activeAppTab < 0) g_activeAppTab = (int)g_appTabs.size() - 1;
           UpdateMenu(hwnd);
         }
+      }
+    } else if (LOWORD(wParam) >= IDM_FOLDERS_START && LOWORD(wParam) < IDM_FOLDERS_START + 100) {
+      size_t idx = LOWORD(wParam) - IDM_FOLDERS_START;
+      const auto &entries = SettingsManager::Instance().GetFolderEntries();
+      if (idx < entries.size()) {
+        ShellExecuteW(NULL, L"open", L"explorer.exe", entries[idx].path.c_str(), NULL, SW_SHOW);
       }
     } else if (LOWORD(wParam) >= IDM_BUFFERS_START &&
                LOWORD(wParam) < IDM_BUFFERS_START + 100) {
