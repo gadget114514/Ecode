@@ -336,13 +336,50 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_LBUTTONDOWN:
+        if (buffer_.mouseTrackingMode() > 0) {
+            POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+            SendMouseClickToPty(0, pt.x, pt.y, false);
+        }
         OnLButtonDown(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         return 0;
-    case WM_MOUSEMOVE:
-        OnMouseMove(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+    case WM_RBUTTONDOWN:
+        if (buffer_.mouseTrackingMode() > 0) {
+            POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+            SendMouseClickToPty(2, pt.x, pt.y, false);
+        }
         return 0;
+    case WM_MBUTTONDOWN:
+        if (buffer_.mouseTrackingMode() > 0) {
+            POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+            SendMouseClickToPty(1, pt.x, pt.y, false);
+        }
+        return 0;
+    case WM_MOUSEMOVE: {
+        POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+        if (buffer_.mouseTrackingMode() == 1003 ||
+            (buffer_.mouseTrackingMode() == 1002 && (wp & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON))))
+            SendMouseClickToPty(32, pt.x, pt.y, false);
+        OnMouseMove(pt.x, pt.y);
+        return 0;
+    }
     case WM_LBUTTONUP:
+        if (buffer_.mouseTrackingMode() > 0) {
+            POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+            SendMouseClickToPty(0, pt.x, pt.y, true);
+        }
         OnLButtonUp();
+        return 0;
+    case WM_RBUTTONUP:
+        if (buffer_.mouseTrackingMode() > 0) {
+            POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+            SendMouseClickToPty(2, pt.x, pt.y, true);
+        }
+        return 0;
+    case WM_MBUTTONUP:
+        if (buffer_.mouseTrackingMode() > 0) {
+            POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+            SendMouseClickToPty(1, pt.x, pt.y, true);
+        }
         return 0;
     case WM_SETFOCUS:
         // Notify PTY of focus (if focus events enabled)
@@ -359,6 +396,8 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         cursorBlink_ = true;
         return 0;
     case WM_CONTEXTMENU:
+        if (buffer_.mouseTrackingMode() > 0)
+            return 0; // right-click is forwarded to PTY
         OnContextMenu(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         return 0;
     case WM_COMMAND:
@@ -1405,6 +1444,28 @@ void TerminalView::SendMouseWheelToPty(int direction, int px, int py) {
             seq[3] = (char)(button + 32);
             seq[4] = (char)(col    + 32);
             seq[5] = (char)(row    + 32);
+            session_.Write(seq, 6);
+        }
+    }
+}
+
+void TerminalView::SendMouseClickToPty(int button, int px, int py, bool release) {
+    int col = std::max(1, std::min((int)(px / cellWidth_)  + 1, buffer_.columns()));
+    int row = std::max(1, std::min((int)(py / cellHeight_) + 1, buffer_.rows()));
+
+    char seq[32];
+    if (buffer_.sgrMouseEnabled()) {
+        // SGR: press → ESC [ < btn ; col ; row M, release → ESC [ < btn ; col ; row m
+        snprintf(seq, sizeof(seq), "\x1b[<%d;%d;%d%c", button, col, row, release ? 'm' : 'M');
+        session_.Write(seq, strlen(seq));
+    } else {
+        // X10: press = btn+32, release = btn+32+64
+        if (col + 32 <= 255 && row + 32 <= 255) {
+            int b = button + 32 + (release ? 64 : 0);
+            seq[0] = '\x1b'; seq[1] = '['; seq[2] = 'M';
+            seq[3] = (char)b;
+            seq[4] = (char)(col + 32);
+            seq[5] = (char)(row + 32);
             session_.Write(seq, 6);
         }
     }
