@@ -118,6 +118,10 @@ void Buffer::Delete(size_t pos, size_t length) {
   m_isDirty = true;
 }
 
+void Buffer::CompactAddedBuffer() {
+  m_pieceTable.CompactAddedBuffer();
+}
+
 std::string Buffer::GetText(size_t pos, size_t length) const {
   return m_pieceTable.GetText(pos, length);
 }
