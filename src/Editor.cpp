@@ -429,6 +429,8 @@ static const size_t kMaxMessageBufferSize = 1024 * 1024; // 1MB limit
 static const size_t kMessageTrimSize = 64 * 1024;        // trim 64KB when exceeded
 
 void Editor::LogMessage(const std::string &msg) {
+  std::lock_guard<std::mutex> lock(m_logMutex);
+
   if (!m_messagesBuffer) {
     m_messagesBuffer = GetBufferByName(L"*Messages*");
     if (!m_messagesBuffer) {
@@ -444,6 +446,7 @@ void Editor::LogMessage(const std::string &msg) {
     // Trim buffer if it exceeds size limit (ring-buffer behavior)
     if (m_messagesBuffer->GetTotalLength() > kMaxMessageBufferSize) {
       m_messagesBuffer->Delete(0, kMessageTrimSize);
+      m_messagesBuffer->CompactAddedBuffer();
     }
     m_messagesBuffer->Insert(m_messagesBuffer->GetTotalLength(), msg + "\n");
   }
