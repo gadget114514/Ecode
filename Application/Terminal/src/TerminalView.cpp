@@ -691,9 +691,9 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
     }
     if (vtDebug) {
         std::string escaped;
-        escaped.reserve(len + 32);
-        for (size_t i = 0; i < len; ++i) {
-            unsigned char c = (unsigned char)data[i];
+        escaped.reserve(combined.size() + 32);
+        for (size_t i = 0; i < validLen; ++i) {
+            unsigned char c = (unsigned char)combined[i];
             if (c == 0x1b) {
                 escaped += "ESC";
             } else if (c == 0x0d) {
@@ -1715,6 +1715,7 @@ void TerminalView::OnChar(wchar_t ch) {
     if (ch < 0x20 || ch == 0x7f) return;
     // IME 確定文字は WM_IME_COMPOSITION (GCS_RESULTSTR) で処理済み——二重送信を防ぐ
     if (imeActive_) return;
+
 
     // Clear selection on character input
     if (selAnchorRow_ >= 0) {
