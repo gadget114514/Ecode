@@ -22,6 +22,22 @@ set(SOURCES
 
 add_executable(Terminal WIN32 ${SOURCES})
 
+add_executable(test_cursor_save
+    tests/test_cursor_save.cpp
+    src/TerminalBuffer.cpp
+    src/TerminalEmulator.cpp
+)
+target_include_directories(test_cursor_save PRIVATE include)
+target_link_libraries(test_cursor_save
+    user32
+    gdi32
+    shell32
+    ole32
+    d2d1
+    dwrite
+)
+set_target_properties(test_cursor_save PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}/$<CONFIG>/tests")
+
 target_link_libraries(Terminal
     user32
     gdi32

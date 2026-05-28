@@ -116,6 +116,7 @@ private:
   float val_LeftPadding = 0.0f;
   HWND m_hwnd;
   D2D1_RECT_F m_lastCaretRect = {0, 0, 0, 0};
+  size_t m_lastCaretPos = (size_t)-1;
   // OPTIMIZATION #6: UTF-8 to UTF-16 conversion caching
   mutable std::string m_lastUtf8Content;
   mutable std::vector<wchar_t> m_cachedWtext;

@@ -52,9 +52,10 @@ TerminalView::TerminalView()
 {
     emulator_.reset(&buffer_);
 
-    // Response callback: PTY → emulator response → PTY
+    // Response callback: PTY → emulator response → PTY (front-of-queue priority
+    // so DSR/CPR/DA responses reach the shell before any pending keystrokes).
     emulator_.setResponseCallback([this](const std::wstring& resp) {
-        session_.Write(resp);
+        session_.WriteFront(resp);
     });
     // Title callback
     emulator_.setTitleCallback([this](const std::wstring& title) {
