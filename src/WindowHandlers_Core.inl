@@ -427,6 +427,7 @@ static LRESULT HandleClose(HWND hwnd) {
   UnregisterHotKey(hwnd, HOTKEY_ID_TABSWITCHER);
   HideTabSwitcher();
 
+<<<<<<< HEAD
   // Request graceful shutdown from all terminal windows
   for (auto &t : g_appTabs)
     if (t.hwnd && t.hProcess && t.type == TAB_TYPE_TERMINAL)
