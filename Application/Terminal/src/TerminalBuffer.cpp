@@ -75,13 +75,19 @@ void TerminalBuffer::resize(int columns, int rows) {
     while ((int)screen_.size() < rows_)
         screen_.insert(screen_.begin(), blankLine());
     if (insertCount > 0) {
-        cursorRow_ += insertCount;
+        cursorRow_         += insertCount;
+        savedCursorRow_    += insertCount;
+        savedCursorRowAlt_ += insertCount;
     } else {
         const int discardCount = (std::max)(0, (int)oldScreen.size() - rows_);
-        cursorRow_ -= discardCount;
+        cursorRow_         -= discardCount;
+        savedCursorRow_    -= discardCount;
+        savedCursorRowAlt_ -= discardCount;
     }
 
     clampCursor();
+    savedCursorRow_    = clamp(savedCursorRow_,    0, rows_ - 1);
+    savedCursorRowAlt_ = clamp(savedCursorRowAlt_, 0, rows_ - 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,23 +292,26 @@ void TerminalBuffer::saveCursor() {
         savedCursorRowAlt_     = cursorRow_;
         savedCursorColumnAlt_  = cursorColumn_;
         savedCursorVisibleAlt_ = cursorVisible_;
+        savedPendingWrapAlt_   = pendingWrap_;
     } else {
         savedCursorRow_        = cursorRow_;
         savedCursorColumn_     = cursorColumn_;
         savedCursorVisible_    = cursorVisible_;
+        savedPendingWrap_      = pendingWrap_;
     }
 }
 
 void TerminalBuffer::restoreCursor() {
-    pendingWrap_  = false;
     if (alternateScreenActive_) {
         cursorRow_     = savedCursorRowAlt_;
         cursorColumn_  = savedCursorColumnAlt_;
         cursorVisible_ = savedCursorVisibleAlt_;
+        pendingWrap_   = savedPendingWrapAlt_;
     } else {
         cursorRow_     = savedCursorRow_;
         cursorColumn_  = savedCursorColumn_;
         cursorVisible_ = savedCursorVisible_;
+        pendingWrap_   = savedPendingWrap_;
     }
     clampCursor();
 }
