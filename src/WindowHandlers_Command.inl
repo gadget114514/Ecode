@@ -676,7 +676,9 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   case IDM_FILE_OPEN: {
     std::wstring path = Dialogs::OpenFileDialog(hwnd);
     if (!path.empty()) {
+      size_t prevBuf = g_editor->GetActiveBufferIndex();
       g_editor->OpenFile(path);
+      g_editor->SwitchToBuffer(prevBuf);
       SettingsManager::Instance().AddRecentFile(path);
       UpdateMenu(hwnd);
     }
