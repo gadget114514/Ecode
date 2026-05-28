@@ -76,6 +76,7 @@ public:
     // --- scroll region / modes ---
     void setScrollRegion(int top, int bottom);
     void resetScrollRegion();
+    void softReset();
     void setOriginMode(bool enabled);
     bool originMode() const;
     void setAutoWrapEnabled(bool enabled);
@@ -120,6 +121,10 @@ public:
     void setSgrMouseEnabled(bool v);     // ?1006 — SGR mouse encoding
     bool sgrMouseEnabled()               const;
 
+    // reverse video (?5) — DECSCNM
+    void setReverseVideo(bool v);
+    bool reverseVideo() const;
+
     // application cursor mode (?1) — terminalpp
     void setApplicationCursorMode(bool v);
     bool applicationCursorMode()         const;
@@ -161,12 +166,19 @@ public:
     void savePrivateMode(int mode);
     void restorePrivateMode(int mode);
 
+    // --- tab stops ---
+    void setTabStop();
+    void clearTabStop();
+    void clearAllTabStops();
+    void resetTabStops();
+
     // --- OSC 4/10/11/12 colour overrides ---
     void setDefaultFgColor(const TermColor& c);
     TermColor defaultFgColor() const;
     void setDefaultBgColor(const TermColor& c);
     TermColor defaultBgColor() const;
     void setCursorColor(const TermColor& c);
+    void resetCursorColor();
     TermColor cursorColor() const;
     void setPaletteColor(int index, const TermColor& c);
     TermColor paletteColor(int index) const;
@@ -199,6 +211,9 @@ private:
     int scrollBottom_ = 29;
     int maxHistoryLines_ = 10000;
 
+    // tab stops (default every 8 columns)
+    std::vector<bool> tabStops_;
+
     // feature flags
     bool bracketedPasteEnabled_      = false;
     bool syncOutputEnabled_          = false;
@@ -225,6 +240,9 @@ private:
     int  attrChangeExtent_ = 2;  // DECSACE: 1=stream, 2=rect, 3=line
     bool pendingWrap_    = false;
     bool alternateScreenActive_ = false;
+
+    // reverse video
+    bool reverseVideo_ = false;
 
     // saved private modes (?Ps s / ?Ps r)
     bool savedPrivateMode1_    = false;

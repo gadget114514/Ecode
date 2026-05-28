@@ -227,7 +227,7 @@ void TerminalEmulator::process(const std::wstring& text) {
         case L'\f': buffer_->lineFeed();       continue;
         case L'\b': buffer_->backspace();       continue;
         case L'\t': buffer_->tab();             continue;
-        case L'\a': /* bell – ignore */         continue;
+        case L'\a': MessageBeep(-1);            continue;
         case L'\x0f': lineDrawingG0_ = false;   continue; // SI
         case L'\x0e': lineDrawingG0_ = true;    continue; // SO
         default:    break;
@@ -282,6 +282,8 @@ void TerminalEmulator::handleEscape(wchar_t ch) {
         buffer_->lineFeed();                     break;
     case L'E':
         buffer_->carriageReturn(); buffer_->lineFeed(); break;
+    case L'H':
+        buffer_->setTabStop();                   break;
     case L'M':
         buffer_->reverseIndex();                 break;
     case L'c': // RIS – full reset
@@ -302,7 +304,7 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
     // strip leading parameter bytes that aren't digits/semicolons
     std::wstring params;
     for (wchar_t c : raw)
-        if ((c >= L'0' && c <= L'9') || c == L';' || c == L':' || c == L'?' || c == L'>' || c == L'<' || c == L'!' || c == L'$')
+        if ((c >= L'0' && c <= L'9') || c == L';' || c == L':' || c == L'?' || c == L'>' || c == L'<' || c == L'!' || c == L'$' || c == L'"' || c == L' ')
             params += c;
 
     // --- private / extended first-byte prefixes ---
@@ -414,6 +416,8 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
                 bool enabled = false;
                 switch (ps) {
                 case 1:    enabled = buffer_->applicationCursorMode();       break;
+                case 3:    enabled = buffer_->columns() >= 132;               break;
+                case 5:    enabled = buffer_->reverseVideo();                  break;
                 case 6:    enabled = buffer_->originMode();                   break;
                 case 7:    enabled = buffer_->autoWrapEnabled();              break;
                 case 12:   enabled = buffer_->cursorBlink();                  break;
@@ -509,12 +513,38 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
     // --- window operations ---
     case L't': sendWindowReport(P(0,0)); break;
 
-    // --- cursor style (DECSCUSR: CSI Ps SP q) ---
+    // --- DECSTR (Soft Terminal Reset): CSI ! p ---
+    case L'p':
+        if (raw.find(L'!') != std::wstring::npos) {
+            buffer_->softReset();
+            // Reset emulator-side state
+            currentAttrs_     = TerminalCell();
+            isBold_           = false;
+            isInverseMode_    = false;
+            lineDrawingG0_    = false;
+            activeHyperlinkUrl_.clear();
+        }
+        break;
+
+    // --- TBC (Tab Clear): CSI Ps g ---
+    case L'g': {
+        int mode = P(0, 0);
+        if (mode == 0)      buffer_->clearTabStop();
+        else if (mode == 1 || mode == 2) buffer_->clearAllTabStops();
+        else if (mode == 3) buffer_->resetTabStops();
+        break;
+    }
+
+    // --- cursor style / DECSCA ---
     case L'q':
-        // Intermediate byte SP (0x20) is stripped from `params` during filtering,
-        // so check the original `raw` string for the space instead.
-        if (raw.find(L' ') != std::wstring::npos)
+        if (raw.find(L' ') != std::wstring::npos) {
+            // DECSCUSR: CSI Ps SP q
             handleCursorStyle(P(0,0));
+        } else if (raw.find(L'"') != std::wstring::npos) {
+            // DECSCA: CSI Ps " q — Select Character Attribute (stub for now)
+            // Ps=1: protected, Ps=2: erasable
+            // Protection is not tracked; treat as no-op.
+        }
         break;
 
     default:
@@ -533,6 +563,16 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
         try { value = std::stoi(modes[i]); } catch(...) { continue; }
         switch (value) {
         case 1:    buffer_->setApplicationCursorMode(enabled);       break; // DECCKM (terminalpp)
+        case 3:    // DECCOLM (80/132 column) — also clears screen, homes cursor, resets tab stops
+            {
+                int newCols = enabled ? 132 : 80;
+                buffer_->resize(newCols, buffer_->rows());
+                buffer_->clearScreen();
+                buffer_->moveCursorTo(0, 0);
+                buffer_->resetTabStops();
+            }
+            break;
+        case 5:    buffer_->setReverseVideo(enabled);                 break; // DECSCNM
         case 6:    buffer_->setOriginMode(enabled);                   break;
         case 7:    buffer_->setAutoWrapEnabled(enabled);              break;
         case 12:   buffer_->setCursorBlink(enabled);                  break;
@@ -866,7 +906,7 @@ void TerminalEmulator::handleOsc(const std::wstring& text) {
     }
 
     case 112: // reset cursor colour
-        buffer_->setCursorBlink(true);
+        buffer_->resetCursorColor();
         break;
 
     case 1337: // iTerm2 proprietary escape codes

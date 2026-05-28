@@ -12,6 +12,7 @@ static int clamp(int v, int lo, int hi) { return std::max(lo, std::min(v, hi)); 
 // ---------------------------------------------------------------------------
 TerminalBuffer::TerminalBuffer(int columns, int rows) {
     resize(columns, rows);
+    resetTabStops();
     // Default ANSI palette
     static const TermColor kPalette[16] = {
         TermColor::fromRgb( 12,  12,  12), TermColor::fromRgb(197,  15,  31),
@@ -82,6 +83,13 @@ void TerminalBuffer::resize(int columns, int rows) {
     }
 
     clampCursor();
+
+    // Resize tab stops if columns changed
+    if (columns_ != (int)tabStops_.size()) {
+        tabStops_.resize(columns_, false);
+        for (int col = 8; col < columns_; col += 8)
+            tabStops_[col] = true;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -231,8 +239,34 @@ void TerminalBuffer::backspace() {
 
 void TerminalBuffer::tab() {
     pendingWrap_ = false;
-    const int nextStop = ((cursorColumn_ / 8) + 1) * 8;
-    cursorColumn_ = std::min(columns_ - 1, nextStop);
+    for (int col = cursorColumn_ + 1; col < columns_; ++col) {
+        if ((size_t)col < tabStops_.size() && tabStops_[col]) {
+            cursorColumn_ = col;
+            return;
+        }
+    }
+    cursorColumn_ = columns_ - 1;
+}
+
+void TerminalBuffer::setTabStop() {
+    if ((size_t)cursorColumn_ < tabStops_.size())
+        tabStops_[cursorColumn_] = true;
+}
+
+void TerminalBuffer::clearTabStop() {
+    if ((size_t)cursorColumn_ < tabStops_.size())
+        tabStops_[cursorColumn_] = false;
+}
+
+void TerminalBuffer::clearAllTabStops() {
+    for (size_t i = 0; i < tabStops_.size(); ++i)
+        tabStops_[i] = false;
+}
+
+void TerminalBuffer::resetTabStops() {
+    tabStops_.assign(columns_, false);
+    for (int col = 8; col < columns_; col += 8)
+        tabStops_[col] = true;
 }
 
 void TerminalBuffer::moveCursorRelative(int rowDelta, int columnDelta) {
@@ -411,6 +445,36 @@ void TerminalBuffer::resetScrollRegion() {
     scrollBottom_ = rows_ - 1;
 }
 
+void TerminalBuffer::softReset() {
+    // DECSTR: Soft Terminal Reset — resets modes but not screen
+    pendingWrap_ = false;
+    // scroll region
+    scrollTop_    = 0;
+    scrollBottom_ = rows_ - 1;
+    // modes
+    originMode_     = false;
+    autoWrapEnabled_ = true;
+    cursorVisible_  = true;
+    cursorBlink_    = true;
+    cursorShape_    = CursorShape::Block;
+    cursorFilled_   = true;
+    cursorWidthPct_  = 100;
+    cursorHeightPct_ = 100;
+    reverseVideo_   = false;
+    mouseTrackingMode_ = 0;
+    sgrMouseEnabled_ = false;
+    focusEventReportingEnabled_ = false;
+    applicationCursorMode_ = false;
+    bracketedPasteEnabled_ = false;
+    // cursor home
+    cursorRow_    = 0;
+    cursorColumn_ = 0;
+    savedCursorRow_    = 0;
+    savedCursorColumn_ = 0;
+    // tab stops
+    resetTabStops();
+}
+
 void TerminalBuffer::setOriginMode(bool enabled) {
     pendingWrap_ = false;
     originMode_  = enabled;
@@ -491,7 +555,10 @@ TermColor TerminalBuffer::defaultFgColor()             const { return defaultFg_
 void TerminalBuffer::setDefaultBgColor(const TermColor& c)  { defaultBg_ = c; }
 TermColor TerminalBuffer::defaultBgColor()             const { return defaultBg_; }
 void TerminalBuffer::setCursorColor(const TermColor& c)     { cursorColor_ = c; }
+void TerminalBuffer::resetCursorColor()                     { cursorColor_ = TermColor(); }
 TermColor TerminalBuffer::cursorColor()                const { return cursorColor_; }
+void TerminalBuffer::setReverseVideo(bool v)                 { reverseVideo_ = v; }
+bool TerminalBuffer::reverseVideo()                    const { return reverseVideo_; }
 void TerminalBuffer::setPaletteColor(int i, const TermColor& c) { if (i >= 0 && i < 16) palette_[i] = c; }
 TermColor TerminalBuffer::paletteColor(int i)          const { return (i >= 0 && i < 16) ? palette_[i] : TermColor(); }
 
