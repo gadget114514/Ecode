@@ -399,9 +399,22 @@ static void HandleDestroy(HWND hwnd) {
   UnregisterHotKey(hwnd, HOTKEY_ID_TABSWITCHER);
   HideTabSwitcher();
 
-  // Cleanup all app views
+  // Cleanup all app views — destroy embedded windows first to request graceful exit
   for (auto &t : g_appTabs) {
     if (t.hwnd) DestroyWindow(t.hwnd);
+  }
+  // Terminate embedded processes and wait; close app process handles without waiting
+  for (auto &t : g_appTabs) {
+    if (t.hProcess) {
+      if (t.hwnd) {
+        DWORD waitResult = WaitForSingleObject(t.hProcess, 3000);
+        if (waitResult == WAIT_TIMEOUT) {
+          TerminateProcess(t.hProcess, 0);
+          WaitForSingleObject(t.hProcess, INFINITE);
+        }
+      }
+      CloseHandle(t.hProcess);
+    }
   }
   g_appTabs.clear();
 
