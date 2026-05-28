@@ -11,7 +11,7 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
-#include <queue>
+#include <deque>
 #include <string>
 #include <utility>
 #include <vector>
@@ -62,6 +62,11 @@ public:
     bool Write(const void* data, size_t len);
     bool Write(const std::string& text) { return Write(text.data(), text.size()); }
     bool Write(const std::wstring& text); // UTF-16 → codePage_ then Write(void*)
+
+    // Write with front-of-queue priority (for terminal emulator responses like DSR/CPR
+    // that must arrive at the shell before any queued user keystrokes).
+    bool WriteFront(const void* data, size_t len);
+    bool WriteFront(const std::wstring& text); // UTF-16 → codePage_ then WriteFront
 
     // Resize the pseudo-console.
     void Resize(int cols, int rows);
@@ -132,7 +137,7 @@ private:
     std::vector<char> writeBuf_;    // current write buffer (valid while write is pending)
 
     std::mutex writeMutex_;
-    std::queue<std::vector<char>> writeQueue_;
+    std::deque<std::vector<char>> writeQueue_;
 
     std::atomic<bool> running_{false};
     std::atomic<bool> closing_{false};

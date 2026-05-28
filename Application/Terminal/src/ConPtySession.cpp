@@ -50,10 +50,37 @@ bool ConPtySession::Write(const void* data, size_t len) {
                            static_cast<const char*>(data) + len);
     {
         std::lock_guard<std::mutex> lock(writeMutex_);
-        writeQueue_.push(std::move(copy));
+        writeQueue_.push_back(std::move(copy));
     }
     SetEvent(ioWakeEvent_);
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// WriteFront — insert at front of write queue so emulator responses (DSR, DA,
+// window reports) reach the shell before any pending user keystrokes.
+// ---------------------------------------------------------------------------
+bool ConPtySession::WriteFront(const void* data, size_t len) {
+    if (!running_ || inputWriteSide_ == INVALID_HANDLE_VALUE || len == 0)
+        return false;
+    std::vector<char> copy(static_cast<const char*>(data),
+                           static_cast<const char*>(data) + len);
+    {
+        std::lock_guard<std::mutex> lock(writeMutex_);
+        writeQueue_.push_front(std::move(copy));
+    }
+    SetEvent(ioWakeEvent_);
+    return true;
+}
+
+bool ConPtySession::WriteFront(const std::wstring& text) {
+    int need = WideCharToMultiByte(codePage_, 0, text.c_str(), (int)text.size(),
+                                   nullptr, 0, nullptr, nullptr);
+    if (need <= 0) return false;
+    std::string encoded(need, '\0');
+    WideCharToMultiByte(codePage_, 0, text.c_str(), (int)text.size(),
+                        encoded.data(), need, nullptr, nullptr);
+    return WriteFront(encoded.data(), encoded.size());
 }
 
 bool ConPtySession::Write(const std::wstring& text) {
@@ -94,7 +121,7 @@ void ConPtySession::Close() {
         std::vector<char> cmd(exitCmd, exitCmd + sizeof(exitCmd) - 1);
         {
             std::lock_guard<std::mutex> lock(writeMutex_);
-            writeQueue_.push(std::move(cmd));
+            writeQueue_.push_back(std::move(cmd));
         }
         SetEvent(ioWakeEvent_);
         Sleep(50);
@@ -385,7 +412,7 @@ void ConPtySession::IoLoop() {
                 std::lock_guard<std::mutex> lock(writeMutex_);
                 if (!writeQueue_.empty()) {
                     data = std::move(writeQueue_.front());
-                    writeQueue_.pop();
+                    writeQueue_.pop_front();
                 }
             }
             if (!data.empty()) {
