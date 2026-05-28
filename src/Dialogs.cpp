@@ -281,7 +281,9 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
 INT_PTR CALLBACK AiSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                    LPARAM lParam);
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
-               const std::wstring& label, int type, int iImage = -1);
+               const std::wstring& label, int type, int iImage = -1,
+               const std::wstring& command = L"",
+               const std::wstring& directory = L"");
 std::wstring GetPluginPath(const std::wstring &name);
 
 INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
@@ -1333,7 +1335,8 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       if (label.empty()) label = L"CLI";
       std::wstring termExe = GetPluginPath(L"Terminal.exe");
       if (g_editor) g_editor->LogMessage("[Launch] CLI Dialog: " + WStringToString(shellArgs));
-      LaunchApp(parent, termExe, shellArgs, label, 10);
+      LaunchApp(parent, termExe, shellArgs, label, 10, -1,
+                std::wstring(cmd), std::wstring(folder));
       EndDialog(hDlg, IDOK);
       return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDCANCEL) {

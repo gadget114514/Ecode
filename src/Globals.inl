@@ -169,6 +169,9 @@ void HandleDestroy(HWND hwnd);
 #define IDM_TAB_COPY_PATH 702
 #define IDM_TAB_CLOSE_TERMINAL 703
 #define IDM_CLI_CONFIGURE 704
+#define IDM_TAB_RELOAD 711
+#define IDM_TAB_SAVE 712
+#define IDM_TAB_SAVE_AS 713
 #define IDM_APPS_CONFIGURE 708
 #define IDM_RECENT_START 2000
 #define IDM_CLI_START 3000
@@ -279,11 +282,13 @@ extern const wchar_t* g_tabIconNames[TAB_ICON_COUNT];
 struct AppTabInfo {
     HWND hwnd = nullptr;
     std::wstring label;
-    int type; // 0 = file search, 1 = grep results, 5 = dired
+    int type; // 0 = file search, 1 = grep results, 5 = dired, 10 = terminal
     int iImage = -1;
 
     void *data = nullptr; // type-specific data (e.g. ListView HWND or result list)
     HANDLE hProcess = nullptr; // process handle for killing
+    std::wstring command;   // CLI command (for terminal tabs)
+    std::wstring directory; // working directory (for terminal tabs)
 };
 extern std::vector<AppTabInfo> g_appTabs;
 extern int g_activeAppTab; // -1 = no app tab active, 0+ = index in g_appTabs

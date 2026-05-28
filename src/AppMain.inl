@@ -393,6 +393,23 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           }
           wcsncpy_s(pdi->szText, path.c_str(), _countof(pdi->szText));
           pdi->szText[_countof(pdi->szText) - 1] = L'\0';
+        } else if (tabIndex >= (int)buffers.size() &&
+                   tabIndex < (int)(buffers.size() + g_appTabs.size())) {
+          int appIdx = tabIndex - (int)buffers.size();
+          auto &tab = g_appTabs[appIdx];
+          if (tab.type == TAB_TYPE_TERMINAL) {
+            std::wstring tip;
+            if (!tab.command.empty())
+              tip = L"Command: " + tab.command;
+            if (!tab.directory.empty()) {
+              if (!tip.empty()) tip += L"\n";
+              tip += L"Directory: " + tab.directory;
+            }
+            if (!tip.empty()) {
+              wcsncpy_s(pdi->szText, tip.c_str(), _countof(pdi->szText));
+              pdi->szText[_countof(pdi->szText) - 1] = L'\0';
+            }
+          }
         }
       }
     } else if (pnm->hwndFrom == g_tabHwnd && pnm->code == NM_RCLICK) {
@@ -412,8 +429,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL + 1, L"Kill Process");
         } else if (tabIndex >= 0 && tabIndex < static_cast<int>(bufCount)) {
           AppendMenu(hMenu, MF_STRING, IDM_TAB_COPY_PATH, L"Copy Full Path");
+          AppendMenu(hMenu, MF_STRING, IDM_TAB_RELOAD, L"Reload");
           if (g_editor->GetBuffers()[tabIndex]->IsDirty())
-            AppendMenu(hMenu, MF_STRING, IDM_FILE_SAVE, L"Save");
+            AppendMenu(hMenu, MF_STRING, IDM_TAB_SAVE, L"Save");
+          AppendMenu(hMenu, MF_STRING, IDM_TAB_SAVE_AS, L"Save As...");
         }
         int res = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_NONOTIFY | TPM_RETURNCMD, ptScreen.x, ptScreen.y, 0, hwnd, NULL);
         DestroyMenu(hMenu);
@@ -436,6 +455,32 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
               }
               CloseClipboard();
             }
+          }
+        } else if (res == IDM_TAB_RELOAD) {
+          auto &buffers = g_editor->GetBuffers();
+          if (tabIndex >= 0 && tabIndex < (int)buffers.size()) {
+            std::wstring path = buffers[tabIndex]->GetPath();
+            if (!path.empty() && !buffers[tabIndex]->IsScratch() && !buffers[tabIndex]->IsShell()) {
+              buffers[tabIndex]->OpenFile(path);
+              g_editor->SwitchToBuffer(tabIndex);
+              UpdateMenu(hwnd);
+              InvalidateRect(hwnd, NULL, FALSE);
+            }
+          }
+        } else if (res == IDM_TAB_SAVE || res == IDM_TAB_SAVE_AS) {
+          auto &buffers = g_editor->GetBuffers();
+          if (tabIndex >= 0 && tabIndex < (int)buffers.size()) {
+            int prevActive = g_activeAppTab;
+            if (prevActive >= 0) {
+              for (auto &t : g_appTabs)
+                if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+              g_activeAppTab = -1;
+            }
+            g_editor->SwitchToBuffer(tabIndex);
+            if (res == IDM_TAB_SAVE)
+              PostMessageW(hwnd, WM_COMMAND, IDM_FILE_SAVE, 0);
+            else
+              PostMessageW(hwnd, WM_COMMAND, IDM_FILE_SAVE_AS, 0);
           }
         } else if (res == IDM_TAB_CLOSE_TERMINAL + 1) {
           // Kill Process on app tab
