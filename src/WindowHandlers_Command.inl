@@ -485,7 +485,9 @@ void ScanPlugins() {
 }
 
 void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
-                      const std::wstring& label, int type, int iImage = -1) {
+                      const std::wstring& label, int type, int iImage = -1,
+                      const std::wstring& command = L"",
+                      const std::wstring& directory = L"") {
   if (GetFileAttributesW(exePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
     std::wstring msg = L"Plugin not found:\n" + exePath;
     MessageBoxW(hwnd, msg.c_str(), L"Plugin Not Found", MB_OK | MB_ICONWARNING);
@@ -495,6 +497,8 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   AppTabInfo tab;
   tab.label = label;
   tab.type  = type;
+  tab.command = command;
+  tab.directory = directory;
   if (iImage == -2)
     tab.iImage = -1;
   else
@@ -960,17 +964,26 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       termExe = exeDir + L"\\Terminal.exe";
     if (LOWORD(wParam) == IDM_TOOLS_TERMINAL) {
       if (g_editor) g_editor->LogMessage("[Launch] Terminal: powershell.exe");
-      LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL);
+      wchar_t cwd[MAX_PATH];
+      GetCurrentDirectoryW(MAX_PATH, cwd);
+      LaunchApp(hwnd, termExe, L"powershell.exe", L"powershell", TAB_TYPE_TERMINAL, -1,
+                L"powershell.exe", cwd);
     } else if (LOWORD(wParam) == IDM_TOOLS_TERMINAL_CMD) {
       if (g_editor) g_editor->LogMessage("[Launch] Terminal: cmd.exe");
-      LaunchApp(hwnd, termExe, L"cmd.exe", L"cmd", TAB_TYPE_TERMINAL);
+      wchar_t cwd[MAX_PATH];
+      GetCurrentDirectoryW(MAX_PATH, cwd);
+      LaunchApp(hwnd, termExe, L"cmd.exe", L"cmd", TAB_TYPE_TERMINAL, -1,
+                L"cmd.exe", cwd);
     } else {
       std::wstring bashDir;
       std::wstring cmd = SettingsManager::Instance().GetBashCommand(&bashDir);
       if (!cmd.empty()) {
         if (!bashDir.empty()) SetCurrentDirectoryW(bashDir.c_str());
         if (g_editor) g_editor->LogMessage("[Launch] Terminal: " + WStringToString(cmd));
-        LaunchApp(hwnd, termExe, cmd, L"bash", TAB_TYPE_TERMINAL);
+        wchar_t cwd[MAX_PATH];
+        GetCurrentDirectoryW(MAX_PATH, cwd);
+        LaunchApp(hwnd, termExe, cmd, L"bash", TAB_TYPE_TERMINAL, -1,
+                  cmd, cwd);
       }
     }
     break;
@@ -1169,7 +1182,8 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
         std::wstring cpArg = (enc == 1) ? L"--codepage 932 " : L"--codepage 65001 ";
         std::wstring launchArgs = cpArg + shellArgs;
         if (g_editor) g_editor->LogMessage("[Launch] CLI Terminal: " + WStringToString(launchArgs));
-        LaunchApp(hwnd, termExe, launchArgs, label, TAB_TYPE_TERMINAL, entries[idx].iconIndex);
+        LaunchApp(hwnd, termExe, launchArgs, label, TAB_TYPE_TERMINAL, entries[idx].iconIndex,
+                  entries[idx].command, entries[idx].folder);
       }
     } else if (LOWORD(wParam) >= IDM_APPS_START && LOWORD(wParam) < IDM_APPS_START + 100) {
       size_t idx = LOWORD(wParam) - IDM_APPS_START;
