@@ -265,6 +265,13 @@ size_t EditorBufferRenderer::CalculateVisibleLineCount() const {
 }
 
 POINT EditorBufferRenderer::GetCaretScreenPoint() const {
+  Buffer *buf = g_editor ? g_editor->GetActiveBuffer() : nullptr;
+  if (buf && buf->GetCaretPos() != m_lastCaretPos) {
+    // Caret moved but a paint message hasn't been processed yet.
+    // Force a synchronous repaint to update the caret rect and screen.
+    InvalidateRect(m_hwnd, NULL, FALSE);
+    UpdateWindow(m_hwnd);
+  }
   POINT pt = {(long)m_lastCaretRect.left, (long)m_lastCaretRect.bottom};
   ClientToScreen(m_hwnd, &pt);
   return pt;

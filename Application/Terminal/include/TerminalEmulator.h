@@ -109,6 +109,8 @@ private:
     void handleSgr(const std::vector<std::wstring>& parts);
     TermColor parseSgrExtendedColor(const std::vector<std::wstring>& parts, size_t& i);
     void handleCursorStyle(int value);
+    void saveCursorFull();       // DECSC (ESC 7) — saves attributes too
+    void restoreCursorFull();    // DECRC (ESC 8) — restores attributes too
     void sendDeviceStatusReport(int value);
     void sendWindowReport(int value);
     void handleKeyModifierOptions(const std::wstring& params);
@@ -153,6 +155,13 @@ private:
 
     // line drawing charset G0
     bool lineDrawingG0_ = false;
+
+    // DECSC/DECRC saved state (ESC 7 / ESC 8) — full attribute save
+    TerminalCell savedDecAttrs_;
+    bool savedDecLineDrawingG0_ = false;
+    bool savedDecIsBold_ = false;
+    bool savedDecBoldIsBright_ = true;
+    bool savedDecIsInverseMode_ = false;
 
     // active hyperlink URL (OSC 8)
     std::wstring activeHyperlinkUrl_;
