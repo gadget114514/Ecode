@@ -11,7 +11,7 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
-#include <queue>
+#include <deque>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,6 +25,13 @@
 // Pipe naming matches the PTYCON sample exactly:
 //   inputReadSide_ / outputWriteSide_  — PTY-side (closed after CreatePseudoConsole)
 //   outputReadSide_ / inputWriteSide_  — terminal-side (retained by this class)
+//
+// I/O architecture: a single IoThread handles both read (outputReadSide_) and
+// write (inputWriteSide_) via OVERLAPPED I/O and WaitForMultipleObjects.
+// This gives select()-style inter-stream serialization: writes are issued with
+// minimum latency (no thread-scheduling delay) before reading more output,
+// so ConPTY echo arrives in the output stream as early as possible relative
+// to the application's escape sequences.
 //
 // Requires Windows 10 1809 (Build 17763) or later.
 // ConPTY functions are loaded dynamically; Start() returns false on older systems.
@@ -56,6 +63,11 @@ public:
     bool Write(const std::string& text) { return Write(text.data(), text.size()); }
     bool Write(const std::wstring& text); // UTF-16 → codePage_ then Write(void*)
 
+    // Write with front-of-queue priority (for terminal emulator responses like DSR/CPR
+    // that must arrive at the shell before any queued user keystrokes).
+    bool WriteFront(const void* data, size_t len);
+    bool WriteFront(const std::wstring& text); // UTF-16 → codePage_ then WriteFront
+
     // Resize the pseudo-console.
     void Resize(int cols, int rows);
 
@@ -72,19 +84,15 @@ public:
 private:
     // --- PTYCON-pattern helpers ---
     HRESULT LoadApi();
-    HRESULT SetUpPseudoConsole(int cols, int rows);   // CreatePipe x2 + CreatePseudoConsole
+    HRESULT SetUpPseudoConsole(int cols, int rows);   // CreateNamedPipe x2 + CreatePseudoConsole
     HRESULT PrepareStartupInformation();              // HeapAlloc attr list + Update PCA
     HRESULT LaunchProcess(const std::wstring& shell,
                           const std::vector<std::pair<std::wstring,std::wstring>>& extraEnv);
 
-    void StartReader();
-    void ReaderLoop();
-
-    void StartWriter();
-    void WriterLoop();
-
-    friend DWORD WINAPI ReaderThreadProc(LPVOID param);
-    friend DWORD WINAPI WriterThreadProc(LPVOID param);
+    // Single I/O thread: OVERLAPPED read + write with WaitForMultipleObjects
+    void StartIoThread();
+    void IoLoop();
+    friend DWORD WINAPI IoThreadProc(LPVOID param);
 
     std::wstring BuildEnvBlock(const std::vector<std::pair<std::wstring,std::wstring>>& extra);
     void CloseHandle_(HANDLE& h);
@@ -112,16 +120,24 @@ private:
     PPROC_THREAD_ATTRIBUTE_LIST attrList_ = nullptr;
     STARTUPINFOEXW              siEx_{};
 
-    HANDLE hProcess_      = nullptr;
-    HANDLE hThread_       = nullptr;  // process main thread
-    DWORD  processId_     = 0;
+    HANDLE hProcess_   = nullptr;
+    HANDLE hThread_    = nullptr;  // process main thread
+    DWORD  processId_  = 0;
 
-    HANDLE readerThread_  = nullptr;  // Win32 reader thread (avoids std::thread issues)
-    HANDLE writerThread_  = nullptr;  // Win32 writer thread
-    HANDLE writeWakeEvent_ = nullptr; // auto-reset event to wake writer
+    // --- Single I/O thread state ---
+    HANDLE ioThread_    = nullptr;
+    HANDLE closeEvent_  = nullptr;  // manual-reset: signal IoThread to stop
+    HANDLE readEvent_   = nullptr;  // manual-reset: OVERLAPPED ReadFile completion
+    HANDLE ioWakeEvent_ = nullptr;  // auto-reset:   new data queued for write
+    HANDLE writeEvent_  = nullptr;  // manual-reset: OVERLAPPED WriteFile completion
+
+    OVERLAPPED readOv_{};           // OVERLAPPED for outstanding ReadFile
+    OVERLAPPED writeOv_{};          // OVERLAPPED for outstanding WriteFile
+    char readBuf_[4096]{};          // receive buffer (valid while read is pending)
+    std::vector<char> writeBuf_;    // current write buffer (valid while write is pending)
 
     std::mutex writeMutex_;
-    std::queue<std::vector<char>> writeQueue_;
+    std::deque<std::vector<char>> writeQueue_;
 
     std::atomic<bool> running_{false};
     std::atomic<bool> closing_{false};
