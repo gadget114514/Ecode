@@ -275,9 +275,9 @@ void TerminalEmulator::handleEscape(wchar_t ch) {
     case L')':
         state_ = State::CharsetG1;               break;
     case L'7':
-        buffer_->saveCursor();                   break;
+        saveCursorFull();                        break;
     case L'8':
-        buffer_->restoreCursor();                break;
+        restoreCursorFull();                     break;
     case L'D':
         buffer_->lineFeed();                     break;
     case L'E':
@@ -490,9 +490,12 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
     // --- cursor save/restore ---
     case L's': buffer_->saveCursor();    break;
     case L'u':
-        if (!params.empty() && params[0] == L'?') { queryKittyKeyboardProtocol(); break; }
-        if (params.empty() || paramInt(parts, 0, -1) == 0) { buffer_->restoreCursor(); break; }
-        handleKittyKeyboardProtocol(params); break;
+        if (params.empty()) { buffer_->restoreCursor(); break; }
+        if (params[0] == L'?' || params[0] == L'>' || params[0] == L'<' || params[0] == L'=') {
+            if (params[0] == L'?') { queryKittyKeyboardProtocol(); break; }
+            handleKittyKeyboardProtocol(params); break;
+        }
+        buffer_->restoreCursor(); break;
 
     // --- SGR ---
     case L'm': {
@@ -1169,6 +1172,27 @@ void TerminalEmulator::handleCursorStyle(int value) {
     case 6:         buffer_->setCursorShape(TerminalBuffer::CursorShape::Bar);       buffer_->setCursorBlink(false); break;
     default: break;
     }
+}
+
+// ---------------------------------------------------------------------------
+// DECSC (ESC 7) / DECRC (ESC 8) — save/restore cursor + attributes
+// ---------------------------------------------------------------------------
+void TerminalEmulator::saveCursorFull() {
+    buffer_->saveCursor();
+    savedDecAttrs_          = currentAttrs_;
+    savedDecLineDrawingG0_  = lineDrawingG0_;
+    savedDecIsBold_         = isBold_;
+    savedDecBoldIsBright_   = boldIsBright_;
+    savedDecIsInverseMode_  = isInverseMode_;
+}
+
+void TerminalEmulator::restoreCursorFull() {
+    buffer_->restoreCursor();
+    currentAttrs_    = savedDecAttrs_;
+    lineDrawingG0_   = savedDecLineDrawingG0_;
+    isBold_          = savedDecIsBold_;
+    boldIsBright_    = savedDecBoldIsBright_;
+    isInverseMode_   = savedDecIsInverseMode_;
 }
 
 // ---------------------------------------------------------------------------

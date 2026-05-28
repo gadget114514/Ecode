@@ -26,6 +26,8 @@ void EditorBufferRenderer::DrawEditorLines(
   if (!this->CreateDeviceResources())
     return;
 
+  this->m_lastCaretPos = caretPos;
+
   this->m_renderTarget->BeginDraw();
   D2D1_SIZE_F sz = this->m_renderTarget->GetSize();
 
