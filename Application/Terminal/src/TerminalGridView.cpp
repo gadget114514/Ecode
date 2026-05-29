@@ -40,7 +40,7 @@ extern void UpdateMenu(HWND hwnd);
 extern void UpdateTabs(HWND hwnd);
 
 #define TAB_TYPE_TERMINAL 10
-#define WM_DEFERRED_FOCUS (WM_USER + 205)
+#define WM_DEFERRED_FOCUS (WM_USER + 207)
 
 // ---------------------------------------------------------------------------
 // Sync terminal list from g_appTabs

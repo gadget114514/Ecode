@@ -37,6 +37,8 @@ protected:
   // File operations
   void NewFile();
   void OpenFile();
+  void OpenMsgPack();
+  void OpenMsgPackLZ4();
   void SaveFile();
   void SaveFileAs();
   void CloseCurrentTab();
@@ -60,6 +62,7 @@ private:
     std::wstring filePath; // Empty for new untitled files
     std::wstring fileName; // Display name
     bool isDirty;
+    bool isReadOnly;
     int eolMode; // 0: CRLF, 1: LF, 2: CR
 
     // Internal Data Structure

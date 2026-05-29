@@ -23,7 +23,8 @@ public:
   size_t OpenJsShell();
   void FindInFiles(const std::wstring &dir, const std::wstring &pattern,
                    const std::wstring &extFilter = L"",
-                   bool useRegex = false, bool matchCase = false);
+                   bool useRegex = false, bool matchCase = false,
+                   bool showCurrentFile = false, bool verbose = false);
   void FindFile(const std::wstring &pattern, const std::wstring &dir);
   void CancelFindInFiles();
   void CloseBuffer(size_t index);

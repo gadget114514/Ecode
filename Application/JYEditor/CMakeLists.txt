@@ -17,6 +17,8 @@ add_executable(JYEditor WIN32
     src/FileUtils.h
     src/JSONEditorLocalization.cpp
     src/JSONEditorLocalization.h
+    src/MsgPackParser.h
+    src/LZ4Decompressor.h
     resources/resource.rc
 )
 

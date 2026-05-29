@@ -1,6 +1,8 @@
 #include "EditorWindow.h"
 #include "../resources/resource.h"
 #include "FileUtils.h"
+#include "MsgPackParser.h"
+#include "LZ4Decompressor.h"
 #include <cctype>
 #include <commctrl.h>
 #include <filesystem>
@@ -263,6 +265,10 @@ void EditorWindow::UpdateMenus() {
              m_localization.GetLocalizedString("New").c_str());
   AppendMenu(hFileMenu, MF_STRING, JE_IDM_FILE_OPEN,
              m_localization.GetLocalizedString("Open").c_str());
+  AppendMenu(hFileMenu, MF_STRING, JE_IDM_FILE_OPEN_MSGPACK,
+             m_localization.GetLocalizedString("OpenMsgPack").c_str());
+  AppendMenu(hFileMenu, MF_STRING, JE_IDM_FILE_OPEN_MSGPACK_LZ4,
+             m_localization.GetLocalizedString("OpenMsgPackLZ4").c_str());
   AppendMenu(hFileMenu, MF_STRING, JE_IDM_FILE_SAVE,
              m_localization.GetLocalizedString("Save").c_str());
   AppendMenu(hFileMenu, MF_STRING, JE_IDM_FILE_SAVEAS,
@@ -323,6 +329,12 @@ void EditorWindow::UpdateMenus() {
                  m_embeddedApps[i].name.c_str());
     }
     AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hToolsMenu, L"&Tools");
+  }
+
+  // Disable Save/SaveAs for read-only documents
+  if (m_activePageIndex >= 0 && m_documents[m_activePageIndex].isReadOnly) {
+    EnableMenuItem(hFileMenu, JE_IDM_FILE_SAVE, MF_GRAYED);
+    EnableMenuItem(hFileMenu, JE_IDM_FILE_SAVEAS, MF_GRAYED);
   }
 
   SetMenu(m_hwnd, hMenu);
@@ -394,7 +406,14 @@ LRESULT EditorWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
       int index = TabCtrl_GetCurSel(m_hTabCtrl);
       SwitchTab(index);
     } else if (pnm->idFrom == JE_IDC_TREE_VIEW) {
-      if (pnm->code == TVN_ENDLABELEDITW || pnm->code == TVN_ENDLABELEDITA) {
+      if (pnm->code == TVN_BEGINLABELEDITW || pnm->code == TVN_BEGINLABELEDITA) {
+        if (m_activePageIndex >= 0 && m_documents[m_activePageIndex].isReadOnly)
+          return TRUE;
+      } else if (pnm->code == TVN_ENDLABELEDITW || pnm->code == TVN_ENDLABELEDITA) {
+        // Disable editing for read-only documents
+        if (m_activePageIndex >= 0 && m_documents[m_activePageIndex].isReadOnly)
+          return FALSE;
+
         LPNMTVDISPINFO ptvdi = (LPNMTVDISPINFO)lParam;
         if (ptvdi->item.pszText) {
           // Get the path from lParam
@@ -578,6 +597,7 @@ void EditorWindow::CreateNewTab(const std::wstring &path,
   doc.fileName = GetFileNameFromPath(path);
   doc.eolMode = 0; // Default CRLF
   doc.isDirty = false;
+  doc.isReadOnly = false;
 
   // Create Line Number Control (Static)
   doc.hLineNum =
@@ -688,6 +708,7 @@ void EditorWindow::SwitchTab(int index) {
       ShowWindow(doc.hPlaceholder, SW_SHOW);
     }
   } else {
+    SendMessage(doc.hEdit, EM_SETREADONLY, doc.isReadOnly ? TRUE : FALSE, 0);
     ShowWindow(doc.hEdit, SW_SHOW);
     ShowWindow(doc.hLineNum, SW_SHOW);
     SetFocus(doc.hEdit);
@@ -695,6 +716,7 @@ void EditorWindow::SwitchTab(int index) {
 
   ResizeTabControl();
   UpdateTitle();
+  UpdateMenus();
   if (!doc.isChildApp) {
     UpdateTreeFromText();
     UpdateLineNumbers(doc.hEdit);
@@ -785,6 +807,12 @@ void EditorWindow::OnCommand(int id, int code) {
   case JE_IDM_FILE_OPEN:
     OpenFile();
     break;
+  case JE_IDM_FILE_OPEN_MSGPACK:
+    OpenMsgPack();
+    break;
+  case JE_IDM_FILE_OPEN_MSGPACK_LZ4:
+    OpenMsgPackLZ4();
+    break;
   case JE_IDM_FILE_SAVE:
     SaveFile();
     break;
@@ -840,6 +868,7 @@ void EditorWindow::OnCommand(int id, int code) {
         doc.eolMode = 0;
         doc.isDirty = false;
         doc.isChildApp = true;
+        doc.isReadOnly = false;
         doc.hChildApp = NULL;
         doc.hPlaceholder = NULL;
         doc.hChildProcess = NULL;
@@ -1002,10 +1031,156 @@ void EditorWindow::OpenFile() {
   }
 }
 
+void EditorWindow::OpenMsgPack() {
+  IFileOpenDialog *pFileOpen;
+  HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
+                                IID_IFileOpenDialog,
+                                reinterpret_cast<void **>(&pFileOpen));
+  if (SUCCEEDED(hr)) {
+    hr = pFileOpen->Show(m_hwnd);
+    if (SUCCEEDED(hr)) {
+      IShellItem *pItem;
+      hr = pFileOpen->GetResult(&pItem);
+      if (SUCCEEDED(hr)) {
+        PWSTR pszFilePath;
+        hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+        if (SUCCEEDED(hr)) {
+          std::wstring wpath = pszFilePath;
+
+          // Read binary data
+          HANDLE hFile = CreateFile(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+          if (hFile != INVALID_HANDLE_VALUE) {
+            DWORD fileSize = GetFileSize(hFile, NULL);
+            if (fileSize > 0 && fileSize != INVALID_FILE_SIZE) {
+              std::vector<uint8_t> buffer(fileSize);
+              DWORD bytesRead;
+              if (ReadFile(hFile, buffer.data(), fileSize, &bytesRead, NULL)) {
+                try {
+                  MsgPackParser parser(buffer);
+                  json j = parser.parse();
+                  std::string formatted = j.dump(4);
+
+                  int wLen = MultiByteToWideChar(CP_UTF8, 0, formatted.c_str(), -1, NULL, 0);
+                  std::vector<wchar_t> wOut(wLen + 1);
+                  MultiByteToWideChar(CP_UTF8, 0, formatted.c_str(), -1, wOut.data(), wLen);
+                  wOut[wLen] = 0;
+                  std::wstring wFormatted = JSONEditorFileUtils::NormalizeToCrlf(wOut.data());
+
+                  CreateNewTab(wpath, wFormatted);
+                  if (!m_documents.empty()) {
+                    Document &doc = m_documents.back();
+                    doc.format = Document::FMT_JSON;
+                    doc.jsonData = j;
+                    doc.isReadOnly = true;
+                    SendMessage(doc.hEdit, EM_SETREADONLY, TRUE, 0);
+
+                    // Update tree
+                    UpdateTreeFromText();
+                  }
+                } catch (std::exception &e) {
+                  std::string errStr = e.what();
+                  std::wstring wErr(errStr.begin(), errStr.end());
+                  MessageBox(m_hwnd, wErr.c_str(), L"MsgPack Parse Error",
+                             MB_OK | MB_ICONERROR);
+                  CloseHandle(hFile);
+                  CoTaskMemFree(pszFilePath);
+                  pItem->Release();
+                  pFileOpen->Release();
+                  return;
+                }
+              }
+            }
+            CloseHandle(hFile);
+          }
+
+          CoTaskMemFree(pszFilePath);
+        }
+        pItem->Release();
+      }
+    }
+    pFileOpen->Release();
+  }
+}
+
+void EditorWindow::OpenMsgPackLZ4() {
+  IFileOpenDialog *pFileOpen;
+  HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
+                                IID_IFileOpenDialog,
+                                reinterpret_cast<void **>(&pFileOpen));
+  if (SUCCEEDED(hr)) {
+    hr = pFileOpen->Show(m_hwnd);
+    if (SUCCEEDED(hr)) {
+      IShellItem *pItem;
+      hr = pFileOpen->GetResult(&pItem);
+      if (SUCCEEDED(hr)) {
+        PWSTR pszFilePath;
+        hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+        if (SUCCEEDED(hr)) {
+          std::wstring wpath = pszFilePath;
+
+          // Read binary data
+          HANDLE hFile = CreateFile(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+          if (hFile != INVALID_HANDLE_VALUE) {
+            DWORD fileSize = GetFileSize(hFile, NULL);
+            if (fileSize > 0 && fileSize != INVALID_FILE_SIZE) {
+              std::vector<uint8_t> buffer(fileSize);
+              DWORD bytesRead;
+              if (ReadFile(hFile, buffer.data(), fileSize, &bytesRead, NULL)) {
+                try {
+                  std::vector<uint8_t> decompressed = LZ4Decompressor::decompress(buffer);
+                  MsgPackParser parser(decompressed);
+                  json j = parser.parse();
+                  std::string formatted = j.dump(4);
+
+                  int wLen = MultiByteToWideChar(CP_UTF8, 0, formatted.c_str(), -1, NULL, 0);
+                  std::vector<wchar_t> wOut(wLen + 1);
+                  MultiByteToWideChar(CP_UTF8, 0, formatted.c_str(), -1, wOut.data(), wLen);
+                  wOut[wLen] = 0;
+                  std::wstring wFormatted = JSONEditorFileUtils::NormalizeToCrlf(wOut.data());
+
+                  CreateNewTab(wpath, wFormatted);
+                  if (!m_documents.empty()) {
+                    Document &doc = m_documents.back();
+                    doc.format = Document::FMT_JSON;
+                    doc.jsonData = j;
+                    doc.isReadOnly = true;
+                    SendMessage(doc.hEdit, EM_SETREADONLY, TRUE, 0);
+                    UpdateTreeFromText();
+                  }
+                } catch (std::exception &e) {
+                  std::string errStr = e.what();
+                  std::wstring wErr(errStr.begin(), errStr.end());
+                  MessageBox(m_hwnd, wErr.c_str(), L"MsgPack LZ4 Error",
+                             MB_OK | MB_ICONERROR);
+                  CloseHandle(hFile);
+                  CoTaskMemFree(pszFilePath);
+                  pItem->Release();
+                  pFileOpen->Release();
+                  return;
+                }
+              }
+            }
+            CloseHandle(hFile);
+          }
+
+          CoTaskMemFree(pszFilePath);
+        }
+        pItem->Release();
+      }
+    }
+    pFileOpen->Release();
+  }
+}
+
 void EditorWindow::SaveFile() {
   if (m_activePageIndex == -1)
     return;
   Document &doc = m_documents[m_activePageIndex];
+
+  if (doc.isReadOnly)
+    return;
 
   if (doc.filePath.empty()) {
     SaveFileAs();
@@ -1028,6 +1203,8 @@ void EditorWindow::SaveFileAs() {
   if (m_activePageIndex == -1)
     return;
   Document &doc = m_documents[m_activePageIndex];
+  if (doc.isReadOnly)
+    return;
 
   IFileSaveDialog *pFileSave;
   HRESULT hr = CoCreateInstance(CLSID_FileSaveDialog, NULL, CLSCTX_ALL,
@@ -1079,7 +1256,10 @@ void EditorWindow::UpdateTitle() {
     return;
   }
 
-  std::wstring title = L"JYEditor - " + m_documents[m_activePageIndex].fileName;
+  Document &doc = m_documents[m_activePageIndex];
+  std::wstring title = L"JYEditor - " + doc.fileName;
+  if (doc.isReadOnly)
+    title += L" (Read-Only)";
   SetWindowText(m_hwnd, title.c_str());
 }
 
