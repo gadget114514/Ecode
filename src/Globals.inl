@@ -359,3 +359,33 @@ inline std::string GetWin32ErrorString(DWORD errorCode) {
   }
   return "Unknown error (" + std::to_string(errorCode) + ")";
 }
+
+inline size_t VisibleBufferCount() {
+  size_t count = 0;
+  for (auto &buf : g_editor->GetBuffers())
+    if (!buf->IsHidden()) count++;
+  return count;
+}
+
+inline int TabToBufferIndex(int tabIndex) {
+  const auto &buffers = g_editor->GetBuffers();
+  int visible = 0;
+  for (size_t i = 0; i < buffers.size(); i++) {
+    if (!buffers[i]->IsHidden()) {
+      if (visible == tabIndex) return (int)i;
+      visible++;
+    }
+  }
+  return -1;
+}
+
+inline int BufferToTabIndex(size_t bufferIndex) {
+  const auto &buffers = g_editor->GetBuffers();
+  int tabIdx = 0;
+  for (size_t i = 0; i < bufferIndex; i++) {
+    if (!buffers[i]->IsHidden()) tabIdx++;
+  }
+  if (bufferIndex < buffers.size() && !buffers[bufferIndex]->IsHidden())
+    return tabIdx;
+  return -1;
+}

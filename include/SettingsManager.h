@@ -106,6 +106,9 @@ public:
   bool IsReverseScrollDirection() const { return m_reverseScrollDirection; }
   void SetReverseScrollDirection(bool v) { m_reverseScrollDirection = v; }
 
+  bool GetHideMessagesBuffer() const { return m_hideMessagesBuffer; }
+  void SetHideMessagesBuffer(bool hide) { m_hideMessagesBuffer = hide; }
+
   bool IsSessionManagementEnabled() const { return m_enableSessionManagement; }
   void SetSessionManagementEnabled(bool enabled) { m_enableSessionManagement = enabled; }
 
@@ -254,6 +257,7 @@ private:
   std::vector<std::pair<std::wstring, std::wstring>> m_aiApiKeys; // vendor -> key
 
   bool m_reverseScrollDirection = false;
+  bool m_hideMessagesBuffer = true;
   std::vector<ThemeEntry> m_themes;
   std::wstring m_activeTheme;
   std::vector<std::wstring> m_hiddenPlugins;

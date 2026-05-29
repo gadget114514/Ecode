@@ -89,6 +89,8 @@ public:
 
   void SetScratch(bool scratch) { m_isScratch = scratch; }
   bool IsScratch() const { return m_isScratch; }
+  void SetHidden(bool hidden) { m_isHidden = hidden; }
+  bool IsHidden() const { return m_isHidden; }
 
   size_t GetCaretPos() const { return m_caretPos; }
   void SetCaretPos(size_t pos) {
@@ -179,6 +181,7 @@ private:
   bool m_isDirty;
   bool m_isScratch;
   bool m_isShell = false;
+  bool m_isHidden = false;
   std::vector<std::unique_ptr<Process>> m_processes;
   size_t m_inputStart = 0;
   std::vector<std::string> m_shellHistory;

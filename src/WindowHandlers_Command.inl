@@ -112,8 +112,8 @@ void OpenFastFileSearch(HWND hwnd) {
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t bufCount = g_editor->GetBuffers().size();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  size_t visCount = VisibleBufferCount();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
   g_suppressTabChange = false;
 
   for (auto &t : g_appTabs) {
@@ -198,8 +198,8 @@ void OpenCSVEditor(HWND hwnd) {
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t bufCount = g_editor->GetBuffers().size();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  size_t visCount = VisibleBufferCount();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
   g_suppressTabChange = false;
 
   for (auto &t : g_appTabs) {
@@ -282,8 +282,8 @@ void OpenJYEditor(HWND hwnd) {
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t bufCount = g_editor->GetBuffers().size();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  size_t visCount = VisibleBufferCount();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
   g_suppressTabChange = false;
 
   for (auto &t : g_appTabs) {
@@ -377,8 +377,8 @@ void OpenDired(HWND hwnd) {
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t bufCount = g_editor->GetBuffers().size();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  size_t visCount = VisibleBufferCount();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
   g_suppressTabChange = false;
 
   for (auto &t : g_appTabs) {
@@ -516,8 +516,8 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t bufCount = g_editor->GetBuffers().size();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(bufCount) + appIdx);
+  size_t visCount = VisibleBufferCount();
+  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
   g_suppressTabChange = false;
 
   for (auto& t : g_appTabs)
