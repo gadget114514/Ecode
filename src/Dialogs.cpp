@@ -799,10 +799,27 @@ INT_PTR CALLBACK FindFileDlgProc(HWND hDlg, UINT message, WPARAM wParam,
   return (INT_PTR)FALSE;
 }
 
+static void PopulateFindHistoryCombo(HWND hDlg) {
+  HWND hCombo = GetDlgItem(hDlg, IDC_FIND_HISTORY);
+  if (!hCombo) return;
+  SendMessage(hCombo, CB_RESETCONTENT, 0, 0);
+  const auto &history = SettingsManager::Instance().GetFindHistory();
+  for (const auto &cond : history) {
+    std::wstring label = cond.pattern + L" @ " + cond.directory;
+    if (!cond.extFilter.empty())
+      label += L" (" + cond.extFilter + L")";
+    SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)label.c_str());
+  }
+  if (history.size() > 0)
+    SendMessage(hCombo, CB_SETCURSEL, 0, 0);
+}
+
 INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                     LPARAM lParam) {
   switch (message) {
   case WM_INITDIALOG: {
+    PopulateFindHistoryCombo(hDlg);
+
     // Default to current file's directory, fallback to saved, fallback to "."
     std::wstring findStart;
     if (g_editor) {
@@ -831,9 +848,41 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     CheckDlgButton(hDlg, IDC_FIND_MATCH_CASE, BST_UNCHECKED);
     CheckDlgButton(hDlg, IDC_FIND_SHOW_CURRENT, BST_CHECKED);
     CheckDlgButton(hDlg, IDC_FIND_VERBOSE, BST_UNCHECKED);
+
+    // If there's history, select the most recent entry's fields
+    const auto &history = SettingsManager::Instance().GetFindHistory();
+    if (!history.empty()) {
+      const auto &cond = history[0];
+      SetDlgItemTextW(hDlg, IDC_FIND_PATTERN, cond.pattern.c_str());
+      SetDlgItemTextW(hDlg, IDC_FIND_DIR, cond.directory.c_str());
+      SetDlgItemTextW(hDlg, IDC_FIND_EXT, cond.extFilter.c_str());
+      CheckDlgButton(hDlg, IDC_FIND_REGEX, cond.useRegex ? BST_CHECKED : BST_UNCHECKED);
+      CheckDlgButton(hDlg, IDC_FIND_MATCH_CASE, cond.matchCase ? BST_CHECKED : BST_UNCHECKED);
+      CheckDlgButton(hDlg, IDC_FIND_SHOW_CURRENT, cond.showCurrentFile ? BST_CHECKED : BST_UNCHECKED);
+      CheckDlgButton(hDlg, IDC_FIND_VERBOSE, cond.verbose ? BST_CHECKED : BST_UNCHECKED);
+    }
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
+    if (LOWORD(wParam) == IDC_FIND_HISTORY &&
+        HIWORD(wParam) == CBN_SELCHANGE) {
+      HWND hCombo = GetDlgItem(hDlg, IDC_FIND_HISTORY);
+      int sel = (int)SendMessage(hCombo, CB_GETCURSEL, 0, 0);
+      if (sel >= 0) {
+        const auto &history = SettingsManager::Instance().GetFindHistory();
+        if ((size_t)sel < history.size()) {
+          const auto &cond = history[sel];
+          SetDlgItemTextW(hDlg, IDC_FIND_PATTERN, cond.pattern.c_str());
+          SetDlgItemTextW(hDlg, IDC_FIND_DIR, cond.directory.c_str());
+          SetDlgItemTextW(hDlg, IDC_FIND_EXT, cond.extFilter.c_str());
+          CheckDlgButton(hDlg, IDC_FIND_REGEX, cond.useRegex ? BST_CHECKED : BST_UNCHECKED);
+          CheckDlgButton(hDlg, IDC_FIND_MATCH_CASE, cond.matchCase ? BST_CHECKED : BST_UNCHECKED);
+          CheckDlgButton(hDlg, IDC_FIND_SHOW_CURRENT, cond.showCurrentFile ? BST_CHECKED : BST_UNCHECKED);
+          CheckDlgButton(hDlg, IDC_FIND_VERBOSE, cond.verbose ? BST_CHECKED : BST_UNCHECKED);
+        }
+      }
+      return (INT_PTR)TRUE;
+    }
     if (LOWORD(wParam) == IDOK) {
       wchar_t pattern[256], dir[MAX_PATH], ext[256];
       GetDlgItemTextW(hDlg, IDC_FIND_PATTERN, pattern, 256);
@@ -850,6 +899,17 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         SettingsManager::Instance().SetFindExtFilter(ext);
         SettingsManager::Instance().Save();
 
+        // Save to history
+        FindInFilesCondition cond;
+        cond.pattern = pattern;
+        cond.directory = dir;
+        cond.extFilter = ext;
+        cond.useRegex = useRegex ? true : false;
+        cond.matchCase = matchCase ? true : false;
+        cond.showCurrentFile = showCurrent ? true : false;
+        cond.verbose = verbose ? true : false;
+        SettingsManager::Instance().AddFindHistory(cond);
+
         // Disable controls, start search
         EnableWindow(GetDlgItem(hDlg, IDOK), FALSE);
         EnableWindow(GetDlgItem(hDlg, IDC_FIND_PATTERN), FALSE);
@@ -860,6 +920,7 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         EnableWindow(GetDlgItem(hDlg, IDC_FIND_SHOW_CURRENT), FALSE);
         EnableWindow(GetDlgItem(hDlg, IDC_FIND_VERBOSE), FALSE);
         EnableWindow(GetDlgItem(hDlg, IDC_FIND_BROWSE), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_HISTORY), FALSE);
         SetDlgItemTextW(hDlg, IDCANCEL, L"Stop");
 
         g_editor->FindInFiles(dir, pattern, ext, useRegex ? true : false, matchCase ? true : false, showCurrent ? true : false, verbose ? true : false);

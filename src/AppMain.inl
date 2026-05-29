@@ -131,6 +131,117 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         return 0;
       }
     }
+
+    Buffer *buf = g_editor ? g_editor->GetActiveBuffer() : nullptr;
+    if (buf && buf->GetKind() == BufferKind::FindResults) {
+      int x = GET_X_LPARAM(lParam), y = HIWORD(lParam);
+
+      size_t totalLines = buf->GetTotalLines();
+      size_t scrollLine = buf->GetScrollLine();
+      size_t viewportLineCount = g_renderer->CalculateVisibleLineCount();
+      size_t actualLines = 0;
+      std::string viewportText = buf->GetViewportText(
+          scrollLine, viewportLineCount, actualLines);
+      size_t viewportRelVisualPos = g_renderer->GetPositionFromPoint(
+          viewportText, (float)x, (float)y, totalLines);
+
+      size_t viewportStartPhysical = buf->GetPhysicalLine(scrollLine);
+      size_t viewportStartLogical =
+          buf->GetLineOffset(viewportStartPhysical);
+      size_t viewportStartVisual =
+          buf->LogicalToVisualOffset(viewportStartLogical);
+
+      size_t totalVisualPos = viewportStartVisual + viewportRelVisualPos;
+      size_t pos = buf->VisualToLogicalOffset(totalVisualPos);
+
+      size_t lineIndex = buf->GetLineAtOffset(pos);
+      size_t lineStart = buf->GetLineOffset(lineIndex);
+      size_t lineEnd = (lineIndex + 1 < totalLines)
+                           ? buf->GetLineOffset(lineIndex + 1)
+                           : buf->GetTotalLength();
+      std::string lineText = buf->GetText(lineStart, lineEnd - lineStart);
+
+      // Strip trailing newline/carriage return
+      while (!lineText.empty() &&
+             (lineText.back() == '\n' || lineText.back() == '\r'))
+        lineText.pop_back();
+
+      // Try filename(linenumber) pattern first
+      std::string filename;
+      int lineNum = 0;
+      bool parsed = false;
+
+      size_t parenOpen = lineText.find('(');
+      if (parenOpen != std::string::npos && parenOpen > 0) {
+        size_t parenClose = lineText.find(')', parenOpen);
+        if (parenClose != std::string::npos) {
+          std::string numStr =
+              lineText.substr(parenOpen + 1, parenClose - parenOpen - 1);
+          try {
+            lineNum = std::stoi(numStr);
+            filename = lineText.substr(0, parenOpen);
+            parsed = true;
+          } catch (...) {}
+        }
+      }
+
+      // Try filename:linenumber pattern if the first didn't match
+      if (!parsed) {
+        size_t colon = lineText.find(':');
+        if (colon != std::string::npos && colon > 0) {
+          size_t numEnd = colon + 1;
+          while (numEnd < lineText.size() &&
+                 isdigit((unsigned char)lineText[numEnd]))
+            numEnd++;
+          if (numEnd > colon + 1) {
+            std::string numStr =
+                lineText.substr(colon + 1, numEnd - colon - 1);
+            try {
+              lineNum = std::stoi(numStr);
+              filename = lineText.substr(0, colon);
+              parsed = true;
+            } catch (...) {}
+          }
+        }
+      }
+
+      if (parsed && !filename.empty() && lineNum > 0) {
+        std::wstring wFilename = StringToWString(filename);
+
+        // Resolve relative paths (same logic as TagJump)
+        if (wFilename.length() < 2 ||
+            (wFilename[1] != L':' && wFilename[0] != L'\\')) {
+          std::wstring basePath = buf->GetPath();
+          if (basePath.empty() || basePath[0] == L'*') {
+            basePath = SettingsManager::Instance().GetProjectDirectory();
+          }
+          if (!basePath.empty()) {
+            size_t lastSlash = basePath.find_last_of(L"\\/");
+            if (lastSlash != std::wstring::npos) {
+              std::wstring dir = basePath.substr(0, lastSlash + 1);
+              wFilename = dir + wFilename;
+            }
+          }
+        }
+
+        size_t newBufIdx = g_editor->OpenFile(wFilename);
+        if (newBufIdx != static_cast<size_t>(-1)) {
+          g_editor->SwitchToBuffer(newBufIdx);
+          Buffer *newBuf = g_editor->GetActiveBuffer();
+          if (newBuf) {
+            size_t offset = newBuf->GetLineOffset(lineNum - 1);
+            newBuf->SetCaretPos(offset);
+            newBuf->SetSelectionAnchor(offset);
+            newBuf->SetScrollLine(
+                lineNum > 20 ? (size_t)(lineNum - 20) : 0);
+          }
+          UpdateMenu(hwnd);
+          InvalidateRect(hwnd, NULL, FALSE);
+        }
+      }
+
+      return 0;
+    }
     break;
   }
   case WM_MOUSEMOVE:

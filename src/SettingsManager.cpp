@@ -164,6 +164,29 @@ void SettingsManager::Load() {
     }
   }
 
+  // Load find history
+  m_findHistory.clear();
+  wchar_t countBuf[16];
+  GetPrivateProfileStringW(L"FindHistory", L"Count", L"0", countBuf, 16, path.c_str());
+  int count = _wtoi(countBuf);
+  for (int i = 0; i < count && i < 20; ++i) {
+    std::wstring prefix = L"Entry" + std::to_wstring(i) + L"_";
+    wchar_t buf[1024];
+    FindInFilesCondition cond;
+    if (GetPrivateProfileStringW(L"FindHistory", (prefix + L"Pattern").c_str(), L"", buf, 1024, path.c_str()) > 0)
+      cond.pattern = buf;
+    if (GetPrivateProfileStringW(L"FindHistory", (prefix + L"Directory").c_str(), L"", buf, 1024, path.c_str()) > 0)
+      cond.directory = buf;
+    if (GetPrivateProfileStringW(L"FindHistory", (prefix + L"ExtFilter").c_str(), L"", buf, 1024, path.c_str()) > 0)
+      cond.extFilter = buf;
+    wchar_t flagBuf[4];
+    cond.useRegex = (GetPrivateProfileStringW(L"FindHistory", (prefix + L"Regex").c_str(), L"0", flagBuf, 4, path.c_str()) > 0 && flagBuf[0] == L'1');
+    cond.matchCase = (GetPrivateProfileStringW(L"FindHistory", (prefix + L"MatchCase").c_str(), L"0", flagBuf, 4, path.c_str()) > 0 && flagBuf[0] == L'1');
+    cond.showCurrentFile = (GetPrivateProfileStringW(L"FindHistory", (prefix + L"ShowCurrent").c_str(), L"1", flagBuf, 4, path.c_str()) == 0 || flagBuf[0] == L'1');
+    cond.verbose = (GetPrivateProfileStringW(L"FindHistory", (prefix + L"Verbose").c_str(), L"0", flagBuf, 4, path.c_str()) > 0 && flagBuf[0] == L'1');
+    m_findHistory.push_back(cond);
+  }
+
   wchar_t vendorBuf[256];
   GetPrivateProfileStringW(L"AI", L"Vendor", L"Gemini", vendorBuf, 256, path.c_str());
   m_aiVendor = vendorBuf;
@@ -476,6 +499,7 @@ void SettingsManager::Save() {
   SaveFolderEntries();
   SaveHiddenPlugins();
   SaveThemes();
+  SaveFindHistory();
 }
 
 std::wstring SettingsManager::DetectBashPath() {
@@ -1018,5 +1042,49 @@ void SettingsManager::ClearAutoSaveSession() {
   if (idx >= 0) {
     DeleteSession(idx);
     WritePrivateProfileStringW(L"Session", L"AutoSaveIndex", NULL, GetSessionIndexPath().c_str());
+  }
+}
+
+void SettingsManager::AddFindHistory(const FindInFilesCondition &cond) {
+  // Dedup: remove if same condition already exists
+  for (auto it = m_findHistory.begin(); it != m_findHistory.end(); ++it) {
+    if (it->pattern == cond.pattern &&
+        it->directory == cond.directory &&
+        it->extFilter == cond.extFilter &&
+        it->useRegex == cond.useRegex &&
+        it->matchCase == cond.matchCase &&
+        it->showCurrentFile == cond.showCurrentFile &&
+        it->verbose == cond.verbose) {
+      m_findHistory.erase(it);
+      break;
+    }
+  }
+  m_findHistory.insert(m_findHistory.begin(), cond);
+  if (m_findHistory.size() > 20) {
+    m_findHistory.pop_back();
+  }
+  SaveFindHistory();
+}
+
+void SettingsManager::RemoveFindHistory(size_t index) {
+  if (index < m_findHistory.size()) {
+    m_findHistory.erase(m_findHistory.begin() + index);
+    SaveFindHistory();
+  }
+}
+
+void SettingsManager::SaveFindHistory() {
+  std::wstring path = GetSettingsPath();
+  WritePrivateProfileStringW(L"FindHistory", NULL, NULL, path.c_str());
+  WritePrivateProfileStringW(L"FindHistory", L"Count", std::to_wstring((int)m_findHistory.size()).c_str(), path.c_str());
+  for (size_t i = 0; i < m_findHistory.size(); ++i) {
+    std::wstring prefix = L"Entry" + std::to_wstring(i) + L"_";
+    WritePrivateProfileStringW(L"FindHistory", (prefix + L"Pattern").c_str(), m_findHistory[i].pattern.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"FindHistory", (prefix + L"Directory").c_str(), m_findHistory[i].directory.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"FindHistory", (prefix + L"ExtFilter").c_str(), m_findHistory[i].extFilter.c_str(), path.c_str());
+    WritePrivateProfileStringW(L"FindHistory", (prefix + L"Regex").c_str(), m_findHistory[i].useRegex ? L"1" : L"0", path.c_str());
+    WritePrivateProfileStringW(L"FindHistory", (prefix + L"MatchCase").c_str(), m_findHistory[i].matchCase ? L"1" : L"0", path.c_str());
+    WritePrivateProfileStringW(L"FindHistory", (prefix + L"ShowCurrent").c_str(), m_findHistory[i].showCurrentFile ? L"1" : L"0", path.c_str());
+    WritePrivateProfileStringW(L"FindHistory", (prefix + L"Verbose").c_str(), m_findHistory[i].verbose ? L"1" : L"0", path.c_str());
   }
 }

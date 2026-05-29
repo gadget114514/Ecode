@@ -51,6 +51,16 @@ struct SessionInfo {
   int bufferCount = 0;
 };
 
+struct FindInFilesCondition {
+  std::wstring pattern;
+  std::wstring directory;
+  std::wstring extFilter;
+  bool useRegex = false;
+  bool matchCase = false;
+  bool showCurrentFile = true;
+  bool verbose = false;
+};
+
 struct ThemeEntry {
   std::wstring name;
   std::wstring background;  // 8-char hex RRGGBBAA
@@ -214,6 +224,14 @@ public:
   void SaveHiddenPlugins();
 
   // Theme management
+  // Find in Files history
+  const std::vector<FindInFilesCondition> &GetFindHistory() const {
+    return m_findHistory;
+  }
+  void AddFindHistory(const FindInFilesCondition &cond);
+  void RemoveFindHistory(size_t index);
+  void SaveFindHistory();
+
   const std::vector<ThemeEntry> &GetThemes() const { return m_themes; }
   std::wstring GetActiveThemeName() const { return m_activeTheme; }
   void SetActiveThemeName(const std::wstring &name) { m_activeTheme = name; }
@@ -269,4 +287,5 @@ private:
   std::vector<ThemeEntry> m_themes;
   std::wstring m_activeTheme;
   std::vector<std::wstring> m_hiddenPlugins;
+  std::vector<FindInFilesCondition> m_findHistory;
 };
