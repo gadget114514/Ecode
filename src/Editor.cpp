@@ -43,9 +43,12 @@ size_t Editor::OpenShell(const std::wstring &cmd) {
   buffer->SetPath(L"*shell*");
   buffer->SetScratch(true);
   buffer->SetShell(true);
+  buffer->SetKind(BufferKind::Shell);
 
   Buffer *bRaw = buffer.get();
   auto process = std::make_unique<Process>();
+  int enc = SettingsManager::Instance().GetShellEncoding();
+  process->SetCodePage((enc == 1) ? 932 : CP_UTF8);
 
   if (process->Start(cmd, [bRaw](const std::string &text) {
         ShellOutput *output = new ShellOutput();
@@ -73,6 +76,7 @@ size_t Editor::OpenJsShell() {
   buffer->SetPath(L"*Script Console*");
   buffer->SetScratch(true);
   buffer->SetShell(true);
+  buffer->SetKind(BufferKind::ScriptConsole);
   buffer->Insert(0, "// Ecode Script Console\n// Type JS code and press Enter to evaluate.\n> ");
   buffer->SetInputStart(buffer->GetTotalLength());
   buffer->SetCaretPos(buffer->GetTotalLength());
@@ -229,6 +233,7 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
     auto buf = std::make_unique<Buffer>();
     buf->SetPath(L"*Find Results*");
     buf->SetScratch(true);
+    buf->SetKind(BufferKind::FindResults);
     results = buf.get();
     m_buffers.push_back(std::move(buf));
     SwitchToBuffer(m_buffers.size() - 1);
@@ -479,6 +484,7 @@ void Editor::LogMessage(const std::string &msg) {
       auto buffer = std::make_unique<Buffer>();
       buffer->SetPath(L"*Messages*");
       buffer->SetScratch(true);
+      buffer->SetKind(BufferKind::Messages);
       buffer->SetHidden(SettingsManager::Instance().GetHideMessagesBuffer());
       m_messagesBuffer = buffer.get();
       m_buffers.push_back(std::move(buffer));

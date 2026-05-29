@@ -11,6 +11,14 @@ enum class Encoding { UTF8, UTF16LE, UTF16BE, ANSI };
 
 enum class SelectionMode { Normal, Box };
 
+enum class BufferKind {
+    Normal = 0,
+    FindResults = 1,
+    Messages = 2,
+    Shell = 3,
+    ScriptConsole = 4,
+};
+
 class Process;
 
 class Buffer {
@@ -91,6 +99,9 @@ public:
   bool IsScratch() const { return m_isScratch; }
   void SetHidden(bool hidden) { m_isHidden = hidden; }
   bool IsHidden() const { return m_isHidden; }
+
+  BufferKind GetKind() const { return m_kind; }
+  void SetKind(BufferKind kind) { m_kind = kind; }
 
   size_t GetCaretPos() const { return m_caretPos; }
   void SetCaretPos(size_t pos) {
@@ -182,6 +193,7 @@ private:
   bool m_isScratch;
   bool m_isShell = false;
   bool m_isHidden = false;
+  BufferKind m_kind = BufferKind::Normal;
   std::vector<std::unique_ptr<Process>> m_processes;
   size_t m_inputStart = 0;
   std::vector<std::string> m_shellHistory;
