@@ -426,7 +426,7 @@ static void SwActivateItem(HWND parentHwnd) {
             ShowWindow(g_appTabs[it.index].hwnd, SW_SHOW);
         g_suppressTabChange = true;
         TabCtrl_SetCurSel(g_tabHwnd,
-            (int)g_editor->GetBuffers().size() + it.index);
+            (int)VisibleBufferCount() + it.index);
         g_suppressTabChange = false;
         ShowScrollBar(parentHwnd, SB_BOTH, FALSE);
     }

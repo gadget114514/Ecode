@@ -123,7 +123,9 @@ void UpdateTabs(HWND hwnd) {
   TabCtrl_DeleteAllItems(g_tabHwnd);
 
   const auto &buffers = g_editor->GetBuffers();
+  int tabPos = 0;
   for (size_t i = 0; i < buffers.size(); ++i) {
+    if (buffers[i]->IsHidden()) continue;
     std::wstring name = buffers[i]->GetPath();
     if (name.empty()) {
       name = buffers[i]->IsScratch() ? L"Scratch" : L"Untitled";
@@ -139,10 +141,11 @@ void UpdateTabs(HWND hwnd) {
     tie.mask = TCIF_TEXT | TCIF_IMAGE;
     tie.pszText = (LPWSTR)name.c_str();
     tie.iImage = buffers[i]->GetPath().empty() ? -1 : AddFileTypeIcon(g_tabImageList, buffers[i]->GetPath());
-    TabCtrl_InsertItem(g_tabHwnd, static_cast<int>(i), &tie);
+    TabCtrl_InsertItem(g_tabHwnd, tabPos, &tie);
+    tabPos++;
   }
   // Append all app tabs after buffer tabs
-  int appStart = static_cast<int>(buffers.size());
+  int appStart = static_cast<int>(VisibleBufferCount());
   for (size_t i = 0; i < g_appTabs.size(); ++i) {
     TCITEMW tci = {0};
     tci.mask = TCIF_TEXT | TCIF_IMAGE;
@@ -154,7 +157,16 @@ void UpdateTabs(HWND hwnd) {
   // Restore selection
   int curSel = (g_activeAppTab >= 0)
     ? appStart + g_activeAppTab
-    : static_cast<int>(g_editor->GetActiveBufferIndex());
+    : BufferToTabIndex(g_editor->GetActiveBufferIndex());
+  if (curSel < 0) {
+    curSel = 0;
+    size_t visCount = VisibleBufferCount();
+    if (visCount > 0) {
+      int firstVis = TabToBufferIndex(0);
+      if (firstVis >= 0)
+        g_editor->SwitchToBuffer(firstVis);
+    }
+  }
   TabCtrl_SetCurSel(g_tabHwnd, curSel);
   // Re-enable redraw
   SendMessage(g_tabHwnd, WM_SETREDRAW, TRUE, 0);

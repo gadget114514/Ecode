@@ -442,6 +442,7 @@ void Editor::LogMessage(const std::string &msg) {
       auto buffer = std::make_unique<Buffer>();
       buffer->SetPath(L"*Messages*");
       buffer->SetScratch(true);
+      buffer->SetHidden(SettingsManager::Instance().GetHideMessagesBuffer());
       m_messagesBuffer = buffer.get();
       m_buffers.push_back(std::move(buffer));
     }

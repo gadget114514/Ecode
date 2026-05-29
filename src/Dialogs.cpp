@@ -405,6 +405,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                    SettingsManager::Instance().IsNoTitleBar() ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(hDlg, IDC_REVERSE_SCROLL_DIRECTION,
                    SettingsManager::Instance().IsReverseScrollDirection() ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(hDlg, IDC_HIDE_MESSAGES_BUFFER,
+                   SettingsManager::Instance().GetHideMessagesBuffer() ? BST_CHECKED : BST_UNCHECKED);
 
     return (INT_PTR)TRUE;
   }
@@ -517,6 +519,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       SettingsManager::Instance().SetNoTitleBar(newNoTitleBar);
       SettingsManager::Instance().SetReverseScrollDirection(
           IsDlgButtonChecked(hDlg, IDC_REVERSE_SCROLL_DIRECTION) == BST_CHECKED);
+      SettingsManager::Instance().SetHideMessagesBuffer(
+          IsDlgButtonChecked(hDlg, IDC_HIDE_MESSAGES_BUFFER) == BST_CHECKED);
 
       SettingsManager::Instance().Save();
 

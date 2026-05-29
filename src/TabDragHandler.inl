@@ -10,9 +10,9 @@ static LRESULT CALLBACK TabSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
   case WM_LBUTTONDOWN: {
     TCHITTESTINFO hti = {{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, 0};
     int tabIndex = TabCtrl_HitTest(hwnd, &hti);
-    size_t bufCount = g_editor->GetBuffers().size();
-    int appEnd = static_cast<int>(bufCount + g_appTabs.size());
-    if (tabIndex >= static_cast<int>(bufCount) && tabIndex < appEnd) {
+    size_t visCount = VisibleBufferCount();
+    int appEnd = static_cast<int>(visCount + g_appTabs.size());
+    if (tabIndex >= static_cast<int>(visCount) && tabIndex < appEnd) {
       g_isDraggingTab = true;
       g_dragTabFrom = tabIndex;
       SetCapture(hwnd);
@@ -24,9 +24,9 @@ static LRESULT CALLBACK TabSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
       SetCursor(LoadCursor(nullptr, IDC_SIZEALL));
       TCHITTESTINFO hti = {{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, 0};
       int hoverTab = TabCtrl_HitTest(hwnd, &hti);
-      size_t bufCount = g_editor->GetBuffers().size();
-      int appEnd = static_cast<int>(bufCount + g_appTabs.size());
-      if (hoverTab >= static_cast<int>(bufCount) &&
+      size_t visCount = VisibleBufferCount();
+      int appEnd = static_cast<int>(visCount + g_appTabs.size());
+      if (hoverTab >= static_cast<int>(visCount) &&
           hoverTab < appEnd && hoverTab != g_dragTabFrom) {
         g_suppressTabChange = true;
         TabCtrl_SetCurSel(hwnd, hoverTab);
@@ -42,13 +42,13 @@ static LRESULT CALLBACK TabSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
 
       TCHITTESTINFO hti = {{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, 0};
       int dropTab = TabCtrl_HitTest(hwnd, &hti);
-      size_t bufCount = g_editor->GetBuffers().size();
-      int appEnd = static_cast<int>(bufCount + g_appTabs.size());
+      size_t visCount = VisibleBufferCount();
+      int appEnd = static_cast<int>(visCount + g_appTabs.size());
 
-      if (dropTab >= static_cast<int>(bufCount) &&
+      if (dropTab >= static_cast<int>(visCount) &&
           dropTab < appEnd && dropTab != g_dragTabFrom) {
-        int fromIdx = g_dragTabFrom - static_cast<int>(bufCount);
-        int toIdx = dropTab - static_cast<int>(bufCount);
+        int fromIdx = g_dragTabFrom - static_cast<int>(visCount);
+        int toIdx = dropTab - static_cast<int>(visCount);
         if (fromIdx >= 0 && fromIdx < static_cast<int>(g_appTabs.size()) &&
             toIdx >= 0 && toIdx < static_cast<int>(g_appTabs.size())) {
           std::swap(g_appTabs[fromIdx], g_appTabs[toIdx]);
