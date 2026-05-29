@@ -1,4 +1,6 @@
 # Ecode
+This application is terminal(shell gui) and text editor.
+
 
 There are same name editor gainning a lot of stars. but this editor and terminal just one star from me. Hahaha.
 
