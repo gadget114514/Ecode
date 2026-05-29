@@ -142,6 +142,18 @@ void SettingsManager::Load() {
     m_findStartDir = findDirBuf;
   }
 
+  wchar_t findPatBuf[256];
+  if (GetPrivateProfileStringW(L"Editor", L"FindPattern", L"", findPatBuf,
+                               256, path.c_str()) > 0) {
+    m_findPattern = findPatBuf;
+  }
+
+  wchar_t findExtBuf[256];
+  if (GetPrivateProfileStringW(L"Editor", L"FindExtFilter", L"", findExtBuf,
+                               256, path.c_str()) > 0) {
+    m_findExtFilter = findExtBuf;
+  }
+
   m_recentFiles.clear();
   for (int i = 1; i <= 10; ++i) {
     std::wstring key = L"Recent" + std::to_wstring(i);
@@ -432,6 +444,14 @@ void SettingsManager::Save() {
   if (!m_findStartDir.empty()) {
     WritePrivateProfileStringW(L"Editor", L"FindStartDirectory",
                                m_findStartDir.c_str(), path.c_str());
+  }
+  if (!m_findPattern.empty()) {
+    WritePrivateProfileStringW(L"Editor", L"FindPattern",
+                               m_findPattern.c_str(), path.c_str());
+  }
+  if (!m_findExtFilter.empty()) {
+    WritePrivateProfileStringW(L"Editor", L"FindExtFilter",
+                               m_findExtFilter.c_str(), path.c_str());
   }
 
   WritePrivateProfileStringW(L"Recent", NULL, NULL, path.c_str());

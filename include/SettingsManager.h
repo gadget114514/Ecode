@@ -140,6 +140,12 @@ public:
   std::wstring GetFindStartDirectory() const { return m_findStartDir; }
   void SetFindStartDirectory(const std::wstring &dir) { m_findStartDir = dir; }
 
+  std::wstring GetFindPattern() const { return m_findPattern; }
+  void SetFindPattern(const std::wstring &pat) { m_findPattern = pat; }
+
+  std::wstring GetFindExtFilter() const { return m_findExtFilter; }
+  void SetFindExtFilter(const std::wstring &filter) { m_findExtFilter = filter; }
+
   int GetCaretStyle() const { return m_caretStyle; }
   void SetCaretStyle(int style) { m_caretStyle = style; }
 
@@ -237,6 +243,8 @@ private:
   int m_shellEncoding; // 0=UTF8, 1=ShiftJIS
   std::wstring m_projectDirectory;
   std::wstring m_findStartDir;
+  std::wstring m_findPattern;
+  std::wstring m_findExtFilter;
   std::wstring m_bashPath;
   std::wstring m_defaultExtension;
   std::wstring m_pluginsDirectory;

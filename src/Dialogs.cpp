@@ -803,11 +803,34 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                     LPARAM lParam) {
   switch (message) {
   case WM_INITDIALOG: {
-    std::wstring findStart = SettingsManager::Instance().GetFindStartDirectory();
+    // Default to current file's directory, fallback to saved, fallback to "."
+    std::wstring findStart;
+    if (g_editor) {
+      Buffer *active = g_editor->GetActiveBuffer();
+      if (active) {
+        std::wstring filePath = active->GetPath();
+        if (!filePath.empty()) {
+          size_t pos = filePath.find_last_of(L"\\/");
+          if (pos != std::wstring::npos)
+            findStart = filePath.substr(0, pos);
+        }
+      }
+    }
+    if (findStart.empty())
+      findStart = SettingsManager::Instance().GetFindStartDirectory();
     if (findStart.empty()) findStart = L".";
     SetDlgItemTextW(hDlg, IDC_FIND_DIR, findStart.c_str());
+
+    std::wstring findPattern = SettingsManager::Instance().GetFindPattern();
+    SetDlgItemTextW(hDlg, IDC_FIND_PATTERN, findPattern.c_str());
+
+    std::wstring findExt = SettingsManager::Instance().GetFindExtFilter();
+    SetDlgItemTextW(hDlg, IDC_FIND_EXT, findExt.c_str());
+
     CheckDlgButton(hDlg, IDC_FIND_REGEX, BST_UNCHECKED);
     CheckDlgButton(hDlg, IDC_FIND_MATCH_CASE, BST_UNCHECKED);
+    CheckDlgButton(hDlg, IDC_FIND_SHOW_CURRENT, BST_CHECKED);
+    CheckDlgButton(hDlg, IDC_FIND_VERBOSE, BST_UNCHECKED);
     return (INT_PTR)TRUE;
   }
   case WM_COMMAND:
@@ -818,9 +841,13 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
       GetDlgItemTextW(hDlg, IDC_FIND_EXT, ext, 256);
       BOOL useRegex = IsDlgButtonChecked(hDlg, IDC_FIND_REGEX);
       BOOL matchCase = IsDlgButtonChecked(hDlg, IDC_FIND_MATCH_CASE);
+      BOOL showCurrent = IsDlgButtonChecked(hDlg, IDC_FIND_SHOW_CURRENT);
+      BOOL verbose = IsDlgButtonChecked(hDlg, IDC_FIND_VERBOSE);
 
       if (g_editor && wcslen(pattern) > 0 && wcslen(dir) > 0) {
         SettingsManager::Instance().SetFindStartDirectory(dir);
+        SettingsManager::Instance().SetFindPattern(pattern);
+        SettingsManager::Instance().SetFindExtFilter(ext);
         SettingsManager::Instance().Save();
 
         // Disable controls, start search
@@ -830,10 +857,12 @@ INT_PTR CALLBACK FindInFilesDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         EnableWindow(GetDlgItem(hDlg, IDC_FIND_EXT), FALSE);
         EnableWindow(GetDlgItem(hDlg, IDC_FIND_REGEX), FALSE);
         EnableWindow(GetDlgItem(hDlg, IDC_FIND_MATCH_CASE), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_SHOW_CURRENT), FALSE);
+        EnableWindow(GetDlgItem(hDlg, IDC_FIND_VERBOSE), FALSE);
         EnableWindow(GetDlgItem(hDlg, IDC_FIND_BROWSE), FALSE);
         SetDlgItemTextW(hDlg, IDCANCEL, L"Stop");
 
-        g_editor->FindInFiles(dir, pattern, ext, useRegex ? true : false, matchCase ? true : false);
+        g_editor->FindInFiles(dir, pattern, ext, useRegex ? true : false, matchCase ? true : false, showCurrent ? true : false, verbose ? true : false);
 
         // Nested message loop while search is active
         MSG msg;

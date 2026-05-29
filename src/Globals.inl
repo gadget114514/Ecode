@@ -201,7 +201,8 @@ void HandleDestroy(HWND hwnd);
 #define WM_GREP_RESULT   (WM_USER + 202)
 #define WM_GREP_PROGRESS (WM_USER + 203)
 #define WM_GREP_COMPLETE (WM_USER + 204)
-#define WM_DEFERRED_FOCUS (WM_USER + 205)
+#define WM_GREP_CURRENT_FILE (WM_USER + 205)
+#define WM_DEFERRED_FOCUS (WM_USER + 207)
 #define WM_SET_PROCESS_HANDLE (WM_USER + 206)
 #define WM_TERMINAL_PROGRESS (WM_USER + 299)
 
@@ -211,6 +212,8 @@ struct GrepSearchParams {
     std::wstring extFilter;
     bool useRegex;
     bool matchCase;
+    bool showCurrentFile;
+    bool verbose;
 };
 struct ShellOutput {
   Buffer *buffer;

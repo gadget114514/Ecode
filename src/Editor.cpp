@@ -88,6 +88,24 @@ static void SendResultText(const std::string &text) {
   PostMessage(g_mainHwnd, WM_GREP_RESULT, 0, (LPARAM)batch);
 }
 
+static bool ExtMatch(std::wstring ext, const std::wstring &pattern) {
+  std::wstring pat = pattern;
+  bool leadingStar = !pat.empty() && pat[0] == L'*';
+  bool trailingStar = !pat.empty() && pat.back() == L'*' && pat.size() > 1;
+  if (leadingStar) pat.erase(0, 1);
+  if (trailingStar) pat.pop_back();
+  if (pat.empty()) return true;
+  if (leadingStar && trailingStar)
+    return ext.find(pat) != std::wstring::npos;
+  if (leadingStar)
+    return ext.size() >= pat.size() &&
+           _wcsicmp(ext.c_str() + ext.size() - pat.size(), pat.c_str()) == 0;
+  if (trailingStar)
+    return ext.size() >= pat.size() &&
+           _wcsnicmp(ext.c_str(), pat.c_str(), pat.size()) == 0;
+  return _wcsicmp(ext.c_str(), pat.c_str()) == 0;
+}
+
 static DWORD WINAPI GrepSearchThread(LPVOID param) {
   GrepSearchParams *params = (GrepSearchParams*)param;
 
@@ -136,16 +154,27 @@ static DWORD WINAPI GrepSearchThread(LPVOID param) {
           size_t p = 0;
           while ((p = filter.find(L';')) != std::wstring::npos) {
             std::wstring e = filter.substr(0, p);
-            if (_wcsicmp(ext.c_str(), e.c_str()) == 0) { found = true; break; }
+            if (ExtMatch(ext, e)) { found = true; break; }
             filter.erase(0, p + 1);
           }
-          if (!found && _wcsicmp(ext.c_str(), filter.c_str()) != 0) continue;
+          if (!found && !ExtMatch(ext, filter)) continue;
+        }
+        if (params->showCurrentFile) {
+          auto *curPath = new std::wstring(entry.path().wstring());
+          PostMessage(g_mainHwnd, WM_GREP_CURRENT_FILE, 0, (LPARAM)curPath);
+        }
+        std::wstring wPath = entry.path().wstring();
+        if (params->verbose) {
+          batchText += "-- " + WStringToString(wPath) + "\n";
+          if (batchText.length() >= 4096) {
+            SendResultText(batchText);
+            batchText.clear();
+          }
         }
         std::ifstream file(entry.path());
         if (!file) continue;
         std::string line;
         int lineNum = 0;
-        std::wstring wPath = entry.path().wstring();
         while (std::getline(file, line)) {
           if (line.length() > 4096) break;
           lineNum++;
@@ -169,6 +198,11 @@ static DWORD WINAPI GrepSearchThread(LPVOID param) {
     DebugLog("GrepSearchThread - Exception during search", LOG_ERROR);
   }
 
+  if (params->verbose) {
+    batchText += "-- Search complete: " + std::to_string(totalMatches) + " match(es) in " +
+                 std::to_string(filesProcessed) + " file(s)\n";
+  }
+
   SendResultText(batchText);
   PostMessage(g_mainHwnd, WM_GREP_COMPLETE, totalMatches, 0);
 
@@ -178,7 +212,8 @@ static DWORD WINAPI GrepSearchThread(LPVOID param) {
 
 void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
                          const std::wstring &extFilter,
-                         bool useRegex, bool matchCase) {
+                         bool useRegex, bool matchCase, bool showCurrentFile,
+                         bool verbose) {
   extern HWND g_mainHwnd;
 
   Buffer *results = GetBufferByName(L"*Find Results*");
@@ -202,6 +237,8 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
   std::string header = "Grep: \"" + WStringToString(pattern) + "\" in " + WStringToString(dir) + "\n";
   if (!extFilter.empty())
     header += "Filter: " + WStringToString(extFilter) + "\n";
+  if (verbose)
+    header += "Mode: verbose\n";
   header += "\n";
   results->Insert(0, header);
   results->SetCaretPos(results->GetTotalLength());
@@ -209,7 +246,7 @@ void Editor::FindInFiles(const std::wstring &dir, const std::wstring &pattern,
   UpdateMenu(g_mainHwnd);
 
   auto *params = new GrepSearchParams{
-    dir, pattern, extFilter, useRegex, matchCase
+    dir, pattern, extFilter, useRegex, matchCase, showCurrentFile, verbose
   };
 
   g_grepSearchActive = true;

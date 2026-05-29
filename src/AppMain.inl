@@ -297,6 +297,23 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     }
     return 0;
   }
+  case WM_GREP_CURRENT_FILE: {
+    std::wstring *path = (std::wstring*)lParam;
+    if (path) {
+      Buffer *buf = g_editor ? g_editor->GetBufferByName(L"*Find Results*") : nullptr;
+      if (buf) {
+        std::string line = "--> Searching: " + WStringToString(*path) + "\n";
+        buf->Insert(buf->GetTotalLength(), line);
+        if (g_editor->GetActiveBuffer() == buf) {
+          buf->SetCaretPos(buf->GetTotalLength());
+          EnsureCaretVisible(hwnd);
+          InvalidateRect(hwnd, NULL, FALSE);
+        }
+      }
+      delete path;
+    }
+    return 0;
+  }
   case WM_GREP_PROGRESS: {
     int filesProcessed = (int)lParam;
     SendMessage(g_progressHwnd, PBM_SETPOS, filesProcessed % 100, 0);
@@ -308,6 +325,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     SendMessage(g_progressHwnd, PBM_SETPOS, 0, 0);
     Buffer *buf = g_editor ? g_editor->GetBufferByName(L"*Find Results*") : nullptr;
     if (buf) {
+      // Remove the last "--> Searching:" line if present
+      std::string allText = buf->GetText(0, buf->GetTotalLength());
+      size_t searchPos = allText.rfind("--> Searching: ");
+      if (searchPos != std::string::npos) {
+        size_t lineStart = allText.rfind('\n', searchPos - 1);
+        if (lineStart == std::string::npos) lineStart = 0;
+        else lineStart++;
+        size_t lineEnd = allText.find('\n', searchPos);
+        if (lineEnd != std::string::npos) lineEnd++;
+        else lineEnd = allText.length();
+        buf->Delete(lineStart, lineEnd - lineStart);
+      }
       std::string done = "\n--- Done. " + std::to_string(totalMatches) + " matches found. ---\n";
       buf->Insert(buf->GetTotalLength(), done);
       if (g_editor->GetActiveBuffer() == buf) {
