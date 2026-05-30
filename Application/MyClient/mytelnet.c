@@ -26,14 +26,15 @@
 
 static SOCKET sock = INVALID_SOCKET;
 static int use_ctrlc = 0;
-static int force_noecho = 0;
+static int raw_mode = 0;
+static int force_noecho = 1;
 static volatile int running = 1;
 static HANDLE hConsole = INVALID_HANDLE_VALUE;
 static DWORD original_mode = 0;
 static unsigned long bytes_sent = 0, bytes_recv = 0;
 static const char* remote_host = "";
 static int remote_port = 0;
-static int local_echo = 1;
+static int local_echo = 0;
 
 static void restore_console(void) {
     if (hConsole != INVALID_HANDLE_VALUE)
@@ -62,6 +63,11 @@ static void send_iac(SOCKET s, int cmd, int opt) {
 }
 
 static void process_telnet_data(unsigned char* data, int len) {
+    if (raw_mode) {
+        fwrite(data, 1, len, stdout);
+        fflush(stdout);
+        return;
+    }
     static int state = 0;
     unsigned char out[BUFSIZE];
     int out_len = 0;
@@ -162,7 +168,10 @@ int main(int argc, char* argv[]) {
                        "  host        Remote host (default 127.0.0.1)\r\n"
                        "  port        Remote port (default 23)\r\n"
                        "  --c         Use Ctrl+C to exit (default: Ctrl+])\r\n"
+                       "  --echo      Enable local echo (default: off)\r\n"
                        "  --noecho    Disable local echo\r\n"
+                       "  --raw       Raw mode: pass all data through (no IAC processing)\r\n"
+                       "  --no-raw    Telnet negotiation mode (default)\r\n"
                        "  -h, --help  Display this help and exit\r\n",
                        argv[0]);
                 return 0;
@@ -171,6 +180,13 @@ int main(int argc, char* argv[]) {
         if (argv[i][0] == '-' && argv[i][1] == '-') {
             if (strcmp(argv[i], "--c") == 0) {
                 use_ctrlc = 1;
+            } else if (strcmp(argv[i], "--echo") == 0) {
+                force_noecho = 0;
+                local_echo = 1;
+            } else if (strcmp(argv[i], "--raw") == 0) {
+                raw_mode = 1;
+            } else if (strcmp(argv[i], "--no-raw") == 0) {
+                raw_mode = 0;
             } else if (strcmp(argv[i], "--noecho") == 0) {
                 force_noecho = 1;
                 local_echo = 0;
