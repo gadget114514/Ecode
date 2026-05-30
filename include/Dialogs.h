@@ -22,4 +22,8 @@ public:
   enum class ConfirmationResult { Save, Discard, Cancel };
   static ConfirmationResult
   ShowSaveConfirmationDialog(HWND hwnd, const std::wstring &filename);
+
+  enum class FileModifiedAction { Reload, Keep, OpenInNewBuffer };
+  static FileModifiedAction
+  ShowFileModifiedDialog(HWND hwnd, const std::wstring &filename, bool isDirty);
 };

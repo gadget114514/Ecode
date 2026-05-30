@@ -404,6 +404,10 @@ add_executable(test_piecetable_advanced EXCLUDE_FROM_ALL
     src/PieceTable.cpp
 )
 
+add_executable(test_telnetd_iac EXCLUDE_FROM_ALL
+    tests/test_telnetd_iac.c
+)
+
 # Libraries to link
 target_link_libraries(ecode
     user32
@@ -455,6 +459,7 @@ set_target_properties(test_memorymappedfile PROPERTIES RUNTIME_OUTPUT_DIRECTORY 
 set_target_properties(test_fileutils PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_editor_buffer_ops PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_piecetable_advanced PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+set_target_properties(test_telnetd_iac PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 
 # Copy scripts directory to output
 add_custom_command(TARGET ecode POST_BUILD

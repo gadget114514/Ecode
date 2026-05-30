@@ -1773,6 +1773,34 @@ Dialogs::ShowSaveConfirmationDialog(HWND hwnd, const std::wstring &filename) {
   return ConfirmationResult::Cancel;
 }
 
+Dialogs::FileModifiedAction
+Dialogs::ShowFileModifiedDialog(HWND hwnd, const std::wstring &filename,
+                                bool isDirty) {
+  std::wstring name = filename.empty() ? L"Untitled" : filename;
+  std::wstring msg;
+  if (isDirty) {
+    msg = L"File has been modified externally:\n" + name +
+          L"\n\nThe buffer has unsaved changes.\n\n"
+          L"What do you want to do?\n"
+          L"Yes    = Reload from disk (discard changes)\n"
+          L"No     = Keep current buffer\n"
+          L"Cancel = Open in new buffer";
+  } else {
+    msg = L"File has been modified externally:\n" + name +
+          L"\n\nWhat do you want to do?\n"
+          L"Yes    = Reload from disk\n"
+          L"No     = Keep current buffer\n"
+          L"Cancel = Open in new buffer";
+  }
+  int result = MessageBoxW(hwnd, msg.c_str(), L"Ecode - File Modified",
+                           MB_YESNOCANCEL | MB_ICONWARNING);
+  if (result == IDYES)
+    return FileModifiedAction::Reload;
+  if (result == IDNO)
+    return FileModifiedAction::Keep;
+  return FileModifiedAction::OpenInNewBuffer;
+}
+
 std::wstring Dialogs::BrowseForFolder(HWND hwnd) {
   std::wstring folderPath;
   IFileOpenDialog *pfd = nullptr;

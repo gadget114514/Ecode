@@ -3,6 +3,7 @@
 #include "MemoryMappedFile.h"
 #include "PieceTable.h"
 #include <algorithm>
+#include <filesystem>
 #include <memory>
 #include <set>
 #include <string>
@@ -94,6 +95,12 @@ public:
   const std::wstring &GetPath() const { return m_filePath; }
   void SetPath(const std::wstring &path) { m_filePath = path; }
   bool IsDirty() const { return m_isDirty; }
+
+  // File modification time tracking
+  void UpdateFileTime();
+  bool HasFile() const { return !m_filePath.empty() && m_filePath[0] != L'*'; }
+  bool IsFileModifiedExternally() const;
+  std::filesystem::file_time_type GetFileTime() const { return m_fileTime; }
 
   void SetScratch(bool scratch) { m_isScratch = scratch; }
   bool IsScratch() const { return m_isScratch; }
@@ -191,6 +198,7 @@ private:
   std::vector<HighlightRange> m_highlights;
   bool m_isDirty;
   bool m_isScratch;
+  std::filesystem::file_time_type m_fileTime;
   bool m_isShell = false;
   bool m_isHidden = false;
   BufferKind m_kind = BufferKind::Normal;
