@@ -842,6 +842,26 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     break;
   }
 
+  case IDM_FILE_RELOAD: {
+    Buffer *buf = g_editor->GetActiveBuffer();
+    if (buf && buf->HasFile() && !buf->IsScratch() && !buf->IsShell()) {
+      if (buf->IsFileModifiedExternally()) {
+        auto action = Dialogs::ShowFileModifiedDialog(
+            hwnd, buf->GetPath(), buf->IsDirty());
+        if (action == Dialogs::FileModifiedAction::Reload) {
+          buf->OpenFile(buf->GetPath());
+        } else if (action == Dialogs::FileModifiedAction::OpenInNewBuffer) {
+          g_editor->OpenFile(buf->GetPath());
+        }
+      } else {
+        buf->OpenFile(buf->GetPath());
+      }
+      UpdateMenu(hwnd);
+      InvalidateRect(hwnd, NULL, FALSE);
+    }
+    break;
+  }
+
   case IDM_FILE_CLOSE:
     if (g_editor->GetActiveBuffer()) {
       if (!PromptSaveBuffer(hwnd, g_editor->GetActiveBuffer()))
