@@ -16,6 +16,7 @@ public:
   void Write(const std::string &text);
   void Stop();
   bool IsRunning() const { return m_running; }
+  void SetCodePage(UINT cp) { m_codePage = cp; }
 
 private:
   static DWORD WINAPI ReadThreadProc(LPVOID lpParam);
@@ -26,4 +27,6 @@ private:
   HANDLE m_hThread;
   std::function<void(const std::string &)> m_onOutput;
   std::atomic<bool> m_running;
+  UINT m_codePage;
+  std::string m_pendingOutput;
 };
