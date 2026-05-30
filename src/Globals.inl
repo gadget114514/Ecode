@@ -315,10 +315,12 @@ extern std::vector<TabRef> g_tabOrder;
 
 inline void RebuildTabOrder() {
   g_tabOrder.clear();
-  const auto &buffers = g_editor->GetBuffers();
-  for (size_t i = 0; i < buffers.size(); i++)
-    if (!buffers[i]->IsHidden())
-      g_tabOrder.push_back({true, (int)i});
+  if (g_editor) {
+    const auto &buffers = g_editor->GetBuffers();
+    for (size_t i = 0; i < buffers.size(); i++)
+      if (!buffers[i]->IsHidden())
+        g_tabOrder.push_back({true, (int)i});
+  }
   for (size_t i = 0; i < g_appTabs.size(); i++)
     g_tabOrder.push_back({false, (int)i});
 }

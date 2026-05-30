@@ -498,7 +498,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           }
         } else {
           int bufIdx = ref.index;
-          if (bufIdx >= 0 && (size_t)bufIdx < g_editor->GetBuffers().size()) {
+          if (bufIdx >= 0 && g_editor &&
+              (size_t)bufIdx < g_editor->GetBuffers().size()) {
             for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
             g_activeAppTab = -1;
             ShowScrollBar(hwnd, SB_BOTH, TRUE);
@@ -610,7 +611,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         HMENU hMenu = CreatePopupMenu();
         if (isAppTab) {
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close");
-        } else if (bufIdx >= 0) {
+        } else if (bufIdx >= 0 && g_editor &&
+                   (size_t)bufIdx < g_editor->GetBuffers().size()) {
           auto &buffers = g_editor->GetBuffers();
           AppendMenu(hMenu, MF_STRING, IDM_TAB_COPY_PATH, L"Copy Full Path");
           AppendMenu(hMenu, MF_STRING, IDM_TAB_RELOAD, L"Reload");
@@ -622,49 +624,55 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         DestroyMenu(hMenu);
 
         if (res == IDM_TAB_COPY_PATH) {
-          auto &buffers = g_editor->GetBuffers();
-          if (bufIdx >= 0 && bufIdx < (int)buffers.size()) {
-            std::wstring path = buffers[bufIdx]->GetPath();
-            if (path.empty()) {
-              path = buffers[bufIdx]->IsScratch() ? L"Scratch" : L"Untitled";
-            }
-            if (OpenClipboard(hwnd)) {
-              EmptyClipboard();
-              size_t cbStr = (path.length() + 1) * sizeof(wchar_t);
-              HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, cbStr);
-              if (hMem) {
-                memcpy(GlobalLock(hMem), path.c_str(), cbStr);
-                GlobalUnlock(hMem);
-                SetClipboardData(CF_UNICODETEXT, hMem);
+          if (g_editor) {
+            auto &buffers = g_editor->GetBuffers();
+            if (bufIdx >= 0 && bufIdx < (int)buffers.size()) {
+              std::wstring path = buffers[bufIdx]->GetPath();
+              if (path.empty()) {
+                path = buffers[bufIdx]->IsScratch() ? L"Scratch" : L"Untitled";
               }
-              CloseClipboard();
+              if (OpenClipboard(hwnd)) {
+                EmptyClipboard();
+                size_t cbStr = (path.length() + 1) * sizeof(wchar_t);
+                HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, cbStr);
+                if (hMem) {
+                  memcpy(GlobalLock(hMem), path.c_str(), cbStr);
+                  GlobalUnlock(hMem);
+                  SetClipboardData(CF_UNICODETEXT, hMem);
+                }
+                CloseClipboard();
+              }
             }
           }
         } else if (res == IDM_TAB_RELOAD) {
-          auto &buffers = g_editor->GetBuffers();
-          if (bufIdx >= 0 && bufIdx < (int)buffers.size()) {
-            std::wstring path = buffers[bufIdx]->GetPath();
-            if (!path.empty() && !buffers[bufIdx]->IsScratch() && !buffers[bufIdx]->IsShell()) {
-              buffers[bufIdx]->OpenFile(path);
-              g_editor->SwitchToBuffer(bufIdx);
-              UpdateMenu(hwnd);
-              InvalidateRect(hwnd, NULL, FALSE);
+          if (g_editor) {
+            auto &buffers = g_editor->GetBuffers();
+            if (bufIdx >= 0 && bufIdx < (int)buffers.size()) {
+              std::wstring path = buffers[bufIdx]->GetPath();
+              if (!path.empty() && !buffers[bufIdx]->IsScratch() && !buffers[bufIdx]->IsShell()) {
+                buffers[bufIdx]->OpenFile(path);
+                g_editor->SwitchToBuffer(bufIdx);
+                UpdateMenu(hwnd);
+                InvalidateRect(hwnd, NULL, FALSE);
+              }
             }
           }
         } else if (res == IDM_TAB_SAVE || res == IDM_TAB_SAVE_AS) {
-          auto &buffers = g_editor->GetBuffers();
-          if (bufIdx >= 0 && bufIdx < (int)buffers.size()) {
-            int prevActive = g_activeAppTab;
-            if (prevActive >= 0) {
-              for (auto &t : g_appTabs)
-                if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-              g_activeAppTab = -1;
+          if (g_editor) {
+            auto &buffers = g_editor->GetBuffers();
+            if (bufIdx >= 0 && bufIdx < (int)buffers.size()) {
+              int prevActive = g_activeAppTab;
+              if (prevActive >= 0) {
+                for (auto &t : g_appTabs)
+                  if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+                g_activeAppTab = -1;
+              }
+              g_editor->SwitchToBuffer(bufIdx);
+              if (res == IDM_TAB_SAVE)
+                PostMessageW(hwnd, WM_COMMAND, IDM_FILE_SAVE, 0);
+              else
+                PostMessageW(hwnd, WM_COMMAND, IDM_FILE_SAVE_AS, 0);
             }
-            g_editor->SwitchToBuffer(bufIdx);
-            if (res == IDM_TAB_SAVE)
-              PostMessageW(hwnd, WM_COMMAND, IDM_FILE_SAVE, 0);
-            else
-              PostMessageW(hwnd, WM_COMMAND, IDM_FILE_SAVE_AS, 0);
           }
         } else if (res == IDM_TAB_CLOSE_TERMINAL) {
           if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {

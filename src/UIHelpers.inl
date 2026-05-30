@@ -132,12 +132,14 @@ void UpdateTabs(HWND hwnd) {
   SendMessage(g_tabHwnd, WM_SETREDRAW, FALSE, 0);
   TabCtrl_DeleteAllItems(g_tabHwnd);
 
-  const auto &buffers = g_editor->GetBuffers();
+  const size_t bufferCount = g_editor ? g_editor->GetBuffers().size() : 0;
   for (size_t ti = 0; ti < g_tabOrder.size(); ++ti) {
     auto &ref = g_tabOrder[ti];
     if (ref.isBuffer) {
       size_t i = (size_t)ref.index;
-      if (i >= buffers.size() || buffers[i]->IsHidden()) continue;
+      if (i >= bufferCount) continue;
+      auto &buffers = g_editor->GetBuffers();
+      if (buffers[i]->IsHidden()) continue;
       std::wstring name = buffers[i]->GetPath();
       if (name.empty()) {
         name = buffers[i]->IsScratch() ? L"Scratch" : L"Untitled";
@@ -166,20 +168,21 @@ void UpdateTabs(HWND hwnd) {
 
   // Restore selection
   int curSel = -1;
+  int activeBufIdx = g_editor ? (int)g_editor->GetActiveBufferIndex() : -1;
   for (size_t i = 0; i < g_tabOrder.size(); i++) {
     auto &ref = g_tabOrder[i];
     if (g_activeAppTab >= 0 && !ref.isBuffer && ref.index == g_activeAppTab) {
       curSel = (int)i;
       break;
     } else if (g_activeAppTab < 0 && ref.isBuffer &&
-               ref.index == (int)g_editor->GetActiveBufferIndex()) {
+               ref.index == activeBufIdx) {
       curSel = (int)i;
       break;
     }
   }
   if (curSel < 0) {
     curSel = 0;
-    if (!g_tabOrder.empty() && g_tabOrder[0].isBuffer)
+    if (g_editor && !g_tabOrder.empty() && g_tabOrder[0].isBuffer)
       g_editor->SwitchToBuffer(g_tabOrder[0].index);
   }
   TabCtrl_SetCurSel(g_tabHwnd, curSel);

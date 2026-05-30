@@ -80,6 +80,7 @@ typedef struct {
     HANDLE  hShellProc;
     HANDLE  hShellThread;
     HANDLE  hOutThread;
+    HANDLE  hShutdownEvent;
     volatile LONG running;
 } CLIENT_CTX;
 
@@ -440,6 +441,7 @@ static int create_conpty(CLIENT_CTX *ctx, wchar_t *envBlock) {
 
 /* ================================================================
  * Output thread  -  ConPTY pipe -> socket
+ * Uses PeekNamedPipe polling so we can detect child process exit.
  * ================================================================ */
 DWORD WINAPI output_thread(LPVOID param) {
     CLIENT_CTX *ctx = (CLIENT_CTX *)param;
@@ -447,8 +449,26 @@ DWORD WINAPI output_thread(LPVOID param) {
     unsigned char out[8192];
     DWORD n;
 
-    while (1) {
-        if (!ReadFile(ctx->hPipeOutRead, in, sizeof(in), &n, NULL)) {
+    while (ctx->running && g_running) {
+        DWORD avail = 0;
+        if (!PeekNamedPipe(ctx->hPipeOutRead, NULL, 0, NULL, &avail, NULL)) {
+            fprintf(stderr, "[ERR] output_thread: PeekNamedPipe failed, error=%lu\r\n", GetLastError());
+            break;
+        }
+        if (avail == 0) {
+            if (ctx->hShutdownEvent) {
+                if (WaitForSingleObject(ctx->hShutdownEvent, 10) == WAIT_OBJECT_0) {
+                    VPRINT("output_thread: shutdown signaled");
+                    break;
+                }
+            } else {
+                Sleep(10);
+            }
+            continue;
+        }
+
+        DWORD toRead = min(avail, (DWORD)sizeof(in));
+        if (!ReadFile(ctx->hPipeOutRead, in, toRead, &n, NULL)) {
             fprintf(stderr, "[ERR] output_thread: ReadFile failed, error=%lu\r\n", GetLastError());
             break;
         }
@@ -480,8 +500,25 @@ DWORD WINAPI output_thread(LPVOID param) {
         }
     }
 
+    /* Drain remaining pipe data (non-blocking) */
+    DWORD avail;
+    while (PeekNamedPipe(ctx->hPipeOutRead, NULL, 0, NULL, &avail, NULL) && avail > 0) {
+        DWORD toRead = min(avail, (DWORD)sizeof(in));
+        if (!ReadFile(ctx->hPipeOutRead, in, toRead, &n, NULL) || n == 0)
+            break;
+        int o = 0;
+        for (DWORD i = 0; i < n && o < (int)sizeof(out) - 2; i++) {
+            unsigned char c = (unsigned char)in[i];
+            if (c == TEL_IAC) { out[o++] = TEL_IAC; out[o++] = TEL_IAC; }
+            else              { out[o++] = c; }
+        }
+        if (o > 0 && !send_all(ctx->sock, (const char *)out, o))
+            break;
+    }
+
     shutdown(ctx->sock, SD_SEND);
     InterlockedExchange(&ctx->running, 0);
+    SetEvent(ctx->hShutdownEvent);
     return 0;
 }
 
@@ -566,8 +603,13 @@ DWORD WINAPI client_thread(LPVOID param) {
         return 0;
     }
 
+    ctx->hShutdownEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     ctx->hOutThread = CreateThread(NULL, 0, output_thread, ctx, 0, NULL);
     VPRINT("output thread started");
+
+    /* Set a 1-second recv timeout so we can detect child process exit */
+    DWORD rcvtimeo = 1000;
+    setsockopt(ctx->sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&rcvtimeo, sizeof(rcvtimeo));
 
     unsigned char buf[4096];
     unsigned char data[4096];
@@ -579,8 +621,27 @@ DWORD WINAPI client_thread(LPVOID param) {
             VPRINT("client already stopped");
             break;
         }
+        /* Check if shutdown was signaled (child process exited) */
+        if (WaitForSingleObject(ctx->hShutdownEvent, 0) == WAIT_OBJECT_0) {
+            VPRINT("shutdown event signaled");
+            break;
+        }
         int ret = recv(ctx->sock, (char *)rbuf, sizeof(rbuf), 0);
-        if (ret <= 0) { VPRINT("recv returned %d, client disconnected", ret); break; }
+        if (ret == SOCKET_ERROR) {
+            int wsaErr = WSAGetLastError();
+            if (wsaErr == WSAETIMEDOUT) {
+                /* Timeout — check if child process has exited */
+                if (WaitForSingleObject(ctx->hShellProc, 0) == WAIT_OBJECT_0) {
+                    VPRINT("child process has exited");
+                    SetEvent(ctx->hShutdownEvent);
+                    break;
+                }
+                continue;
+            }
+            VPRINT("recv failed: %d", wsaErr);
+            break;
+        }
+        if (ret == 0) { VPRINT("client disconnected"); break; }
         VPRINT("sock->pipe %d bytes", ret);
         if (g_verbose) {
             char dbg[128]; int di = 0;
@@ -621,6 +682,10 @@ done:
 
     free(envBlock);
 
+    /* Signal shutdown event so output_thread can exit promptly */
+    if (ctx->hShutdownEvent) SetEvent(ctx->hShutdownEvent);
+
+    /* Close pipe handles to unblock any pending I/O */
     if (ctx->hPipeInWrite) { CloseHandle(ctx->hPipeInWrite); ctx->hPipeInWrite = NULL; }
     if (ctx->hPipeOutRead) { CloseHandle(ctx->hPipeOutRead); ctx->hPipeOutRead = NULL; }
 
@@ -632,6 +697,8 @@ done:
     if (ctx->hpc)          { ConPtyClose(ctx->hpc); }
     if (ctx->hShellProc)   { WaitForSingleObject(ctx->hShellProc, 5000); CloseHandle(ctx->hShellProc); }
     if (ctx->hShellThread) { CloseHandle(ctx->hShellThread); }
+
+    if (ctx->hShutdownEvent) CloseHandle(ctx->hShutdownEvent);
 
     closesocket(ctx->sock);
     free(ctx);
