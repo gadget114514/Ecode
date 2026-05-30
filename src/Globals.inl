@@ -302,6 +302,9 @@ extern bool g_isDraggingTab;
 extern int  g_dragTabFrom;
 extern bool g_suppressTabChange;
 extern WNDPROC g_oldTabProc;
+extern HFONT g_hTabFont;
+extern HFONT g_hTabFontActive;
+extern int g_lastTabFontStyle;
 extern UINT g_uFindMsgString;
 
 // IME inline composition state

@@ -131,6 +131,10 @@ public:
   int GetTabGridRefreshIntervalMs() const { return m_tabGridRefreshIntervalMs; }
   void SetTabGridRefreshIntervalMs(int ms) { m_tabGridRefreshIntervalMs = ms; }
 
+  // Tab font style: 0=regular, 1=bold(default), 2=italic, 3=bold italic
+  int GetTabActiveFontStyle() const { return m_tabActiveFontStyle; }
+  void SetTabActiveFontStyle(int style) { m_tabActiveFontStyle = style; }
+
   // AI Settings
   std::wstring GetAIVendor() const { return m_aiVendor; }
   void SetAIVendor(const std::wstring &vendor) { m_aiVendor = vendor; }
@@ -284,6 +288,7 @@ private:
 
   bool m_reverseScrollDirection = false;
   bool m_hideMessagesBuffer = true;
+  int m_tabActiveFontStyle = 1;
   std::vector<ThemeEntry> m_themes;
   std::wstring m_activeTheme;
   std::vector<std::wstring> m_hiddenPlugins;

@@ -106,6 +106,9 @@ void SettingsManager::Load() {
   m_tabGridRefreshIntervalMs =
       GetPrivateProfileIntW(L"TabGrid", L"RefreshIntervalMs", 1000, path.c_str());
   if (m_tabGridRefreshIntervalMs < 200) m_tabGridRefreshIntervalMs = 200;
+  m_tabActiveFontStyle =
+      GetPrivateProfileIntW(L"Tab", L"ActiveFontStyle", 1, path.c_str());
+  if (m_tabActiveFontStyle < 0 || m_tabActiveFontStyle > 3) m_tabActiveFontStyle = 1;
 
   wchar_t bashBuf[MAX_PATH];
   if (GetPrivateProfileStringW(L"Editor", L"BashPath", L"", bashBuf,
@@ -448,6 +451,7 @@ void SettingsManager::Save() {
   WriteInt(L"TabGrid", L"CellHeight", m_tabGridCellH);
   WriteInt(L"TabGrid", L"RefreshEnabled",    m_tabGridRefreshEnabled ? 1 : 0);
   WriteInt(L"TabGrid", L"RefreshIntervalMs", m_tabGridRefreshIntervalMs);
+  WriteInt(L"Tab", L"ActiveFontStyle", m_tabActiveFontStyle);
   if (!m_defaultExtension.empty()) {
     WritePrivateProfileStringW(L"Editor", L"DefaultExtension",
                                m_defaultExtension.c_str(), path.c_str());

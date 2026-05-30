@@ -524,6 +524,33 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           }
         }
       }
+    } else if (pnm->hwndFrom == g_tabHwnd && pnm->code == NM_CUSTOMDRAW) {
+      LPNMCUSTOMDRAW pcd = (LPNMCUSTOMDRAW)lParam;
+      if (pcd->dwDrawStage == CDDS_PREPAINT) {
+        return CDRF_NOTIFYITEMDRAW;
+      } else if (pcd->dwDrawStage == CDDS_ITEMPREPAINT) {
+        int curSel = TabCtrl_GetCurSel(g_tabHwnd);
+        if (pcd->dwItemSpec == (DWORD_PTR)curSel) {
+          int style = SettingsManager::Instance().GetTabActiveFontStyle();
+          if (style > 0) {
+            if (!g_hTabFontActive || g_lastTabFontStyle != style) {
+              if (g_hTabFontActive) { DeleteObject(g_hTabFontActive); g_hTabFontActive = nullptr; }
+              g_lastTabFontStyle = style;
+              LOGFONTW lf;
+              if (GetObjectW(g_hTabFont, sizeof(lf), &lf)) {
+                lf.lfWeight = (style == 1 || style == 3) ? FW_BOLD : FW_NORMAL;
+                lf.lfItalic = (style == 2 || style == 3) ? TRUE : FALSE;
+                g_hTabFontActive = CreateFontIndirectW(&lf);
+              }
+            }
+            if (g_hTabFontActive) {
+              SelectObject(pcd->hdc, g_hTabFontActive);
+              return CDRF_NEWFONT;
+            }
+          }
+        }
+        return CDRF_DODEFAULT;
+      }
     } else if (pnm->code == TTN_GETDISPINFOW) {
       NMTTDISPINFOW *pdi = (NMTTDISPINFOW *)lParam;
       if (pdi->hdr.hwndFrom == TabCtrl_GetToolTips(g_tabHwnd)) {
@@ -539,24 +566,28 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
             }
             wcsncpy_s(pdi->szText, path.c_str(), _countof(pdi->szText));
             pdi->szText[_countof(pdi->szText) - 1] = L'\0';
+            pdi->lpszText = pdi->szText;
+            pdi->uFlags |= TTF_DI_SETITEM;
           }
         } else if (tabIndex >= (int)visCount &&
                    tabIndex < (int)(visCount + g_appTabs.size())) {
           int appIdx = tabIndex - (int)visCount;
           auto &tab = g_appTabs[appIdx];
+          std::wstring tip;
           if (tab.type == TAB_TYPE_TERMINAL) {
-            std::wstring tip;
             if (!tab.command.empty())
               tip = L"Command: " + tab.command;
             if (!tab.directory.empty()) {
               if (!tip.empty()) tip += L"\n";
               tip += L"Directory: " + tab.directory;
             }
-            if (!tip.empty()) {
-              wcsncpy_s(pdi->szText, tip.c_str(), _countof(pdi->szText));
-              pdi->szText[_countof(pdi->szText) - 1] = L'\0';
-            }
           }
+          if (tip.empty())
+            tip = tab.label;
+          wcsncpy_s(pdi->szText, tip.c_str(), _countof(pdi->szText));
+          pdi->szText[_countof(pdi->szText) - 1] = L'\0';
+          pdi->lpszText = pdi->szText;
+          pdi->uFlags |= TTF_DI_SETITEM;
         }
       }
     } else if (pnm->hwndFrom == g_tabHwnd && pnm->code == NM_RCLICK) {

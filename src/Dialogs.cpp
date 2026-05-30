@@ -408,6 +408,14 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     CheckDlgButton(hDlg, IDC_HIDE_MESSAGES_BUFFER,
                    SettingsManager::Instance().GetHideMessagesBuffer() ? BST_CHECKED : BST_UNCHECKED);
 
+    HWND hTabFont = GetDlgItem(hDlg, IDC_TAB_FONT_STYLE);
+    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Regular");
+    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Bold");
+    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Italic");
+    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Bold Italic");
+    SendMessage(hTabFont, CB_SETCURSEL,
+                (WPARAM)SettingsManager::Instance().GetTabActiveFontStyle(), 0);
+
     return (INT_PTR)TRUE;
   }
   case WM_DESTROY: {
@@ -521,6 +529,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           IsDlgButtonChecked(hDlg, IDC_REVERSE_SCROLL_DIRECTION) == BST_CHECKED);
       SettingsManager::Instance().SetHideMessagesBuffer(
           IsDlgButtonChecked(hDlg, IDC_HIDE_MESSAGES_BUFFER) == BST_CHECKED);
+      SettingsManager::Instance().SetTabActiveFontStyle(
+          (int)SendMessage(GetDlgItem(hDlg, IDC_TAB_FONT_STYLE), CB_GETCURSEL, 0, 0));
 
       SettingsManager::Instance().Save();
 
