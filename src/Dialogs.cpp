@@ -1777,27 +1777,68 @@ Dialogs::FileModifiedAction
 Dialogs::ShowFileModifiedDialog(HWND hwnd, const std::wstring &filename,
                                 bool isDirty) {
   std::wstring name = filename.empty() ? L"Untitled" : filename;
-  std::wstring msg;
-  if (isDirty) {
-    msg = L"File has been modified externally:\n" + name +
-          L"\n\nThe buffer has unsaved changes.\n\n"
-          L"What do you want to do?\n"
-          L"Yes    = Reload from disk (discard changes)\n"
-          L"No     = Keep current buffer\n"
-          L"Cancel = Open in new buffer";
-  } else {
-    msg = L"File has been modified externally:\n" + name +
-          L"\n\nWhat do you want to do?\n"
-          L"Yes    = Reload from disk\n"
-          L"No     = Keep current buffer\n"
-          L"Cancel = Open in new buffer";
+  std::wstring msg = L"File has been modified externally:\n" + name;
+  if (isDirty)
+    msg += L"\n\nThere are unsaved changes in this buffer.";
+
+  // Use TaskDialogIndirect (Vista+) for custom button labels.
+  // Define types ourselves since _WIN32_WINNT may be < 0x0600.
+  struct TDButton { int id; const wchar_t *text; };
+  struct TDConfig {
+    DWORD cbSize;
+    HWND  hwndParent;
+    HINSTANCE hInstance;
+    DWORD dwFlags;
+    const wchar_t *pszWindowTitle;
+    const wchar_t *pszMainIcon;
+    const wchar_t *pszMainInstruction;
+    const wchar_t *pszContent;
+    UINT cButtons;
+    const TDButton *pButtons;
+  };
+  const DWORD TDF_ALLOW_CANCEL = 0x00000008;
+
+  static HRESULT (WINAPI *s_TaskDialogIndirect)(const TDConfig *,
+      int *, int *, BOOL *) = nullptr;
+  if (!s_TaskDialogIndirect) {
+    HMODULE hMod = LoadLibraryW(L"comctl32.dll");
+    if (hMod)
+      s_TaskDialogIndirect = (decltype(s_TaskDialogIndirect))
+          GetProcAddress(hMod, "TaskDialogIndirect");
   }
+
+  if (s_TaskDialogIndirect) {
+    TDButton buttons[3] = {
+      { IDYES,    L"&Reload from disk" },
+      { IDNO,     L"&Keep current buffer" },
+      { IDCANCEL, L"Open in &new buffer" },
+    };
+    TDConfig cfg = { sizeof(cfg) };
+    cfg.hwndParent = hwnd;
+    cfg.dwFlags = TDF_ALLOW_CANCEL;
+    cfg.pszWindowTitle = L"Ecode";
+    cfg.pszMainInstruction = L"File changed externally";
+    cfg.pszContent = msg.c_str();
+    cfg.pszMainIcon = MAKEINTRESOURCEW(-1); // TD_WARNING_ICON
+    cfg.cButtons = 3;
+    cfg.pButtons = buttons;
+
+    int result;
+    s_TaskDialogIndirect(&cfg, &result, nullptr, nullptr);
+    if (result == IDYES)      return FileModifiedAction::Reload;
+    if (result == IDNO)       return FileModifiedAction::Keep;
+    return FileModifiedAction::OpenInNewBuffer;
+  }
+
+  // Fallback: standard MessageBox
+  msg += isDirty
+    ? L"\n\nReload and discard changes?"
+    : L"\n\nReload this file?";
+  msg += L"\n\nYes = Reload   No = Keep   Cancel = Open in new buffer";
   int result = MessageBoxW(hwnd, msg.c_str(), L"Ecode - File Modified",
                            MB_YESNOCANCEL | MB_ICONWARNING);
-  if (result == IDYES)
-    return FileModifiedAction::Reload;
-  if (result == IDNO)
-    return FileModifiedAction::Keep;
+  if (result == IDYES)   return FileModifiedAction::Reload;
+  if (result == IDNO)    return FileModifiedAction::Keep;
   return FileModifiedAction::OpenInNewBuffer;
 }
 
