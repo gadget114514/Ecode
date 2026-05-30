@@ -46,6 +46,8 @@ size_t Editor::OpenShell(const std::wstring &cmd) {
 
   Buffer *bRaw = buffer.get();
   auto process = std::make_unique<Process>();
+  int enc = SettingsManager::Instance().GetShellEncoding();
+  process->SetCodePage((enc == 1) ? 932 : CP_UTF8);
 
   if (process->Start(cmd, [bRaw](const std::string &text) {
         ShellOutput *output = new ShellOutput();
