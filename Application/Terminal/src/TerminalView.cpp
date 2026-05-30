@@ -636,25 +636,37 @@ void TerminalView::OnTerminalOutput(const char* data, size_t len) {
                     }
                 }
             } else if (contCount > 0) {
-                pendingPartial_ = std::move(combined);
-                return;
+                if (combined.size() <= 3) {
+                    pendingPartial_ = std::move(combined);
+                    return;
+                }
             }
         }
     } else {
         // Non-UTF-8 codepage (e.g. CP_932=Shift_JIS):
-        // try-convert with MB_ERR_INVALID_CHARS, truncating from the end
-        // until we find a suffix that decodes successfully.
-        while (validLen > 0) {
-            int needed = MultiByteToWideChar(codePage_, MB_ERR_INVALID_CHARS,
-                combined.data(), (int)validLen, nullptr, 0);
-            if (needed > 0) break;
-            // last byte may be an incomplete lead byte — save it
-            --validLen;
+        // For non-UTF-8 DBCS/MBCS, a split trailing character can be at most 1 byte (since max char is 2 bytes).
+        // Let's check if the full combined buffer decodes. If not, try reducing by 1 byte.
+        // If it still fails, it contains a permanently invalid character, so we don't treat it as pending.
+        bool decoded = false;
+        int needed = MultiByteToWideChar(codePage_, MB_ERR_INVALID_CHARS,
+            combined.data(), (int)combined.size(), nullptr, 0);
+        if (needed > 0) {
+            validLen = combined.size();
+            decoded = true;
+        } else if (combined.size() > 1) {
+            needed = MultiByteToWideChar(codePage_, MB_ERR_INVALID_CHARS,
+                combined.data(), (int)(combined.size() - 1), nullptr, 0);
+            if (needed > 0) {
+                pendingPartial_ = combined.substr(combined.size() - 1);
+                validLen = combined.size() - 1;
+                decoded = true;
+            }
         }
-        if (validLen < combined.size())
-            pendingPartial_ = combined.substr(validLen);
-        if (validLen == 0)
-            return; // nothing decodable yet
+        if (!decoded) {
+            // Permanently invalid character or single-byte invalid char.
+            // Decode everything, letting the converter replace/ignore invalid bytes.
+            validLen = combined.size();
+        }
     }
 
     // Decode the valid portion
