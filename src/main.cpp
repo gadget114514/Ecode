@@ -43,6 +43,7 @@ WNDPROC g_oldTabProc = nullptr;
 HFONT g_hTabFont = nullptr;
 HFONT g_hTabFontActive = nullptr;
 int g_lastTabFontStyle = -1;
+std::vector<TabRef> g_tabOrder;
 LogCallback g_logCallback = nullptr;
 std::wstring g_scriptsDir;
 bool g_isDragging = false;

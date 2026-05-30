@@ -425,8 +425,11 @@ static void SwActivateItem(HWND parentHwnd) {
         if (g_appTabs[it.index].hwnd)
             ShowWindow(g_appTabs[it.index].hwnd, SW_SHOW);
         g_suppressTabChange = true;
-        TabCtrl_SetCurSel(g_tabHwnd,
-            (int)VisibleBufferCount() + it.index);
+        for (size_t ti = 0; ti < g_tabOrder.size(); ti++)
+          if (!g_tabOrder[ti].isBuffer && g_tabOrder[ti].index == it.index) {
+            TabCtrl_SetCurSel(g_tabHwnd, (int)ti);
+            break;
+          }
         g_suppressTabChange = false;
         ShowScrollBar(parentHwnd, SB_BOTH, FALSE);
     }

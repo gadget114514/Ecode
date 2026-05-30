@@ -112,8 +112,12 @@ void OpenFastFileSearch(HWND hwnd) {
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t visCount = VisibleBufferCount();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
+  {
+    int ti = -1;
+    for (size_t t = 0; t < g_tabOrder.size(); t++)
+      if (!g_tabOrder[t].isBuffer && g_tabOrder[t].index == appIdx) { ti = (int)t; break; }
+    if (ti >= 0) TabCtrl_SetCurSel(g_tabHwnd, ti);
+  }
   g_suppressTabChange = false;
 
   for (auto &t : g_appTabs) {
@@ -198,8 +202,12 @@ void OpenCSVEditor(HWND hwnd) {
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t visCount = VisibleBufferCount();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
+  {
+    int ti = -1;
+    for (size_t t = 0; t < g_tabOrder.size(); t++)
+      if (!g_tabOrder[t].isBuffer && g_tabOrder[t].index == appIdx) { ti = (int)t; break; }
+    if (ti >= 0) TabCtrl_SetCurSel(g_tabHwnd, ti);
+  }
   g_suppressTabChange = false;
 
   for (auto &t : g_appTabs) {
@@ -282,8 +290,12 @@ void OpenJYEditor(HWND hwnd) {
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t visCount = VisibleBufferCount();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
+  {
+    int ti = -1;
+    for (size_t t = 0; t < g_tabOrder.size(); t++)
+      if (!g_tabOrder[t].isBuffer && g_tabOrder[t].index == appIdx) { ti = (int)t; break; }
+    if (ti >= 0) TabCtrl_SetCurSel(g_tabHwnd, ti);
+  }
   g_suppressTabChange = false;
 
   for (auto &t : g_appTabs) {
@@ -377,8 +389,12 @@ void OpenDired(HWND hwnd) {
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t visCount = VisibleBufferCount();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
+  {
+    int ti = -1;
+    for (size_t t = 0; t < g_tabOrder.size(); t++)
+      if (!g_tabOrder[t].isBuffer && g_tabOrder[t].index == appIdx) { ti = (int)t; break; }
+    if (ti >= 0) TabCtrl_SetCurSel(g_tabHwnd, ti);
+  }
   g_suppressTabChange = false;
 
   for (auto &t : g_appTabs) {
@@ -516,8 +532,12 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
   SendMessage(hwnd, WM_SIZE, 0, MAKELPARAM(rc.right - rc.left, rc.bottom - rc.top));
 
   g_suppressTabChange = true;
-  size_t visCount = VisibleBufferCount();
-  TabCtrl_SetCurSel(g_tabHwnd, static_cast<int>(visCount) + appIdx);
+  {
+    int ti = -1;
+    for (size_t t = 0; t < g_tabOrder.size(); t++)
+      if (!g_tabOrder[t].isBuffer && g_tabOrder[t].index == appIdx) { ti = (int)t; break; }
+    if (ti >= 0) TabCtrl_SetCurSel(g_tabHwnd, ti);
+  }
   g_suppressTabChange = false;
 
   for (auto& t : g_appTabs)

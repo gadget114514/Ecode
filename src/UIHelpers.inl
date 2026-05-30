@@ -118,54 +118,69 @@ void EnsureCaretVisible(HWND hwnd) {
 void UpdateTabs(HWND hwnd) {
   if (!g_tabHwnd)
     return;
+  // Validate g_tabOrder: rebuild if buffer/app counts changed
+  {
+    size_t bufCount = 0, appCount = 0;
+    for (auto &ref : g_tabOrder) {
+      if (ref.isBuffer) bufCount++; else appCount++;
+    }
+    if (bufCount != VisibleBufferCount() || appCount != g_appTabs.size())
+      RebuildTabOrder();
+  }
+
   // Suppress redraw to avoid flicker during tab rebuild
   SendMessage(g_tabHwnd, WM_SETREDRAW, FALSE, 0);
   TabCtrl_DeleteAllItems(g_tabHwnd);
 
   const auto &buffers = g_editor->GetBuffers();
-  int tabPos = 0;
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    if (buffers[i]->IsHidden()) continue;
-    std::wstring name = buffers[i]->GetPath();
-    if (name.empty()) {
-      name = buffers[i]->IsScratch() ? L"Scratch" : L"Untitled";
+  for (size_t ti = 0; ti < g_tabOrder.size(); ++ti) {
+    auto &ref = g_tabOrder[ti];
+    if (ref.isBuffer) {
+      size_t i = (size_t)ref.index;
+      if (i >= buffers.size() || buffers[i]->IsHidden()) continue;
+      std::wstring name = buffers[i]->GetPath();
+      if (name.empty()) {
+        name = buffers[i]->IsScratch() ? L"Scratch" : L"Untitled";
+      } else {
+        size_t pos = name.find_last_of(L"\\/");
+        if (pos != std::wstring::npos)
+          name = name.substr(pos + 1);
+      }
+      if (buffers[i]->IsDirty())
+        name += L" *";
+      TCITEMW tie = {0};
+      tie.mask = TCIF_TEXT | TCIF_IMAGE;
+      tie.pszText = (LPWSTR)name.c_str();
+      tie.iImage = buffers[i]->GetPath().empty() ? -1 : AddFileTypeIcon(g_tabImageList, buffers[i]->GetPath());
+      TabCtrl_InsertItem(g_tabHwnd, (int)ti, &tie);
     } else {
-      size_t pos = name.find_last_of(L"\\/");
-      if (pos != std::wstring::npos)
-        name = name.substr(pos + 1);
+      int i = ref.index;
+      if (i < 0 || i >= (int)g_appTabs.size()) continue;
+      TCITEMW tci = {0};
+      tci.mask = TCIF_TEXT | TCIF_IMAGE;
+      tci.pszText = (LPWSTR)g_appTabs[i].label.c_str();
+      tci.iImage = g_appTabs[i].iImage;
+      TabCtrl_InsertItem(g_tabHwnd, (int)ti, &tci);
     }
-    if (buffers[i]->IsDirty())
-      name += L" *";
-
-    TCITEMW tie = {0};
-    tie.mask = TCIF_TEXT | TCIF_IMAGE;
-    tie.pszText = (LPWSTR)name.c_str();
-    tie.iImage = buffers[i]->GetPath().empty() ? -1 : AddFileTypeIcon(g_tabImageList, buffers[i]->GetPath());
-    TabCtrl_InsertItem(g_tabHwnd, tabPos, &tie);
-    tabPos++;
-  }
-  // Append all app tabs after buffer tabs
-  int appStart = static_cast<int>(VisibleBufferCount());
-  for (size_t i = 0; i < g_appTabs.size(); ++i) {
-    TCITEMW tci = {0};
-    tci.mask = TCIF_TEXT | TCIF_IMAGE;
-    tci.pszText = (LPWSTR)g_appTabs[i].label.c_str();
-    tci.iImage = g_appTabs[i].iImage;
-    TabCtrl_InsertItem(g_tabHwnd, appStart + static_cast<int>(i), &tci);
   }
 
   // Restore selection
-  int curSel = (g_activeAppTab >= 0)
-    ? appStart + g_activeAppTab
-    : BufferToTabIndex(g_editor->GetActiveBufferIndex());
+  int curSel = -1;
+  for (size_t i = 0; i < g_tabOrder.size(); i++) {
+    auto &ref = g_tabOrder[i];
+    if (g_activeAppTab >= 0 && !ref.isBuffer && ref.index == g_activeAppTab) {
+      curSel = (int)i;
+      break;
+    } else if (g_activeAppTab < 0 && ref.isBuffer &&
+               ref.index == (int)g_editor->GetActiveBufferIndex()) {
+      curSel = (int)i;
+      break;
+    }
+  }
   if (curSel < 0) {
     curSel = 0;
-    size_t visCount = VisibleBufferCount();
-    if (visCount > 0) {
-      int firstVis = TabToBufferIndex(0);
-      if (firstVis >= 0)
-        g_editor->SwitchToBuffer(firstVis);
-    }
+    if (!g_tabOrder.empty() && g_tabOrder[0].isBuffer)
+      g_editor->SwitchToBuffer(g_tabOrder[0].index);
   }
   TabCtrl_SetCurSel(g_tabHwnd, curSel);
   // Re-enable redraw
