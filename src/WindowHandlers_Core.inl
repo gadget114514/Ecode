@@ -399,22 +399,27 @@ static void HandleDestroy(HWND hwnd) {
   UnregisterHotKey(hwnd, HOTKEY_ID_TABSWITCHER);
   HideTabSwitcher();
 
-  // Cleanup all app views — destroy embedded windows first to request graceful exit
+  // Step 1: Request graceful shutdown from terminal windows first
   for (auto &t : g_appTabs) {
-    if (t.hwnd) DestroyWindow(t.hwnd);
+    if (t.hwnd && t.hProcess && t.type == TAB_TYPE_TERMINAL)
+      PostMessage(t.hwnd, WM_CLOSE, 0, 0);
   }
-  // Terminate embedded processes and wait; close app process handles without waiting
+  // Step 2: Wait for all processes to exit gracefully
   for (auto &t : g_appTabs) {
     if (t.hProcess) {
-      if (t.hwnd) {
-        DWORD waitResult = WaitForSingleObject(t.hProcess, 3000);
-        if (waitResult == WAIT_TIMEOUT) {
-          TerminateProcess(t.hProcess, 0);
-          WaitForSingleObject(t.hProcess, INFINITE);
-        }
+      DWORD waitResult = WaitForSingleObject(t.hProcess, 5000);
+      if (waitResult == WAIT_TIMEOUT) {
+        if (t.hwnd) DestroyWindow(t.hwnd);
+        TerminateProcess(t.hProcess, 0);
+        WaitForSingleObject(t.hProcess, INFINITE);
       }
       CloseHandle(t.hProcess);
+      t.hProcess = nullptr;
     }
+  }
+  // Step 3: Destroy any remaining windows
+  for (auto &t : g_appTabs) {
+    if (t.hwnd) { DestroyWindow(t.hwnd); t.hwnd = nullptr; }
   }
   g_appTabs.clear();
 

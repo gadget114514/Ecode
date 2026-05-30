@@ -4,6 +4,8 @@
 // Included by main.cpp
 // =============================================================================
 
+void CloseAppTab(size_t idx);
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                             LPARAM lParam) {
   if (uMsg == g_uFindMsgString)
@@ -665,27 +667,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
             else
               PostMessageW(hwnd, WM_COMMAND, IDM_FILE_SAVE_AS, 0);
           }
-        } else if (res == IDM_TAB_CLOSE_TERMINAL + 1) {
-          // Kill Process on app tab
+        } else if (res == IDM_TAB_CLOSE_TERMINAL + 1 || res == IDM_TAB_CLOSE_TERMINAL) {
           if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
-            if (g_appTabs[appIdx].hProcess) {
-              TerminateProcess(g_appTabs[appIdx].hProcess, 0);
-              CloseHandle(g_appTabs[appIdx].hProcess);
-            }
-            if (g_appTabs[appIdx].hwnd) DestroyWindow(g_appTabs[appIdx].hwnd);
-            g_appTabs.erase(g_appTabs.begin() + appIdx);
-            if (g_activeAppTab == appIdx) g_activeAppTab = -1;
-            else if (g_activeAppTab > appIdx) g_activeAppTab--;
-            UpdateMenu(hwnd);
-            InvalidateRect(hwnd, NULL, FALSE);
-          }
-        } else if (res == IDM_TAB_CLOSE_TERMINAL) {
-          if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
-            if (g_appTabs[appIdx].hProcess) {
-              TerminateProcess(g_appTabs[appIdx].hProcess, 0);
-              CloseHandle(g_appTabs[appIdx].hProcess);
-            }
-            if (g_appTabs[appIdx].hwnd) DestroyWindow(g_appTabs[appIdx].hwnd);
+            CloseAppTab(appIdx);
             g_appTabs.erase(g_appTabs.begin() + appIdx);
             if (g_activeAppTab == appIdx) g_activeAppTab = -1;
             else if (g_activeAppTab > appIdx) g_activeAppTab--;

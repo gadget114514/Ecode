@@ -413,14 +413,29 @@ void OpenDired(HWND hwnd) {
   CreateThread(nullptr, 0, DiredThread, params, 0, nullptr);
 }
 
+void CloseAppTab(size_t idx) {
+  if (idx >= g_appTabs.size()) return;
+  auto &tab = g_appTabs[idx];
+  // For terminal tabs: send WM_CLOSE to allow graceful ConPTY cleanup
+  if (tab.hwnd && tab.hProcess && tab.type == TAB_TYPE_TERMINAL)
+    PostMessage(tab.hwnd, WM_CLOSE, 0, 0);
+  // Wait for graceful shutdown (up to 5s)
+  if (tab.hProcess) {
+    DWORD waitResult = WaitForSingleObject(tab.hProcess, 5000);
+    if (waitResult == WAIT_TIMEOUT) {
+      if (tab.hwnd) DestroyWindow(tab.hwnd);
+      TerminateProcess(tab.hProcess, 0);
+      WaitForSingleObject(tab.hProcess, INFINITE);
+    }
+    CloseHandle(tab.hProcess);
+    tab.hProcess = nullptr;
+  }
+  if (tab.hwnd) DestroyWindow(tab.hwnd);
+}
+
 void KillAppProcessByIndex(HWND hwnd, size_t idx) {
   if (idx >= g_appTabs.size()) return;
-  if (g_appTabs[idx].hProcess) {
-    TerminateProcess(g_appTabs[idx].hProcess, 0);
-    CloseHandle(g_appTabs[idx].hProcess);
-    g_appTabs[idx].hProcess = nullptr;
-  }
-  if (g_appTabs[idx].hwnd) DestroyWindow(g_appTabs[idx].hwnd);
+  CloseAppTab(idx);
   g_appTabs.erase(g_appTabs.begin() + idx);
   if (g_activeAppTab == static_cast<int>(idx)) g_activeAppTab = -1;
   else if (g_activeAppTab > static_cast<int>(idx)) g_activeAppTab--;
