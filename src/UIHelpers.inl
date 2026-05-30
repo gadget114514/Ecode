@@ -207,6 +207,7 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE, L"Save\tC-x C-s");
   AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE_AS, L"Save As\tC-x C-w");
   AppendMenu(hFile, MF_STRING, IDM_FILE_CLOSE, L"Close\tC-x k");
+  AppendMenu(hFile, MF_STRING, IDM_FILE_RELOAD, L"Reload from Disk\tC-x C-v");
 
   HMENU hRecent = CreatePopupMenu();
   const auto &recent = SettingsManager::Instance().GetRecentFiles();
