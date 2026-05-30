@@ -28,6 +28,7 @@ public:
   void FindFile(const std::wstring &pattern, const std::wstring &dir);
   void CancelFindInFiles();
   void CloseBuffer(size_t index);
+  void SwapBuffers(size_t a, size_t b);
 
   void SwitchToBuffer(size_t index);
   Buffer *GetActiveBuffer() const;
