@@ -326,6 +326,16 @@ void Editor::CloseBuffer(size_t index) {
   }
 }
 
+void Editor::SwapBuffers(size_t a, size_t b) {
+  if (a >= m_buffers.size() || b >= m_buffers.size() || a == b)
+    return;
+  std::swap(m_buffers[a], m_buffers[b]);
+  if (m_activeBufferIndex == a)
+    m_activeBufferIndex = b;
+  else if (m_activeBufferIndex == b)
+    m_activeBufferIndex = a;
+}
+
 void Editor::SwitchToBuffer(size_t index) {
   if (index < m_buffers.size()) {
     m_activeBufferIndex = index;
