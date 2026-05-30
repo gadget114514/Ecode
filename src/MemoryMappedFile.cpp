@@ -10,7 +10,8 @@ MemoryMappedFile::~MemoryMappedFile() { Close(); }
 bool MemoryMappedFile::Open(const std::wstring &filePath) {
   Close();
 
-  m_fileHandle = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+  m_fileHandle = CreateFileW(filePath.c_str(), GENERIC_READ,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE,
                              NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
   if (m_fileHandle == INVALID_HANDLE_VALUE) {
     return false;
