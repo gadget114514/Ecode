@@ -685,14 +685,15 @@ done:
     /* Signal shutdown event so output_thread can exit promptly */
     if (ctx->hShutdownEvent) SetEvent(ctx->hShutdownEvent);
 
-    /* Close pipe handles to unblock any pending I/O */
-    if (ctx->hPipeInWrite) { CloseHandle(ctx->hPipeInWrite); ctx->hPipeInWrite = NULL; }
-    if (ctx->hPipeOutRead) { CloseHandle(ctx->hPipeOutRead); ctx->hPipeOutRead = NULL; }
-
+    /* Wait for output_thread to finish before closing pipe handles */
     if (ctx->hOutThread) {
         WaitForSingleObject(ctx->hOutThread, 5000);
         CloseHandle(ctx->hOutThread);
     }
+
+    /* Close pipe handles */
+    if (ctx->hPipeInWrite) { CloseHandle(ctx->hPipeInWrite); ctx->hPipeInWrite = NULL; }
+    if (ctx->hPipeOutRead) { CloseHandle(ctx->hPipeOutRead); ctx->hPipeOutRead = NULL; }
 
     if (ctx->hpc)          { ConPtyClose(ctx->hpc); }
     if (ctx->hShellProc)   { WaitForSingleObject(ctx->hShellProc, 5000); CloseHandle(ctx->hShellProc); }
