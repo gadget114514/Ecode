@@ -337,9 +337,26 @@ void Editor::SwapBuffers(size_t a, size_t b) {
 }
 
 void Editor::SwitchToBuffer(size_t index) {
-  if (index < m_buffers.size()) {
-    m_activeBufferIndex = index;
+  if (index >= m_buffers.size()) return;
+
+  auto &buf = m_buffers[index];
+  if (buf->HasFile() && buf->IsFileModifiedExternally()) {
+    auto action = Dialogs::ShowFileModifiedDialog(
+        g_mainHwnd, buf->GetPath(), buf->IsDirty());
+
+    if (action == Dialogs::FileModifiedAction::Reload) {
+      buf->OpenFile(buf->GetPath());
+    } else if (action == Dialogs::FileModifiedAction::OpenInNewBuffer) {
+      size_t newIdx = OpenFile(buf->GetPath());
+      if (newIdx != static_cast<size_t>(-1)) {
+        m_activeBufferIndex = newIdx;
+        return;
+      }
+    }
+    // action == Keep: fall through to switch to the buffer as-is
   }
+
+  m_activeBufferIndex = index;
 }
 
 Buffer *Editor::GetActiveBuffer() const {

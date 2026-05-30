@@ -69,6 +69,7 @@ bool Buffer::OpenFile(const std::wstring &path) {
     m_caretPos = 0;
     m_selectionAnchor = 0;
     m_scrollLine = 0;
+    UpdateFileTime();
     return true;
   }
   return false;
@@ -101,11 +102,26 @@ bool Buffer::SaveFile(const std::wstring &path) {
     if (path == m_filePath) {
       m_isDirty = false;
     }
+    UpdateFileTime();
     return true;
   }
   if (m_progressCb)
     m_progressCb(0.0f); // Reset
   return false;
+}
+
+void Buffer::UpdateFileTime() {
+  std::error_code ec;
+  auto ft = std::filesystem::last_write_time(m_filePath, ec);
+  if (!ec) m_fileTime = ft;
+}
+
+bool Buffer::IsFileModifiedExternally() const {
+  if (!HasFile()) return false;
+  std::error_code ec;
+  auto current = std::filesystem::last_write_time(m_filePath, ec);
+  if (ec) return false;
+  return current != m_fileTime;
 }
 
 void Buffer::Insert(size_t pos, const std::string &text) {
