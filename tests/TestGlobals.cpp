@@ -29,6 +29,9 @@ WNDPROC g_oldMinibufferProc = NULL;
 bool g_bypassCache = false;
 bool g_compileAllScripts = false;
 LogCallback g_logCallback = nullptr;
+HFONT g_hTabFont = nullptr;
+HFONT g_hTabFontActive = nullptr;
+int g_lastTabFontStyle = -1;
 
 std::vector<AppTabInfo> g_appTabs;
 int g_activeAppTab = -1;

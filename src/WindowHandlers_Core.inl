@@ -37,8 +37,8 @@ static LRESULT HandleCreate(HWND hwnd) {
     NONCLIENTMETRICSW ncm = {0};
     ncm.cbSize = sizeof(ncm);
     SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
-    HFONT hTabFont = CreateFontIndirectW(&ncm.lfMenuFont);
-    SendMessage(g_tabHwnd, WM_SETFONT, (WPARAM)hTabFont, TRUE);
+    g_hTabFont = CreateFontIndirectW(&ncm.lfMenuFont);
+    SendMessage(g_tabHwnd, WM_SETFONT, (WPARAM)g_hTabFont, TRUE);
   }
   
   g_treeHwnd = CreateWindowEx(0, WC_TREEVIEW, NULL,
@@ -426,6 +426,9 @@ static void HandleDestroy(HWND hwnd) {
   g_editor = nullptr;
   delete g_lspClient;
   g_lspClient = nullptr;
+
+  if (g_hTabFont) { DeleteObject(g_hTabFont); g_hTabFont = nullptr; }
+  if (g_hTabFontActive) { DeleteObject(g_hTabFontActive); g_hTabFontActive = nullptr; }
 
   PostQuitMessage(0);
 }
