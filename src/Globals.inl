@@ -307,6 +307,22 @@ extern HFONT g_hTabFontActive;
 extern int g_lastTabFontStyle;
 extern UINT g_uFindMsgString;
 
+struct TabRef {
+  bool isBuffer; // true = buffer tab, false = app tab
+  int  index;    // index in Editor::m_buffers or g_appTabs
+};
+extern std::vector<TabRef> g_tabOrder;
+
+inline void RebuildTabOrder() {
+  g_tabOrder.clear();
+  const auto &buffers = g_editor->GetBuffers();
+  for (size_t i = 0; i < buffers.size(); i++)
+    if (!buffers[i]->IsHidden())
+      g_tabOrder.push_back({true, (int)i});
+  for (size_t i = 0; i < g_appTabs.size(); i++)
+    g_tabOrder.push_back({false, (int)i});
+}
+
 // IME inline composition state
 extern std::wstring g_imeComposition;   // current composition string (UTF-16)
 extern std::vector<BYTE> g_imeCompAttr; // per-char attribute for composition
@@ -374,24 +390,14 @@ inline size_t VisibleBufferCount() {
 }
 
 inline int TabToBufferIndex(int tabIndex) {
-  const auto &buffers = g_editor->GetBuffers();
-  int visible = 0;
-  for (size_t i = 0; i < buffers.size(); i++) {
-    if (!buffers[i]->IsHidden()) {
-      if (visible == tabIndex) return (int)i;
-      visible++;
-    }
-  }
+  if (tabIndex >= 0 && tabIndex < (int)g_tabOrder.size() && g_tabOrder[tabIndex].isBuffer)
+    return g_tabOrder[tabIndex].index;
   return -1;
 }
 
 inline int BufferToTabIndex(size_t bufferIndex) {
-  const auto &buffers = g_editor->GetBuffers();
-  int tabIdx = 0;
-  for (size_t i = 0; i < bufferIndex; i++) {
-    if (!buffers[i]->IsHidden()) tabIdx++;
-  }
-  if (bufferIndex < buffers.size() && !buffers[bufferIndex]->IsHidden())
-    return tabIdx;
+  for (size_t i = 0; i < g_tabOrder.size(); i++)
+    if (g_tabOrder[i].isBuffer && g_tabOrder[i].index == (int)bufferIndex)
+      return (int)i;
   return -1;
 }

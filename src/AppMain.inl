@@ -480,30 +480,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     if (pnm->hwndFrom == g_tabHwnd && pnm->code == TCN_SELCHANGE) {
       if (g_suppressTabChange) break;
       int sel = TabCtrl_GetCurSel(g_tabHwnd);
-      size_t visCount = VisibleBufferCount();
-      int appStart = static_cast<int>(visCount);
-      int appEnd = appStart + static_cast<int>(g_appTabs.size());
-
-      if (sel >= appStart && sel < appEnd) {
-        int appIdx = sel - appStart;
-        for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-        g_activeAppTab = appIdx;
-        ShowScrollBar(hwnd, SB_BOTH, FALSE);
-        if (g_appTabs[appIdx].hwnd) {
-          ShowWindow(g_appTabs[appIdx].hwnd, SW_SHOW);
-          PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_appTabs[appIdx].hwnd, 0);
-        }
-        UpdateMenu(hwnd);
-      } else if (sel >= 0 && sel < static_cast<int>(visCount)) {
-        int bufIdx = TabToBufferIndex(sel);
-        if (bufIdx >= 0) {
-          for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
-          g_activeAppTab = -1;
-          ShowScrollBar(hwnd, SB_BOTH, TRUE);
-          g_editor->SwitchToBuffer(static_cast<size_t>(bufIdx));
-          SetFocus(hwnd);
-          UpdateMenu(hwnd);
-          InvalidateRect(hwnd, NULL, FALSE);
+      if (sel >= 0 && sel < (int)g_tabOrder.size()) {
+        auto &ref = g_tabOrder[sel];
+        if (!ref.isBuffer) {
+          int appIdx = ref.index;
+          if (appIdx >= 0 && appIdx < (int)g_appTabs.size()) {
+            for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+            g_activeAppTab = appIdx;
+            ShowScrollBar(hwnd, SB_BOTH, FALSE);
+            if (g_appTabs[appIdx].hwnd) {
+              ShowWindow(g_appTabs[appIdx].hwnd, SW_SHOW);
+              PostMessage(hwnd, WM_DEFERRED_FOCUS, (WPARAM)g_appTabs[appIdx].hwnd, 0);
+            }
+            UpdateMenu(hwnd);
+          }
+        } else {
+          int bufIdx = ref.index;
+          if (bufIdx >= 0 && (size_t)bufIdx < g_editor->GetBuffers().size()) {
+            for (auto &t : g_appTabs) if (t.hwnd) ShowWindow(t.hwnd, SW_HIDE);
+            g_activeAppTab = -1;
+            ShowScrollBar(hwnd, SB_BOTH, TRUE);
+            g_editor->SwitchToBuffer(static_cast<size_t>(bufIdx));
+            SetFocus(hwnd);
+            UpdateMenu(hwnd);
+            InvalidateRect(hwnd, NULL, FALSE);
+          }
         }
       }
     } else if (pnm->hwndFrom == g_treeHwnd && pnm->code == NM_DBLCLK) {
@@ -555,39 +556,42 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       NMTTDISPINFOW *pdi = (NMTTDISPINFOW *)lParam;
       if (pdi->hdr.hwndFrom == TabCtrl_GetToolTips(g_tabHwnd)) {
         int tabIndex = (int)pdi->hdr.idFrom;
-        auto &buffers = g_editor->GetBuffers();
-        size_t visCount = VisibleBufferCount();
-        if (tabIndex >= 0 && tabIndex < (int)visCount) {
-          int bufIdx = TabToBufferIndex(tabIndex);
-          if (bufIdx >= 0 && bufIdx < (int)buffers.size()) {
-            std::wstring path = buffers[bufIdx]->GetPath();
-            if (path.empty()) {
-              path = buffers[bufIdx]->IsScratch() ? L"Scratch" : L"Untitled";
+        if (tabIndex >= 0 && tabIndex < (int)g_tabOrder.size()) {
+          auto &ref = g_tabOrder[tabIndex];
+          if (ref.isBuffer) {
+            auto &buffers = g_editor->GetBuffers();
+            int bufIdx = ref.index;
+            if (bufIdx >= 0 && bufIdx < (int)buffers.size()) {
+              std::wstring path = buffers[bufIdx]->GetPath();
+              if (path.empty()) {
+                path = buffers[bufIdx]->IsScratch() ? L"Scratch" : L"Untitled";
+              }
+              wcsncpy_s(pdi->szText, path.c_str(), _countof(pdi->szText));
+              pdi->szText[_countof(pdi->szText) - 1] = L'\0';
+              pdi->lpszText = pdi->szText;
+              pdi->uFlags |= TTF_DI_SETITEM;
             }
-            wcsncpy_s(pdi->szText, path.c_str(), _countof(pdi->szText));
-            pdi->szText[_countof(pdi->szText) - 1] = L'\0';
-            pdi->lpszText = pdi->szText;
-            pdi->uFlags |= TTF_DI_SETITEM;
-          }
-        } else if (tabIndex >= (int)visCount &&
-                   tabIndex < (int)(visCount + g_appTabs.size())) {
-          int appIdx = tabIndex - (int)visCount;
-          auto &tab = g_appTabs[appIdx];
-          std::wstring tip;
-          if (tab.type == TAB_TYPE_TERMINAL) {
-            if (!tab.command.empty())
-              tip = L"Command: " + tab.command;
-            if (!tab.directory.empty()) {
-              if (!tip.empty()) tip += L"\n";
-              tip += L"Directory: " + tab.directory;
+          } else {
+            int appIdx = ref.index;
+            if (appIdx >= 0 && appIdx < (int)g_appTabs.size()) {
+              auto &tab = g_appTabs[appIdx];
+              std::wstring tip;
+              if (tab.type == TAB_TYPE_TERMINAL) {
+                if (!tab.command.empty())
+                  tip = L"Command: " + tab.command;
+                if (!tab.directory.empty()) {
+                  if (!tip.empty()) tip += L"\n";
+                  tip += L"Directory: " + tab.directory;
+                }
+              }
+              if (tip.empty())
+                tip = tab.label;
+              wcsncpy_s(pdi->szText, tip.c_str(), _countof(pdi->szText));
+              pdi->szText[_countof(pdi->szText) - 1] = L'\0';
+              pdi->lpszText = pdi->szText;
+              pdi->uFlags |= TTF_DI_SETITEM;
             }
           }
-          if (tip.empty())
-            tip = tab.label;
-          wcsncpy_s(pdi->szText, tip.c_str(), _countof(pdi->szText));
-          pdi->szText[_countof(pdi->szText) - 1] = L'\0';
-          pdi->lpszText = pdi->szText;
-          pdi->uFlags |= TTF_DI_SETITEM;
         }
       }
     } else if (pnm->hwndFrom == g_tabHwnd && pnm->code == NM_RCLICK) {
@@ -596,12 +600,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       POINT ptScreen = hti.pt;
       ScreenToClient(g_tabHwnd, &hti.pt);
       int tabIndex = TabCtrl_HitTest(g_tabHwnd, &hti);
-      if (tabIndex != -1) {
-        size_t visCount = VisibleBufferCount();
-        int appStart = static_cast<int>(visCount);
-        int appEnd = appStart + static_cast<int>(g_appTabs.size());
-        bool isAppTab = (tabIndex >= appStart && tabIndex < appEnd);
-        int bufIdx = isAppTab ? -1 : TabToBufferIndex(tabIndex);
+      if (tabIndex != -1 && tabIndex < (int)g_tabOrder.size()) {
+        auto &clickedRef = g_tabOrder[tabIndex];
+        bool isAppTab = !clickedRef.isBuffer;
+        int bufIdx = isAppTab ? -1 : clickedRef.index;
+        int appIdx = isAppTab ? clickedRef.index : -1;
         HMENU hMenu = CreatePopupMenu();
         if (isAppTab) {
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close");
@@ -664,7 +667,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
           }
         } else if (res == IDM_TAB_CLOSE_TERMINAL + 1) {
           // Kill Process on app tab
-          int appIdx = tabIndex - appStart;
           if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
             if (g_appTabs[appIdx].hProcess) {
               TerminateProcess(g_appTabs[appIdx].hProcess, 0);
@@ -678,8 +680,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
             InvalidateRect(hwnd, NULL, FALSE);
           }
         } else if (res == IDM_TAB_CLOSE_TERMINAL) {
-          int appStart = static_cast<int>(VisibleBufferCount());
-          int appIdx = tabIndex - appStart;
           if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
             if (g_appTabs[appIdx].hProcess) {
               TerminateProcess(g_appTabs[appIdx].hProcess, 0);
