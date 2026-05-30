@@ -610,7 +610,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         HMENU hMenu = CreatePopupMenu();
         if (isAppTab) {
           AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL, L"Close");
-          AppendMenu(hMenu, MF_STRING, IDM_TAB_CLOSE_TERMINAL + 1, L"Kill Process");
         } else if (bufIdx >= 0) {
           auto &buffers = g_editor->GetBuffers();
           AppendMenu(hMenu, MF_STRING, IDM_TAB_COPY_PATH, L"Copy Full Path");
@@ -667,7 +666,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
             else
               PostMessageW(hwnd, WM_COMMAND, IDM_FILE_SAVE_AS, 0);
           }
-        } else if (res == IDM_TAB_CLOSE_TERMINAL + 1 || res == IDM_TAB_CLOSE_TERMINAL) {
+        } else if (res == IDM_TAB_CLOSE_TERMINAL) {
           if (appIdx >= 0 && appIdx < static_cast<int>(g_appTabs.size())) {
             CloseAppTab(appIdx);
             g_appTabs.erase(g_appTabs.begin() + appIdx);
