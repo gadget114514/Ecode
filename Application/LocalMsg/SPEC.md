@@ -64,6 +64,8 @@ LocalMsg is a LAN messenger plugin for Ecode that enables AI agents (Claude Code
 
 Each port falls back to `port + 1` through `port + 5` if the default is occupied.
 
+> **⚠ Notice**: LocalMsg uses IPMsg protocol on UDP port 2425. It **cannot coexist** with another IPMsg client (e.g., `ipmsg.exe`) on the same computer — both try to bind port 2425 and the second one fails. To run both, change the port via `LOCALMSG_UDPPORT` environment variable or `--udpport` flag.
+
 ---
 
 ## REST API
