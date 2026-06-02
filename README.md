@@ -165,4 +165,20 @@ MIT
 
 ## Thirdparty
 
-Microsoft MIT license
+Ecode incorporates the following third-party components (see [src/copyright.c](file:///D:/ws/Ecode/src/copyright.c) for full copyright notices):
+
+- **Duktape**: JavaScript Engine (MIT License)
+- **libsixel**: SIXEL Image Encoding/Decoding (MIT License)
+- **Microsoft ConPTY / OpenConsole**: Pseudo Console host (MIT License)
+- **MIT VT420 Parser**: Terminal parser reference implementation (MIT License)
+- **JSON for Modern C++ (nlohmann/json)**: JSON serialization/deserialization (MIT License)
+- **yaml-cpp**: YAML Parser (MIT License)
+- **md4c**: Markdown Parser (MIT License)
+- **dukluv**: Duktape + libuv scripting runtime (MIT License)
+- **Mbed TLS**: Cryptographic and TLS implementation for LocalMsg plugin (Apache 2.0 or GPL 2.0+)
+- **Microsoft WebView2 SDK**: Embedded web browser engine for Prompts plugin (BSD 3-Clause License)
+- **Cytoscape.js**: Graph theory visualization library for Prompts plugin (MIT License)
+- **mark.js**: Text highlighting library for Prompts plugin (MIT License)
+- **marked**: Fast markdown parser for Prompts plugin (MIT License)
+- **mermaid**: Generation of diagrams and flowcharts for Prompts plugin (MIT License)
+- **24x24 Free Application Icons**: Application icons by Aha-Soft (Creative Commons Attribution 3.0 US)
