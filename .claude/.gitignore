@@ -1,0 +1,5 @@
+# Ignore Claude Code internal state — only commit skills
+*
+!.gitignore
+!skills/
+!skills/**
