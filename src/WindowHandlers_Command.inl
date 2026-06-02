@@ -677,8 +677,8 @@ void ShowPluginConfigDialog(HWND hwnd) {
 static INT_PTR CALLBACK CopyrightDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
   switch (msg) {
   case WM_INITDIALOG: {
-    wchar_t wbuf[4096];
-    MultiByteToWideChar(CP_UTF8, 0, g_copyrightText, -1, wbuf, 4096);
+    wchar_t wbuf[8192];
+    MultiByteToWideChar(CP_UTF8, 0, g_copyrightText, -1, wbuf, 8192);
     SetDlgItemTextW(hDlg, IDC_COPYRIGHT_TEXT, wbuf);
     SetFocus(GetDlgItem(hDlg, IDOK));
     return (INT_PTR)FALSE;

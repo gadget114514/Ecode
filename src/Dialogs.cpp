@@ -290,10 +290,14 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                                  LPARAM lParam) {
   switch (message) {
   case WM_INITDIALOG: {
+    SetWindowTextW(hDlg, L10N("settings_title"));
+    SetDlgItemTextW(hDlg, IDCANCEL, L10N("settings_cancel"));
+
     HWND hTab = GetDlgItem(hDlg, IDC_TAB_SETTINGS);
     TCITEMW tie;
     tie.mask = TCIF_TEXT;
-    tie.pszText = (LPWSTR)L"General";
+    std::wstring tabText = L10N("settings_tab_general");
+    tie.pszText = &tabText[0];
     TabCtrl_InsertItem(hTab, 0, &tie);
 
     g_hDlgSettingsGeneral = CreateDialogW(
@@ -342,6 +346,29 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
     SendMessage(hDlg, WM_SETFONT, (WPARAM)hMenuFont, TRUE);
     EnumChildWindows(hDlg, SetChildMenuFont, (LPARAM)hMenuFont);
 
+    // Localize static text labels and buttons
+    SetDlgItemTextW(hDlg, IDC_ST_FONT_FAMILY, L10N("settings_font_family"));
+    SetDlgItemTextW(hDlg, IDC_FONT_BROWSE, L10N("settings_font_browse"));
+    SetDlgItemTextW(hDlg, IDC_ST_FONT_SIZE, L10N("settings_font_size"));
+    SetDlgItemTextW(hDlg, IDC_ST_FONT_WEIGHT, L10N("settings_font_weight"));
+    SetDlgItemTextW(hDlg, IDC_SHOW_LINE_NUMBERS, L10N("settings_show_line_numbers"));
+    SetDlgItemTextW(hDlg, IDC_ENABLE_LIGATURES, L10N("settings_enable_ligatures"));
+    SetDlgItemTextW(hDlg, IDC_WORD_WRAP, L10N("settings_word_wrap"));
+    SetDlgItemTextW(hDlg, IDC_ST_WRAP_WIDTH, L10N("settings_wrap_width"));
+    SetDlgItemTextW(hDlg, IDC_ST_LANGUAGE, L10N("settings_language"));
+    SetDlgItemTextW(hDlg, IDC_ST_CARET_STYLE, L10N("settings_caret_style"));
+    SetDlgItemTextW(hDlg, IDC_CARET_BLINKING, L10N("settings_caret_blinking"));
+    SetDlgItemTextW(hDlg, IDC_ST_LOG_LEVEL, L10N("settings_log_level"));
+    SetDlgItemTextW(hDlg, IDC_VT_DEBUG, L10N("settings_vt_debug"));
+    SetDlgItemTextW(hDlg, IDC_ST_BASH_PATH, L10N("settings_bash_path"));
+    SetDlgItemTextW(hDlg, IDC_ST_DEFAULT_EXT, L10N("settings_default_ext"));
+    SetDlgItemTextW(hDlg, IDC_NO_TITLE_BAR, L10N("settings_no_title_bar"));
+    SetDlgItemTextW(hDlg, IDC_REVERSE_SCROLL_DIRECTION, L10N("settings_reverse_scroll"));
+    SetDlgItemTextW(hDlg, IDC_HIDE_MESSAGES_BUFFER, L10N("settings_hide_messages"));
+    SetDlgItemTextW(hDlg, IDC_SHARED_LOCALMSG, L10N("settings_shared_localmsg"));
+    SetDlgItemTextW(hDlg, IDC_ST_TAB_FONT_STYLE, L10N("settings_tab_font_style"));
+    SetDlgItemTextW(hDlg, IDC_ST_PLUGINS_DIR, L10N("settings_plugins_dir"));
+
     if (g_renderer) {
       SetDlgItemTextW(hDlg, IDC_FONT_FAMILY,
                       g_renderer->GetFontFamily().c_str());
@@ -361,9 +388,9 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                       static_cast<UINT>(g_renderer->GetWrapWidth()), FALSE);
 
       HWND hCaret = GetDlgItem(hDlg, IDC_CARET_STYLE);
-      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Line");
-      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Block");
-      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L"Underline");
+      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L10N("settings_caret_line"));
+      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L10N("settings_caret_block"));
+      ::SendMessage(hCaret, CB_ADDSTRING, 0, (LPARAM)L10N("settings_caret_underline"));
       ::SendMessage(hCaret, CB_SETCURSEL,
                     static_cast<WPARAM>(g_renderer->GetCaretStyle()), 0);
 
@@ -411,10 +438,10 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                    SettingsManager::Instance().IsSharedLocalMsg() ? BST_CHECKED : BST_UNCHECKED);
 
     HWND hTabFont = GetDlgItem(hDlg, IDC_TAB_FONT_STYLE);
-    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Regular");
-    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Bold");
-    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Italic");
-    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Bold Italic");
+    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L10N("settings_font_regular"));
+    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L10N("settings_font_bold"));
+    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L10N("settings_font_italic"));
+    SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L10N("settings_font_bold_italic"));
     SendMessage(hTabFont, CB_SETCURSEL,
                 (WPARAM)SettingsManager::Instance().GetTabActiveFontStyle(), 0);
 
