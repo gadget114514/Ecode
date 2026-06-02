@@ -154,6 +154,10 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 
 ---
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for security considerations, especially regarding the LocalMsg LAN messenger plugin.
+
 ## License
 
 MIT
