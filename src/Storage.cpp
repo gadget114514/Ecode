@@ -303,6 +303,25 @@ std::vector<Pipeline> Storage::LoadPipelines() {
 }
 
 void Storage::SavePipelines(const std::vector<Pipeline> &pipelines) {
-    (void)pipelines;
-    // TODO
+    std::vector<JsonValue> arr;
+    for (auto &p : pipelines) {
+        std::map<std::string, JsonValue> obj;
+        obj["name"] = JsonValue::fromString(p.name);
+        obj["mode"] = JsonValue::fromString(p.mode);
+        obj["outputMode"] = JsonValue::fromString(p.outputMode);
+        obj["outputNaming"] = JsonValue::fromString(p.outputNaming);
+        obj["multiMedia"] = JsonValue::fromString(p.multiMedia);
+        std::vector<JsonValue> steps;
+        for (auto &s : p.steps) {
+            std::map<std::string, JsonValue> step;
+            step["name"] = JsonValue::fromString(s.name);
+            step["type"] = JsonValue::fromString(s.type);
+            steps.push_back(JsonValue::fromObject(step));
+        }
+        obj["steps"] = JsonValue::fromArray(steps);
+        arr.push_back(JsonValue::fromObject(obj));
+    }
+    std::map<std::string, JsonValue> root;
+    root["pipelines"] = JsonValue::fromArray(arr);
+    WriteFileUtf8(basePath_ + L"\\pipeline.json", JsonValue::fromObject(root).serialize(true));
 }

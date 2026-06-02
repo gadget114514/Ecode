@@ -55,3 +55,28 @@ add_custom_command(TARGET Prompts POST_BUILD
 set_target_properties(Prompts PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin"
 )
+
+# Test executables
+set(PROMPTS_TEST_COMMON_LIBS comctl32 shlwapi user32 kernel32 shell32 ole32 oleaut32)
+
+if(MSVC)
+    set(PROMPTS_TEST_COMMON_FLAGS /utf-8 /W4 /EHsc)
+endif()
+
+function(add_prompts_test name)
+    add_executable(${name} EXCLUDE_FROM_ALL ${ARGN})
+    if(MSVC)
+        target_compile_options(${name} PRIVATE ${PROMPTS_TEST_COMMON_FLAGS})
+    endif()
+endfunction()
+
+add_prompts_test(test_prompts_base64 tests/test_base64.cpp src/Base64.cpp)
+
+add_prompts_test(test_prompts_jsonparser tests/test_jsonparser.cpp src/JsonParser.cpp)
+
+add_prompts_test(test_prompts_localization tests/test_localization.cpp src/PromptsLocalization.cpp)
+
+add_prompts_test(test_prompts_nodedata tests/test_nodedata.cpp src/NodeData.cpp)
+
+add_prompts_test(test_prompts_storage tests/test_storage.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
+target_link_libraries(test_prompts_storage PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
