@@ -1865,28 +1865,36 @@ static DWORD WINAPI RestApiThread(LPVOID) {
 // ---------------------------------------------------------------------------
 static void UpdatePeerList() {
     // Build combined list: pseudo users first, then discovered peers
-    std::vector<std::tuple<std::wstring,std::wstring,std::wstring,bool>> items; // name, ip, proto, isMe
+    std::vector<std::tuple<std::wstring,std::wstring,std::wstring,bool>> items;
     EnterCriticalSection(&g_pseudoCs);
     for (auto& pu : g_pseudoUsers)
         items.push_back({pu.username, L"127.0.0.1", L"IpMsgP", true});
     LeaveCriticalSection(&g_pseudoCs);
     EnterCriticalSection(&g_peerCs);
+    int peerCount = (int)g_peers.size();
     for (auto& p : g_peers) {
         std::wstring proto = (p.protocol == Proto::IPMsg) ? L"IPMsg" : L"LS";
         items.push_back({p.alias, p.ip, proto, false});
     }
     LeaveCriticalSection(&g_peerCs);
 
-    int cur = ListView_GetItemCount(g_peerList);
-    while ((int)items.size() > cur) {
-        LVITEM lvi{}; lvi.mask = LVIF_TEXT; lvi.iItem = cur; lvi.pszText = (LPWSTR)L"";
-        ListView_InsertItem(g_peerList, &lvi); cur++;
+    int itemCount = (int)items.size();
+    int listCount = ListView_GetItemCount(g_peerList);
+    if (itemCount != listCount || peerCount > 0) {
+        DebugLog(L"UI update: " + std::to_wstring(itemCount) + L" items ("
+                 + std::to_wstring(peerCount) + L" peers, "
+                 + std::to_wstring(listCount) + L" in listview)");
     }
-    while (cur > (int)items.size()) { ListView_DeleteItem(g_peerList, --cur); }
+
+    while (itemCount > listCount) {
+        LVITEM lvi{}; lvi.mask = LVIF_TEXT; lvi.iItem = listCount; lvi.pszText = (LPWSTR)L"";
+        ListView_InsertItem(g_peerList, &lvi); listCount++;
+    }
+    while (listCount > itemCount) { ListView_DeleteItem(g_peerList, --listCount); }
     // Count name occurrences to detect duplicates
     std::map<std::wstring,int> nameCount;
     for (auto& item : items) nameCount[std::get<0>(item)]++;
-    for (int i = 0; i < (int)items.size(); ++i) {
+    for (int i = 0; i < itemCount; ++i) {
         std::wstring name = std::get<0>(items[i]);
         std::wstring ip   = std::get<1>(items[i]);
         if (nameCount[name] > 1)

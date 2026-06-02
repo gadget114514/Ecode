@@ -83,8 +83,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     return 0;
   }
   case WM_SETFOCUS:
-    if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size())
-      SetFocus(g_appTabs[g_activeAppTab].hwnd);
+    if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size()) {
+      HWND target = g_appTabs[g_activeAppTab].hwnd;
+      if (target && IsWindow(target))
+        SetFocus(target);
+    }
     return 0;
   case WM_DEFERRED_FOCUS:
     if (IsWindow((HWND)wParam))
@@ -342,6 +345,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     HANDLE hProcess = (HANDLE)lParam;
     if (appIdx >= 0 && (size_t)appIdx < g_appTabs.size()) {
       g_appTabs[appIdx].hProcess = hProcess;
+      // Register for process exit notification (used for terminal plugins)
+      g_appTabs[appIdx].hWaitObject = nullptr;
+      RegisterWaitForSingleObject(
+          &g_appTabs[appIdx].hWaitObject,
+          hProcess,
+          OnAppTerminated,
+          (PVOID)hProcess,
+          INFINITE,
+          WT_EXECUTEONLYONCE);
     } else {
       CloseHandle(hProcess);
     }
@@ -356,6 +368,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         SendMessage(g_progressHwnd, PBM_SETPOS, scaled / 100, 0);
       }
       UpdateWindow(g_statusHwnd);
+    }
+    return 0;
+  }
+  case WM_NOTIFY_APP_TERMINATED: {
+    HANDLE hProcess = (HANDLE)lParam;
+    // Find the tab by process handle
+    for (size_t i = 0; i < g_appTabs.size(); ++i) {
+      if (g_appTabs[i].hProcess == hProcess && g_appTabs[i].hWaitObject) {
+        g_appTabs[i].hWaitObject = nullptr; // wait auto-unregistered (WT_EXECUTEONLYONCE)
+        // Clean up the terminated/crashed app tab
+        if (g_appTabs[i].hwnd) {
+          DestroyWindow(g_appTabs[i].hwnd);
+          g_appTabs[i].hwnd = nullptr;
+        }
+        if (g_appTabs[i].hProcess) {
+          CloseHandle(g_appTabs[i].hProcess);
+          g_appTabs[i].hProcess = nullptr;
+        }
+        g_appTabs.erase(g_appTabs.begin() + i);
+        if (g_activeAppTab == static_cast<int>(i)) g_activeAppTab = -1;
+        else if (g_activeAppTab > static_cast<int>(i)) g_activeAppTab--;
+        UpdateMenu(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
+        break;
+      }
     }
     return 0;
   }

@@ -17,6 +17,12 @@ struct EnumData {
   HWND hwnd;
 };
 
+// Callback for RegisterWaitForSingleObject – runs on a thread pool thread
+static void CALLBACK OnAppTerminated(PVOID lpParam, BOOLEAN) {
+    HANDLE hProcess = (HANDLE)lpParam;
+    PostMessage(g_mainHwnd, WM_NOTIFY_APP_TERMINATED, 0, (LPARAM)hProcess);
+}
+
 static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
   EnumData *data = (EnumData *)lParam;
   DWORD processId = 0;
@@ -416,6 +422,11 @@ void OpenDired(HWND hwnd) {
 void CloseAppTab(size_t idx) {
   if (idx >= g_appTabs.size()) return;
   auto &tab = g_appTabs[idx];
+  // Unregister wait first so the callback can't fire during cleanup
+  if (tab.hWaitObject) {
+    UnregisterWait(tab.hWaitObject);
+    tab.hWaitObject = nullptr;
+  }
   // For terminal tabs: send WM_CLOSE to allow graceful ConPTY cleanup
   if (tab.hwnd && tab.hProcess && tab.type == TAB_TYPE_TERMINAL)
     PostMessage(tab.hwnd, WM_CLOSE, 0, 0);

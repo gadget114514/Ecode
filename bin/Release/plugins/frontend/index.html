@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompts</title>
+<link rel="stylesheet" href="style.css">
+<script src="lib/marked.min.js"></script>
+<script src="lib/mark.min.js"></script>
+<script src="lib/mermaid.min.js"></script>
+</head>
+<body>
+<div id="app">
+    <div id="toolbar">
+        <button id="btn-new" onclick="app.newTab()">📄 <span data-i18n="New">New</span></button>
+        <button id="btn-open" onclick="app.openFile()">📂 <span data-i18n="Open">Open</span></button>
+        <button id="btn-save" onclick="app.saveFile()">💾 <span data-i18n="Save">Save</span></button>
+        <button id="btn-saveas" onclick="app.saveFileAs()">💾 <span data-i18n="SaveAs">Save As</span></button>
+        <span class="separator">|</span>
+        <button id="btn-pipeline" onclick="app.runPipeline()">▶ <span data-i18n="RunPipeline">Run</span></button>
+        <button id="btn-config" onclick="app.showConfig()">⚙ <span data-i18n="Config">Config</span></button>
+        <span class="spacer"></span>
+        <input type="text" id="search-box" placeholder="Search..." oninput="app.search(this.value)">
+        <button onclick="app.toggleTestMode()" id="btn-test-mode">🧪 <span data-i18n="Test">Test</span></button>
+    </div>
+    <div id="tab-bar"></div>
+    <div id="main-content">
+        <div id="tree-pane" class="pane">
+            <div class="pane-header" onclick="app.togglePane('tree-pane')">📂 <span data-i18n="Tree">Tree</span></div>
+            <div id="tree-content" class="pane-content"></div>
+        </div>
+        <div id="right-panes">
+            <div id="list-pane" class="pane">
+                <div class="pane-header">
+                    <span onclick="app.togglePane('list-pane')">📋 <span data-i18n="List">List</span></span>
+                    <span class="nav-buttons">
+                        <button onclick="app.navRoot()" title="Root">▲</button>
+                        <button onclick="app.navUp()" title="Up">◀ <span data-i18n="Up">Up</span></button>
+                        <button onclick="app.navDown()" title="Down">▶ <span data-i18n="Down">Down</span></button>
+                    </span>
+                </div>
+                <div id="list-content" class="pane-content"></div>
+            </div>
+            <div id="editor-pane" class="pane">
+                <div class="pane-header" onclick="app.togglePane('editor-pane')">✏️ <span data-i18n="Editor">Editor</span></div>
+                <div id="editor-content" class="pane-content">
+                    <input type="text" id="node-title" placeholder="Title (base64 auto)">
+                    <textarea id="node-content" placeholder="Content..."></textarea>
+                    <div id="editor-buttons">
+                        <button onclick="app.addChild()">➕ <span data-i18n="AddChild">Add</span></button>
+                        <button onclick="app.updateNode()">💾 <span data-i18n="Update">Update</span></button>
+                        <button onclick="app.removeNode()">🗑 <span data-i18n="Remove">Remove</span></button>
+                        <button onclick="app.copyContent()">📋 <span data-i18n="Copy">Copy</span></button>
+                    </div>
+                    <div id="mimetype-selector">
+                        <select onchange="app.changeMimetype(this.value)">
+                            <option value="text/plain">text/plain</option>
+                            <option value="text/html">text/html</option>
+                            <option value="application/rtf">application/rtf</option>
+                            <option value="image/png">image/png</option>
+                            <option value="image/jpeg">image/jpeg</option>
+                            <option value="image/webp">image/webp</option>
+                        </select>
+                    </div>
+                    <div id="attachments-area"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="messages-pane" class="pane">
+        <div class="pane-header" onclick="app.togglePane('messages-pane')">📝 <span data-i18n="Messages">Messages</span></div>
+        <div id="messages-content"></div>
+    </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
