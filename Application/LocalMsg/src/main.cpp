@@ -89,6 +89,8 @@ static std::wstring s2ws(const std::string& s) {
 #define IDC_PEER_NAME_LABEL 111
 #define IDC_COMM_LOG        113
 #define IDC_DEBUG_LOG       114
+#define IDC_RECEIVE_BTN     115
+#define IDC_USER_FILTER     119
 
 #define IDM_SEND_FILES  201
 #define IDM_CLEAR_CHAT  202
@@ -114,7 +116,7 @@ static std::wstring s2ws(const std::string& s) {
 // ---------------------------------------------------------------------------
 // [2] IPMsg Protocol Constants
 // ---------------------------------------------------------------------------
-#define IPMSG_PORT          2425
+static int    g_ipmsgPort = 2425;      // UDP port for IPMsg, overridable via LOCALMSG_UDPPORT env
 #define GET_MODE(cmd)  (cmd & 0x000000ffUL)
 #define GET_OPT(cmd)   (cmd & 0xffffff00UL)
 
@@ -213,6 +215,7 @@ struct TextSendParams {
     int          peerPort = LS_PORT;
     std::wstring text;
     std::wstring senderAlias;
+    std::wstring toUser;
     HWND         notifyHwnd = nullptr;
 };
 
@@ -220,6 +223,7 @@ struct PseudoUser {
     std::wstring username;
     std::wstring hostname;
     bool active = true;
+    DWORD lastSeenMs = 0;
 };
 
 struct Message {
@@ -249,6 +253,7 @@ static HWND g_statusBar    = nullptr;
 static HWND g_reloadBtn      = nullptr;
 static HWND g_peerNameLabel  = nullptr;
 static HWND g_chatView       = nullptr;
+static HWND g_userFilter     = nullptr;
 static HWND g_textInput      = nullptr;
 static HWND g_sendTextBtn    = nullptr;
 static HWND g_attachBtn      = nullptr;
@@ -314,6 +319,7 @@ static SOCKET g_restSock     = INVALID_SOCKET;
 // Forward declarations
 static bool IsPseudoUser(const std::wstring& username);
 static std::wstring GetPrimaryUser();
+static void PushMessage(const std::wstring& from, const std::wstring& to, const std::wstring& text);
 
 // File inbox for pseudo-user auto-accept transfers (protected by g_xferCs)
 struct ReceivedFile {
@@ -378,7 +384,7 @@ static std::string MakeId() {
 
 static std::wstring TimeStamp() {
     SYSTEMTIME st; GetLocalTime(&st);
-    wchar_t buf[32]; swprintf(buf, 32, L"%02d:%02d:%02d", st.wHour, st.wMinute, st.wSecond);
+    wchar_t buf[64]; swprintf(buf, 64, L"%04d-%02d-%02d %02d:%02d:%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
     return buf;
 }
 
@@ -578,25 +584,35 @@ static DWORD WINAPI DiscoveryThread(LPVOID) {
             sockaddr_in from{}; int fromLen = sizeof(from);
             int n = recvfrom(g_udpSock, buf, sizeof(buf)-1, 0, (sockaddr*)&from, &fromLen);
             if (n > 0) {
-                std::string json(buf, n);
-                char ipbuf[64] = {}; inet_ntop(AF_INET, &from.sin_addr, ipbuf, sizeof(ipbuf));
-                DebugLog(L"LS <<< recv from " + s2ws(ipbuf) + L": " + s2ws(json));
-                std::string fp = JsonGet(json, "fingerprint");
-                if (!fp.empty() && fp != g_fingerprint) {
-                    auto* p        = new PeerInfo;
-                    p->alias       = s2ws(JsonGet(json, "alias"));
-                    p->deviceType  = s2ws(JsonGet(json, "deviceType"));
-                    p->fingerprint = s2ws(fp);
-                    p->lastSeenMs  = GetTickCount();
-                    p->ip = s2ws(std::string(ipbuf));
-                    std::string ps = JsonGet(json, "port");
-                    p->port = ps.empty() ? LS_PORT : atoi(ps.c_str());
-                    p->protocol = Proto::LocalSend;
-                    PostMessage(g_hwnd, WM_LS_PEER_FOUND, 0, (LPARAM)p);
-
-                    sockaddr_in reply = from;
-                    SendAnnounce(&reply);
-                }
+                std::string raw(buf, n);
+                sockaddr_in fromCopy = from;
+                HANDLE hJob = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+                    auto* args = (std::pair<std::string,sockaddr_in>*)p;
+                    std::string json = args->first;
+                    sockaddr_in from = args->second;
+                    delete args;
+                    char ipbuf[64] = {}; inet_ntop(AF_INET, &from.sin_addr, ipbuf, sizeof(ipbuf));
+                    DebugLog(L"LS <<< recv from " + s2ws(ipbuf) + L": " + s2ws(json));
+                    std::string fp = JsonGet(json, "fingerprint");
+                    if (!fp.empty() && fp != g_fingerprint) {
+                        auto* peer = new PeerInfo;
+                        peer->alias       = s2ws(JsonGet(json, "alias"));
+                        peer->deviceType  = s2ws(JsonGet(json, "deviceType"));
+                        peer->fingerprint = s2ws(fp);
+                        peer->lastSeenMs  = GetTickCount();
+                        peer->ip = s2ws(std::string(ipbuf));
+                        std::string ps = JsonGet(json, "port");
+                        peer->port = ps.empty() ? LS_PORT : atoi(ps.c_str());
+                        peer->protocol = Proto::LocalSend;
+                        PostMessage(g_hwnd, WM_LS_PEER_FOUND, 0, (LPARAM)peer);
+                        // SendAnnounce inline (avoid capturing outer lambda)
+                        std::string ann = BuildAnnounce(g_listenPort);
+                        DebugLog(L"LS >>> multicast (unicast): " + s2ws(ann));
+                        sendto(g_udpSock, ann.c_str(), (int)ann.size(), 0, (const sockaddr*)&from, sizeof(sockaddr_in));
+                    }
+                    return 0;
+                }, new std::pair<std::string,sockaddr_in>(raw, fromCopy), 0, nullptr);
+                if (hJob) CloseHandle(hJob);
             }
         }
         bool force = g_announceNow;
@@ -872,13 +888,31 @@ static void HandleTextMessage(HttpReq& req) {
         DebugLog(L"Handler TextMessage: RecvBody FAILED");
         SendResponse(req, 500, "{}"); return;
     }
+    // Format: senderAlias \x01 toUser \x01 text
+    // Legacy format (no toUser): senderAlias \x01 text
     std::wstring payload = s2ws(body);
+    size_t sep1 = payload.find(L'\x01');
+    std::wstring senderAlias = (sep1 == std::wstring::npos) ? L"?" : payload.substr(0, sep1);
+    std::wstring toUser, text;
+    if (sep1 != std::wstring::npos) {
+        size_t sep2 = payload.find(L'\x01', sep1 + 1);
+        if (sep2 != std::wstring::npos) {
+            toUser = payload.substr(sep1 + 1, sep2 - sep1 - 1);
+            text = payload.substr(sep2 + 1);
+        } else {
+            text = payload.substr(sep1 + 1);
+        }
+    }
+    if (toUser.empty()) toUser = GetPrimaryUser();
+    // Store in message queue and notify UI
+    PushMessage(senderAlias, toUser, text);
+    std::wstring* notifyPayload = new std::wstring(senderAlias + L"\x01" + toUser + L"\x01" + text);
+    PostMessage(g_hwnd, WM_IPMSG_TEXT_RCVD, 0, (LPARAM)notifyPayload);
     std::wstring preview = payload;
     for (auto& ch : preview) if (ch < 0x20) ch = L' ';
     if (preview.size() > 80) { preview = preview.substr(0, 80); preview += L"\x2026"; }
     PostMessage(g_hwnd, WM_LS_APPEND_COMM, 0,
         (LPARAM)new std::wstring(L"RECV localmsg payload: " + preview));
-    PostMessage(g_hwnd, WM_LS_TEXT_RECEIVED, 0, (LPARAM)new std::wstring(payload));
     SendResponse(req, 200, "{}");
 }
 
@@ -1103,7 +1137,7 @@ static DWORD WINAPI SendFileThread(LPVOID pv) {
 // ---------------------------------------------------------------------------
 static DWORD WINAPI SendTextThread(LPVOID pv) {
     auto* sp = (TextSendParams*)pv;
-    std::string body = ws2s(sp->senderAlias) + "\x01" + ws2s(sp->text);
+    std::string body = ws2s(sp->senderAlias) + "\x01" + ws2s(sp->toUser) + "\x01" + ws2s(sp->text);
     {
         std::wstring preview = s2ws(body);
         for (auto& ch : preview) if (ch < 0x20) ch = L' ';
@@ -1138,6 +1172,37 @@ static DWORD WINAPI SendTextThread(LPVOID pv) {
     }
     if (hSess) WinHttpCloseHandle(hSess);
     delete sp; return 0;
+}
+
+// ---------------------------------------------------------------------------
+// [14b] LocalSend — Send text via HTTPS (for large messages or pseudo-user routing)
+// ---------------------------------------------------------------------------
+static bool SendTextHttps(const std::wstring& fromUser, const std::wstring& toUser,
+                          const std::wstring& text) {
+    PeerInfo target;
+    bool isIp = toUser.find(L'.') != std::wstring::npos;
+    EnterCriticalSection(&g_peerCs);
+    if (isIp) {
+        for (auto& p : g_peers)
+            if (p.ip == toUser) { target = p; break; }
+    } else {
+        for (auto& p : g_peers)
+            if (p.alias == toUser) { target = p; break; }
+    }
+    LeaveCriticalSection(&g_peerCs);
+    if (target.ip.empty()) return false;
+    int port = target.port > 0 ? target.port : LS_PORT;
+
+    auto* sp = new TextSendParams;
+    sp->peerIp = target.ip;
+    sp->peerPort = port;
+    sp->text = text;
+    sp->senderAlias = fromUser;
+    sp->toUser = toUser;
+    sp->notifyHwnd = g_hwnd;
+    HANDLE h = CreateThread(nullptr, 0, SendTextThread, sp, 0, nullptr);
+    if (h) CloseHandle(h); else { delete sp; return false; }
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1219,7 +1284,7 @@ static bool AddPseudoUser(const std::wstring& username) {
     EnterCriticalSection(&g_pseudoCs);
     for (auto& u : g_pseudoUsers)
         if (u.username == username) { LeaveCriticalSection(&g_pseudoCs); return false; }
-    PseudoUser pu; pu.username = username; pu.hostname = g_myHostname; pu.active = true;
+    PseudoUser pu; pu.username = username; pu.hostname = g_myHostname; pu.active = true; pu.lastSeenMs = GetTickCount();
     g_pseudoUsers.push_back(pu);
     LeaveCriticalSection(&g_pseudoCs);
     DebugLog(L"Pseudo user added: " + username);
@@ -1232,6 +1297,28 @@ static bool RemovePseudoUser(const std::wstring& username) {
         if (g_pseudoUsers[i].username == username) { g_pseudoUsers.erase(g_pseudoUsers.begin()+i); LeaveCriticalSection(&g_pseudoCs); DebugLog(L"Pseudo user removed: " + username); return true; }
     LeaveCriticalSection(&g_pseudoCs);
     return false;
+}
+
+static void TouchPseudoUser(const std::wstring& username) {
+    EnterCriticalSection(&g_pseudoCs);
+    for (auto& pu : g_pseudoUsers)
+        if (pu.username == username) { pu.lastSeenMs = GetTickCount(); break; }
+    LeaveCriticalSection(&g_pseudoCs);
+}
+
+static void CleanupStalePseudoUsers() {
+    DWORD now = GetTickCount();
+    DWORD timeoutMs = 30 * 60 * 1000; // 30 minutes
+    EnterCriticalSection(&g_pseudoCs);
+    for (size_t i = 0; i < g_pseudoUsers.size(); ) {
+        if (now - g_pseudoUsers[i].lastSeenMs > timeoutMs) {
+            DebugLog(L"Pseudo user timed out (30m): " + g_pseudoUsers[i].username);
+            g_pseudoUsers.erase(g_pseudoUsers.begin() + i);
+        } else {
+            ++i;
+        }
+    }
+    LeaveCriticalSection(&g_pseudoCs);
 }
 
 // ---------------------------------------------------------------------------
@@ -1272,6 +1359,25 @@ static std::wstring GetMessagesJson(const std::wstring& user, bool advancePtr) {
     r += "]"; return s2ws(r);
 }
 
+static std::wstring GetUserNameByIndex(int idx) {
+    EnterCriticalSection(&g_pseudoCs);
+    if (idx < (int)g_pseudoUsers.size()) {
+        std::wstring n = g_pseudoUsers[idx].username;
+        LeaveCriticalSection(&g_pseudoCs); return n;
+    }
+    int peerIdx = idx - (int)g_pseudoUsers.size();
+    LeaveCriticalSection(&g_pseudoCs);
+    EnterCriticalSection(&g_peerCs);
+    if (peerIdx < (int)g_peers.size()) {
+        std::wstring n = g_peers[peerIdx].alias;
+        LeaveCriticalSection(&g_peerCs); return n;
+    }
+    LeaveCriticalSection(&g_peerCs);
+    return {};
+}
+
+// ---------------------------------------------------------------------------
+// [17] IPMsg — Message Inbox
 // ---------------------------------------------------------------------------
 // [18a] IPMsg — Pending sends (retry on no ACK)
 // ---------------------------------------------------------------------------
@@ -1371,7 +1477,7 @@ static bool SendTextIpMsg(const std::wstring& fromUser, const std::wstring& toUs
     pkt.destUser = toUser; pkt.extra = text;
 
     sockaddr_in dest = {};
-    dest.sin_family = AF_INET; dest.sin_port = htons(IPMSG_PORT);
+    dest.sin_family = AF_INET; dest.sin_port = htons((u_short)g_ipmsgPort);
     inet_pton(AF_INET, ws2s(target.ip).c_str(), &dest.sin_addr);
     SendIpMsg(pkt, dest);
     DebugLog(L"IPMSG >>> SENDMSG to " + toUser + L": " + text);
@@ -1401,7 +1507,7 @@ static void AnnouncePseudoUsers(const sockaddr_in* target = nullptr) {
         if (target) {
             sendto(g_ipmsgSock, raw.c_str(), (int)raw.size(), 0, (const sockaddr*)target, sizeof(*target));
         } else {
-            sockaddr_in bc = {}; bc.sin_family = AF_INET; bc.sin_port = htons(IPMSG_PORT); bc.sin_addr.s_addr = INADDR_BROADCAST;
+            sockaddr_in bc = {}; bc.sin_family = AF_INET; bc.sin_port = htons((u_short)g_ipmsgPort); bc.sin_addr.s_addr = INADDR_BROADCAST;
             sendto(g_ipmsgSock, raw.c_str(), (int)raw.size(), 0, (const sockaddr*)&bc, sizeof(bc));
             DebugLog(L"IPMSG >>> BR_ENTRY for " + pu.username);
         }
@@ -1417,7 +1523,7 @@ static void SendBrExit(const std::wstring& username) {
     pkt.senderUser = username; pkt.senderHost = g_myHostname;
     pkt.command = IPMSG_BR_EXIT | IPMSG_CAPUTF8OPT;
     pkt.extra = username;
-    sockaddr_in bc = {}; bc.sin_family = AF_INET; bc.sin_port = htons(IPMSG_PORT); bc.sin_addr.s_addr = INADDR_BROADCAST;
+    sockaddr_in bc = {}; bc.sin_family = AF_INET; bc.sin_port = htons((u_short)g_ipmsgPort); bc.sin_addr.s_addr = INADDR_BROADCAST;
     std::string raw = ComposeIpMsgPacket(pkt);
     sendto(g_ipmsgSock, raw.c_str(), (int)raw.size(), 0, (const sockaddr*)&bc, sizeof(bc));
     DebugLog(L"IPMSG >>> BR_EXIT for " + username);
@@ -1428,12 +1534,12 @@ static DWORD WINAPI IpMsgThread(LPVOID) {
     if (g_ipmsgSock == INVALID_SOCKET) return 1;
     BOOL broadcast = TRUE; setsockopt(g_ipmsgSock, SOL_SOCKET, SO_BROADCAST, (char*)&broadcast, sizeof(broadcast));
     BOOL reuse = TRUE; setsockopt(g_ipmsgSock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
-    sockaddr_in local = {}; local.sin_family = AF_INET; local.sin_port = htons(IPMSG_PORT); local.sin_addr.s_addr = INADDR_ANY;
+    sockaddr_in local = {}; local.sin_family = AF_INET; local.sin_port = htons((u_short)g_ipmsgPort); local.sin_addr.s_addr = INADDR_ANY;
     if (bind(g_ipmsgSock, (sockaddr*)&local, sizeof(local)) != 0) {
-        DebugLog(L"IPMSG: bind port " + std::to_wstring(IPMSG_PORT) + L" FAILED");
+        DebugLog(L"IPMSG: bind port " + std::to_wstring(g_ipmsgPort) + L" FAILED");
         closesocket(g_ipmsgSock); g_ipmsgSock = INVALID_SOCKET; return 1;
     }
-    DebugLog(L"IPMSG: listening on port " + std::to_wstring(IPMSG_PORT));
+    DebugLog(L"IPMSG: listening on port " + std::to_wstring(g_ipmsgPort));
     Sleep(500);
     // Auto-create hostname-based identity if no pseudo user exists
     EnterCriticalSection(&g_pseudoCs);
@@ -1455,103 +1561,79 @@ static DWORD WINAPI IpMsgThread(LPVOID) {
             int n = recvfrom(g_ipmsgSock, buf, sizeof(buf)-1, 0, (sockaddr*)&from, &fromLen);
             if (n > 0) {
                 std::string raw(buf, n);
-                char ipbuf[64] = {}; inet_ntop(AF_INET, &from.sin_addr, ipbuf, sizeof(ipbuf));
-                std::wstring fromIp = s2ws(ipbuf);
-                IpMsgPacket pkt;
-                if (!ParseIpMsgPacket(raw, pkt)) { DebugLog(L"IPMSG <<< parse FAILED from " + fromIp); continue; }
-                DWORD mode = GET_MODE(pkt.command);
-                DebugLog(L"IPMSG <<< " + IpMsgDirStr(pkt.command) + L" from " + pkt.senderUser + L"@" + fromIp + L" dst=" + pkt.destUser);
+                sockaddr_in fromCopy = from;
+                HANDLE hJob = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+                    auto* args = (std::pair<std::string,sockaddr_in>*)p;
+                    std::string raw = args->first;
+                    sockaddr_in from = args->second;
+                    delete args;
+                    char ipbuf[64] = {}; inet_ntop(AF_INET, &from.sin_addr, ipbuf, sizeof(ipbuf));
+                    std::wstring fromIp = s2ws(ipbuf);
+                    IpMsgPacket pkt;
+                    if (!ParseIpMsgPacket(raw, pkt)) { DebugLog(L"IPMSG <<< parse FAILED from " + fromIp); return 0; }
+                    DWORD mode = GET_MODE(pkt.command);
+                    DebugLog(L"IPMSG <<< " + IpMsgDirStr(pkt.command) + L" from " + pkt.senderUser + L"@" + fromIp + L" dst=" + pkt.destUser);
 
-                switch (mode) {
-                case IPMSG_BR_ENTRY: {
-                    bool self = false;
-                    EnterCriticalSection(&g_pseudoCs);
-                    for (auto& pu : g_pseudoUsers) if (pu.username == pkt.senderUser) { self = true; break; }
-                    LeaveCriticalSection(&g_pseudoCs);
-                    if (self) break;
-                    EnterCriticalSection(&g_peerCs);
-                    bool found = false;
-                    for (auto& e : g_peers)
-                        if (e.alias == pkt.senderUser && e.ip == fromIp && e.protocol == Proto::IPMsg) { e.lastSeenMs = GetTickCount(); e.hostname = pkt.senderHost; found = true; break; }
-                    if (!found) {
-                        PeerInfo pi; pi.alias = pkt.senderUser; pi.hostname = pkt.senderHost; pi.ip = fromIp; pi.lastSeenMs = GetTickCount(); pi.protocol = Proto::IPMsg;
-                        g_peers.push_back(pi);
-                    }
-                    LeaveCriticalSection(&g_peerCs);
-                    PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0);
-                    PostMessage(g_hwnd, WM_LS_APPEND_COMM, 0, (LPARAM)new std::wstring(L"IPMSG peer found: " + pkt.senderUser + L" " + fromIp));
-                    // Reply ANSENTRY for each pseudo user
-                    EnterCriticalSection(&g_pseudoCs);
-                    for (auto& pu : g_pseudoUsers) {
-                        if (!pu.active) continue;
-                        IpMsgPacket ans; static DWORD ansNo = 1;
-                        ans.version = 1; ans.packetNo = ansNo++;
-                        ans.senderUser = pu.username; ans.senderHost = pu.hostname;
-                        ans.command = IPMSG_ANSENTRY | IPMSG_CAPUTF8OPT;
-                        ans.destUser = pkt.senderUser; ans.extra = pu.username;
-                        sockaddr_in dest = from; SendIpMsg(ans, dest);
-                    }
-                    LeaveCriticalSection(&g_pseudoCs);
-                    break;
-                }
-                case IPMSG_ANSENTRY: {
-                    EnterCriticalSection(&g_peerCs);
-                    bool found = false;
-                    for (auto& e : g_peers)
-                        if (e.alias == pkt.senderUser && e.ip == fromIp && e.protocol == Proto::IPMsg) { e.lastSeenMs = GetTickCount(); found = true; break; }
-                    if (!found) {
-                        PeerInfo pi; pi.alias = pkt.senderUser; pi.hostname = pkt.senderHost; pi.ip = fromIp; pi.lastSeenMs = GetTickCount(); pi.protocol = Proto::IPMsg;
-                        g_peers.push_back(pi);
-                    }
-                    LeaveCriticalSection(&g_peerCs);
-                    PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0);
-                    break;
-                }
-                case IPMSG_SENDMSG: {
-                    // Duplicate / replay detection per sender IP.
-                    // Accept if: first packet from this peer, or packetNo advanced forward,
-                    // or packetNo wrapped/reset (new value is much smaller than last → new session).
-                    bool isDuplicate = false;
-                    {
-                        auto it = g_ipmsgLastPktNo.find(fromIp);
-                        if (it != g_ipmsgLastPktNo.end()) {
-                            DWORD last = it->second;
-                            bool reset = (pkt.packetNo < last) && ((last - pkt.packetNo) > 10000);
-                            if (!reset && pkt.packetNo <= last)
-                                isDuplicate = true;
-                            else
-                                it->second = pkt.packetNo;
-                        } else {
-                            g_ipmsgLastPktNo[fromIp] = pkt.packetNo;
+                    switch (mode) {
+                    case IPMSG_BR_ENTRY: {
+                        bool self = false;
+                        EnterCriticalSection(&g_pseudoCs);
+                        for (auto& pu : g_pseudoUsers) if (pu.username == pkt.senderUser) { self = true; break; }
+                        LeaveCriticalSection(&g_pseudoCs);
+                        if (self) break;
+                        EnterCriticalSection(&g_peerCs);
+                        bool found = false;
+                        for (auto& e : g_peers)
+                            if (e.alias == pkt.senderUser && e.ip == fromIp && e.protocol == Proto::IPMsg) { e.lastSeenMs = GetTickCount(); e.hostname = pkt.senderHost; found = true; break; }
+                        if (!found) {
+                            PeerInfo pi; pi.alias = pkt.senderUser; pi.hostname = pkt.senderHost; pi.ip = fromIp; pi.lastSeenMs = GetTickCount(); pi.protocol = Proto::IPMsg;
+                            g_peers.push_back(pi);
                         }
-                    }
-                    if (isDuplicate) {
-                        // Still send RECVMSG so sender stops retransmitting
-                        std::wstring myName = GetPrimaryUser();
-                        if (myName.empty()) myName = g_myHostname;
-                        IpMsgPacket recv; recv.version = 1; recv.packetNo = pkt.packetNo;
-                        recv.senderUser = myName; recv.senderHost = g_myHostname;
-                        recv.command = IPMSG_RECVMSG;
-                        recv.extra = std::to_wstring(pkt.packetNo);
-                        sockaddr_in dest = from; SendIpMsg(recv, dest);
-                        DebugLog(L"IPMSG dup pkt " + std::to_wstring(pkt.packetNo) + L" from " + fromIp + L" — RECVMSG resent");
+                        LeaveCriticalSection(&g_peerCs);
+                        PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0);
+                        PostMessage(g_hwnd, WM_LS_APPEND_COMM, 0, (LPARAM)new std::wstring(L"IPMSG peer found: " + pkt.senderUser + L" " + fromIp));
+                        EnterCriticalSection(&g_pseudoCs);
+                        for (auto& pu : g_pseudoUsers) {
+                            if (!pu.active) continue;
+                            IpMsgPacket ans; static DWORD ansNo = 1;
+                            ans.version = 1; ans.packetNo = ansNo++;
+                            ans.senderUser = pu.username; ans.senderHost = pu.hostname;
+                            ans.command = IPMSG_ANSENTRY | IPMSG_CAPUTF8OPT;
+                            ans.destUser = pkt.senderUser; ans.extra = pu.username;
+                            sockaddr_in dest = from; SendIpMsg(ans, dest);
+                        }
+                        LeaveCriticalSection(&g_pseudoCs);
                         break;
                     }
-                    // Extract text before first \0
-                    std::wstring msgText = pkt.extra;
-                    size_t nulPos = msgText.find(L'\0');
-                    if (nulPos != std::wstring::npos) msgText = msgText.substr(0, nulPos);
-                    bool isSecret = (GET_OPT(pkt.command) & IPMSG_SECRETOPT) != 0;
-                    std::wstring toUser = pkt.destUser.empty() ? L"*" : pkt.destUser;
-                    // Deduplicate delayed messages by content hash
-                    std::wstring msgKey = pkt.senderUser + L"\x01" + msgText;
-                    uint64_t hash = 14695981039346656037ULL;
-                    for (auto& ch : msgKey) { hash ^= (unsigned char)ch; hash *= 1099511628211ULL; }
-                    bool isDelayed = (GET_OPT(pkt.command) & IPMSG_RETRYOPT) != 0;
-                    if (isDelayed) {
-                        if (g_ipmsgSeenMsgs.find(hash) != g_ipmsgSeenMsgs.end()) {
-                            DebugLog(L"IPMSG delayed dup (content seen) from " + pkt.senderUser + L" — skipped");
-                            // Still send ACK
+                    case IPMSG_ANSENTRY: {
+                        EnterCriticalSection(&g_peerCs);
+                        bool found = false;
+                        for (auto& e : g_peers)
+                            if (e.alias == pkt.senderUser && e.ip == fromIp && e.protocol == Proto::IPMsg) { e.lastSeenMs = GetTickCount(); found = true; break; }
+                        if (!found) {
+                            PeerInfo pi; pi.alias = pkt.senderUser; pi.hostname = pkt.senderHost; pi.ip = fromIp; pi.lastSeenMs = GetTickCount(); pi.protocol = Proto::IPMsg;
+                            g_peers.push_back(pi);
+                        }
+                        LeaveCriticalSection(&g_peerCs);
+                        PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0);
+                        break;
+                    }
+                    case IPMSG_SENDMSG: {
+                        bool isDuplicate = false;
+                        {
+                            auto it = g_ipmsgLastPktNo.find(fromIp);
+                            if (it != g_ipmsgLastPktNo.end()) {
+                                DWORD last = it->second;
+                                bool reset = (pkt.packetNo < last) && ((last - pkt.packetNo) > 10000);
+                                if (!reset && pkt.packetNo <= last)
+                                    isDuplicate = true;
+                                else
+                                    it->second = pkt.packetNo;
+                            } else {
+                                g_ipmsgLastPktNo[fromIp] = pkt.packetNo;
+                            }
+                        }
+                        if (isDuplicate) {
                             std::wstring myName = GetPrimaryUser();
                             if (myName.empty()) myName = g_myHostname;
                             IpMsgPacket recv; recv.version = 1; recv.packetNo = pkt.packetNo;
@@ -1559,96 +1641,116 @@ static DWORD WINAPI IpMsgThread(LPVOID) {
                             recv.command = IPMSG_RECVMSG;
                             recv.extra = std::to_wstring(pkt.packetNo);
                             sockaddr_in dest = from; SendIpMsg(recv, dest);
-                            DebugLog(L"IPMSG >>> RECVMSG (delayed dup) for pkt " + std::to_wstring(pkt.packetNo));
+                            DebugLog(L"IPMSG dup pkt " + std::to_wstring(pkt.packetNo) + L" from " + fromIp + L" — RECVMSG resent");
                             break;
                         }
-                        g_ipmsgSeenMsgs.insert(hash);
-                        if (g_ipmsgSeenMsgs.size() > 500) g_ipmsgSeenMsgs.erase(g_ipmsgSeenMsgs.begin());
-                    }
-                    // Batch detection: if >2 msgs from same IP arrive within 1s, suppress rest
-                    bool suppressDisplay = false;
-                    {
-                        DWORD now = GetTickCount();
-                        auto& bt = g_ipmsgBatchTime[fromIp];
-                        auto& rl = g_ipmsgRateLimit[fromIp];
-                        if (now - rl.second > 60000) { rl.first = 0; rl.second = now; }
-                        rl.first++;
-                        if (now - bt <= 1000 && rl.first > 1) suppressDisplay = true;
-                        bt = now;
-                        if (suppressDisplay && rl.first == 2) DebugLog(L"IPMSG batch detected from " + fromIp + L" — suppressing rest");
-                        if (rl.first > 10) suppressDisplay = true; // hard cap
-                    }
-                    if (suppressDisplay) {
-                        DebugLog(L"IPMSG suppressed (rate-limit) from " + pkt.senderUser + L": " + msgText);
-                    } else {
-                        std::wstring display = isSecret ? L"[envelop] " + msgText : msgText;
-                        PushMessage(pkt.senderUser, toUser, display);
-                        PostMessage(g_hwnd, WM_IPMSG_TEXT_RCVD, 0, (LPARAM)new std::wstring(pkt.senderUser + L"\x01" + toUser + L"\x01" + display));
-                    }
-                    // Always send RECVMSG ack
-                    std::wstring myName = GetPrimaryUser();
-                    if (myName.empty()) myName = g_myHostname;
-                    {
-                        IpMsgPacket recv; recv.version = 1; recv.packetNo = pkt.packetNo;
-                        recv.senderUser = myName; recv.senderHost = g_myHostname;
-                        recv.command = IPMSG_RECVMSG;
-                        recv.extra = std::to_wstring(pkt.packetNo);
-                        sockaddr_in dest = from; SendIpMsg(recv, dest);
-                        DebugLog(L"IPMSG >>> RECVMSG ack for packet " + std::to_wstring(pkt.packetNo));
-                    }
-                    // For sealed messages, send READMSG
-                    if (isSecret) {
-                        IpMsgPacket read; read.version = 1; read.packetNo = pkt.packetNo;
-                        read.senderUser = myName; read.senderHost = g_myHostname;
-                        read.command = IPMSG_READMSG;
-                        if (GET_OPT(pkt.command) & IPMSG_READCHECKOPT) read.command |= IPMSG_READCHECKOPT;
-                        read.extra = std::to_wstring(pkt.packetNo);
-                        sockaddr_in dest = from; SendIpMsg(read, dest);
-                        DebugLog(L"IPMSG >>> READMSG for sealed packet " + std::to_wstring(pkt.packetNo));
-                    }
-                    break;
-                }
-                case IPMSG_RECVMSG: {
-                    DebugLog(L"IPMSG <<< RECVMSG ack for packet " + pkt.extra);
-                    // Match by extra (packetNo string) or packetNo
-                    DWORD ackPktNo = (DWORD)_wtoi64(pkt.extra.c_str());
-                    if (ackPktNo > 0) AckPendingSend(ackPktNo);
-                    break;
-                }
-                case IPMSG_READMSG: {
-                    DebugLog(L"IPMSG <<< READMSG (envelope opened) for packet " + pkt.extra);
-                    // If READCHECKOPT is set, send ANSREADMSG back
-                    if (GET_OPT(pkt.command) & IPMSG_READCHECKOPT) {
+                        std::wstring msgText = pkt.extra;
+                        size_t nulPos = msgText.find(L'\0');
+                        if (nulPos != std::wstring::npos) msgText = msgText.substr(0, nulPos);
+                        bool isSecret = (GET_OPT(pkt.command) & IPMSG_SECRETOPT) != 0;
+                        std::wstring toUser = pkt.destUser.empty() ? L"*" : pkt.destUser;
+                        std::wstring msgKey = pkt.senderUser + L"\x01" + msgText;
+                        uint64_t hash = 14695981039346656037ULL;
+                        for (auto& ch : msgKey) { hash ^= (unsigned char)ch; hash *= 1099511628211ULL; }
+                        bool isDelayed = (GET_OPT(pkt.command) & IPMSG_RETRYOPT) != 0;
+                        if (isDelayed) {
+                            if (g_ipmsgSeenMsgs.find(hash) != g_ipmsgSeenMsgs.end()) {
+                                DebugLog(L"IPMSG delayed dup (content seen) from " + pkt.senderUser + L" — skipped");
+                                std::wstring myName = GetPrimaryUser();
+                                if (myName.empty()) myName = g_myHostname;
+                                IpMsgPacket recv; recv.version = 1; recv.packetNo = pkt.packetNo;
+                                recv.senderUser = myName; recv.senderHost = g_myHostname;
+                                recv.command = IPMSG_RECVMSG;
+                                recv.extra = std::to_wstring(pkt.packetNo);
+                                sockaddr_in dest = from; SendIpMsg(recv, dest);
+                                DebugLog(L"IPMSG >>> RECVMSG (delayed dup) for pkt " + std::to_wstring(pkt.packetNo));
+                                break;
+                            }
+                            g_ipmsgSeenMsgs.insert(hash);
+                            if (g_ipmsgSeenMsgs.size() > 500) g_ipmsgSeenMsgs.erase(g_ipmsgSeenMsgs.begin());
+                        }
+                        bool suppressDisplay = false;
+                        {
+                            DWORD now = GetTickCount();
+                            auto& bt = g_ipmsgBatchTime[fromIp];
+                            auto& rl = g_ipmsgRateLimit[fromIp];
+                            if (now - rl.second > 60000) { rl.first = 0; rl.second = now; }
+                            rl.first++;
+                            if (now - bt <= 1000 && rl.first > 1) suppressDisplay = true;
+                            bt = now;
+                            if (suppressDisplay && rl.first == 2) DebugLog(L"IPMSG batch detected from " + fromIp + L" — suppressing rest");
+                            if (rl.first > 10) suppressDisplay = true;
+                        }
+                        if (suppressDisplay) {
+                            DebugLog(L"IPMSG suppressed (rate-limit) from " + pkt.senderUser + L": " + msgText);
+                        } else {
+                            std::wstring display = isSecret ? L"[envelop] " + msgText : msgText;
+                            PushMessage(pkt.senderUser, toUser, display);
+                            PostMessage(g_hwnd, WM_IPMSG_TEXT_RCVD, 0, (LPARAM)new std::wstring(pkt.senderUser + L"\x01" + toUser + L"\x01" + display));
+                        }
                         std::wstring myName = GetPrimaryUser();
                         if (myName.empty()) myName = g_myHostname;
-                        IpMsgPacket ans; ans.version = 1; ans.packetNo = pkt.packetNo;
-                        ans.senderUser = myName; ans.senderHost = g_myHostname;
-                        ans.command = IPMSG_ANSREADMSG;
-                        ans.extra = std::to_wstring(pkt.packetNo);
-                        sockaddr_in dest = from; SendIpMsg(ans, dest);
-                        DebugLog(L"IPMSG >>> ANSREADMSG for packet " + std::to_wstring(pkt.packetNo));
-                    }
-                    break;
-                }
-                case IPMSG_DELMSG:
-                    DebugLog(L"IPMSG <<< DELMSG (envelope discarded) for packet " + pkt.extra);
-                    break;
-                case IPMSG_ANSREADMSG:
-                    DebugLog(L"IPMSG <<< ANSREADMSG (read confirmed) for packet " + pkt.extra);
-                    break;
-                case IPMSG_BR_EXIT: {
-                    EnterCriticalSection(&g_peerCs);
-                    for (size_t i = 0; i < g_peers.size(); ++i)
-                        if (g_peers[i].alias == pkt.senderUser && g_peers[i].ip == fromIp && g_peers[i].protocol == Proto::IPMsg) {
-                            DebugLog(L"IPMSG removed by BR_EXIT: " + g_peers[i].alias + L" @" + g_peers[i].ip);
-                            g_peers.erase(g_peers.begin()+i); break;
+                        {
+                            IpMsgPacket recv; recv.version = 1; recv.packetNo = pkt.packetNo;
+                            recv.senderUser = myName; recv.senderHost = g_myHostname;
+                            recv.command = IPMSG_RECVMSG;
+                            recv.extra = std::to_wstring(pkt.packetNo);
+                            sockaddr_in dest = from; SendIpMsg(recv, dest);
+                            DebugLog(L"IPMSG >>> RECVMSG ack for packet " + std::to_wstring(pkt.packetNo));
                         }
-                    LeaveCriticalSection(&g_peerCs);
-                    PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0);
-                    PostMessage(g_hwnd, WM_LS_APPEND_COMM, 0, (LPARAM)new std::wstring(L"IPMSG peer gone: " + pkt.senderUser));
-                    break;
-                }
-                }
+                        if (isSecret) {
+                            IpMsgPacket read; read.version = 1; read.packetNo = pkt.packetNo;
+                            read.senderUser = myName; read.senderHost = g_myHostname;
+                            read.command = IPMSG_READMSG;
+                            if (GET_OPT(pkt.command) & IPMSG_READCHECKOPT) read.command |= IPMSG_READCHECKOPT;
+                            read.extra = std::to_wstring(pkt.packetNo);
+                            sockaddr_in dest = from; SendIpMsg(read, dest);
+                            DebugLog(L"IPMSG >>> READMSG for sealed packet " + std::to_wstring(pkt.packetNo));
+                        }
+                        break;
+                    }
+                    case IPMSG_RECVMSG: {
+                        DebugLog(L"IPMSG <<< RECVMSG ack for packet " + pkt.extra);
+                        DWORD ackPktNo = (DWORD)_wtoi64(pkt.extra.c_str());
+                        if (ackPktNo > 0) AckPendingSend(ackPktNo);
+                        break;
+                    }
+                    case IPMSG_READMSG: {
+                        DebugLog(L"IPMSG <<< READMSG (envelope opened) for packet " + pkt.extra);
+                        if (GET_OPT(pkt.command) & IPMSG_READCHECKOPT) {
+                            std::wstring myName = GetPrimaryUser();
+                            if (myName.empty()) myName = g_myHostname;
+                            IpMsgPacket ans; ans.version = 1; ans.packetNo = pkt.packetNo;
+                            ans.senderUser = myName; ans.senderHost = g_myHostname;
+                            ans.command = IPMSG_ANSREADMSG;
+                            ans.extra = std::to_wstring(pkt.packetNo);
+                            sockaddr_in dest = from; SendIpMsg(ans, dest);
+                            DebugLog(L"IPMSG >>> ANSREADMSG for packet " + std::to_wstring(pkt.packetNo));
+                        }
+                        break;
+                    }
+                    case IPMSG_DELMSG:
+                        DebugLog(L"IPMSG <<< DELMSG (envelope discarded) for packet " + pkt.extra);
+                        break;
+                    case IPMSG_ANSREADMSG:
+                        DebugLog(L"IPMSG <<< ANSREADMSG (read confirmed) for packet " + pkt.extra);
+                        break;
+                    case IPMSG_BR_EXIT: {
+                        EnterCriticalSection(&g_peerCs);
+                        for (size_t i = 0; i < g_peers.size(); ++i)
+                            if (g_peers[i].alias == pkt.senderUser && g_peers[i].ip == fromIp && g_peers[i].protocol == Proto::IPMsg) {
+                                DebugLog(L"IPMSG removed by BR_EXIT: " + g_peers[i].alias + L" @" + g_peers[i].ip);
+                                g_peers.erase(g_peers.begin()+i); break;
+                            }
+                        LeaveCriticalSection(&g_peerCs);
+                        PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0);
+                        PostMessage(g_hwnd, WM_LS_APPEND_COMM, 0, (LPARAM)new std::wstring(L"IPMSG peer gone: " + pkt.senderUser));
+                        break;
+                    }
+                    }
+                    return 0;
+                }, new std::pair<std::string,sockaddr_in>(raw, fromCopy), 0, nullptr);
+                if (hJob) CloseHandle(hJob);
             }
         }
         RetryPendingSends();
@@ -1663,27 +1765,51 @@ static DWORD WINAPI IpMsgThread(LPVOID) {
 // ---------------------------------------------------------------------------
 static void SendRestResp(SOCKET s, int code, const std::string& body, const char* ct = "application/json") {
     const char* ph = (code==200)?"OK":(code==400)?"Bad Request":(code==404)?"Not Found":"Error";
-    char hdr[512]; int hl = snprintf(hdr, sizeof(hdr),
-        "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %d\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
-        code, ph, ct, (int)body.size());
-    send(s, hdr, hl, 0); if (!body.empty()) send(s, body.c_str(), (int)body.size(), 0);
+    // coalesce into one send to avoid Nagle delay
+    std::string resp = "HTTP/1.1 " + std::to_string(code) + " " + ph + "\r\n"
+                       "Content-Type: " + ct + "\r\n"
+                       "Content-Length: " + std::to_string((int)body.size()) + "\r\n"
+                       "Access-Control-Allow-Origin: *\r\n"
+                       "Connection: close\r\n\r\n" + body;
+    send(s, resp.data(), (int)resp.size(), 0);
 }
 
 static void HandleRestRequest(SOCKET s) {
+    DWORD _t0 = GetTickCount();
+    // Buffered line reader: reads large chunks, serves lines from memory
+    std::string buf(4096, 0);
+    int bufLen = 0, bufPos = 0;
+
+    auto fillBuf = [&]() -> bool {
+        if (bufPos < bufLen) return true;
+        bufPos = 0;
+        bufLen = (int)recv(s, &buf[0], (int)buf.size(), 0);
+        return bufLen > 0;
+    };
+    auto nextChar = [&]() -> int {
+        return fillBuf() ? (unsigned char)buf[bufPos++] : -1;
+    };
+    auto readLine = [&](std::string& out) {
+        out.clear();
+        while (true) {
+            int c = nextChar();
+            if (c < 0) return false;
+            if (c == '\n') return true;
+            if (c != '\r') out += (char)c;
+        }
+    };
+
     std::string line, method, path;
-    // Parse request line
-    { char c; while (recv(s, &c, 1, 0) > 0) { if (c == '\n') break; if (c != '\r') line += c; } }
-    if (line.empty()) { closesocket(s); return; }
+    if (!readLine(line) || line.empty()) { closesocket(s); return; }
     size_t s1 = line.find(' '); if (s1 == std::string::npos) { closesocket(s); return; }
     method = line.substr(0, s1);
     size_t s2 = line.find(' ', s1+1);
     path = s2 == std::string::npos ? line.substr(s1+1) : line.substr(s1+1, s2-s1-1);
+    DebugLog(L"REST <<< " + s2ws(method) + L" " + s2ws(path));
     // Parse headers
     std::map<std::string,std::string> hdrs;
     int contentLen = 0;
-    while (true) {
-        line.clear(); char c;
-        while (recv(s, &c, 1, 0) > 0) { if (c == '\n') break; if (c != '\r') line += c; }
+    while (readLine(line)) {
         if (line.empty()) break;
         size_t col = line.find(':'); if (col == std::string::npos) continue;
         std::string k = line.substr(0,col), v = line.substr(col+1);
@@ -1693,9 +1819,11 @@ static void HandleRestRequest(SOCKET s) {
     }
     auto it = hdrs.find("content-length");
     if (it != hdrs.end()) contentLen = atoi(it->second.c_str());
-    // Read body
+    // Read body — consume remaining buffer first, then recv more if needed
     std::string body;
-    while (contentLen > 0) { char buf[4096]; int want = ls_min(contentLen,(int)sizeof(buf)); int r = recv(s,buf,want,0); if(r<=0)break; body.append(buf,r); contentLen-=r; }
+    int remain = bufLen - bufPos;
+    if (remain > 0) { int take = ls_min(contentLen, remain); body.append(buf.c_str() + bufPos, take); contentLen -= take; bufPos += take; }
+    while (contentLen > 0) { char b[4096]; int want = ls_min(contentLen,(int)sizeof(b)); int r = recv(s,b,want,0); if(r<=0)break; body.append(b,r); contentLen-=r; }
 
     std::string resp;
     if (method=="GET" && path=="/api/users") {
@@ -1731,6 +1859,7 @@ static void HandleRestRequest(SOCKET s) {
             }
             if (!IsPseudoUser(filter)) filter = GetPrimaryUser();
         }
+        if (!filter.empty()) TouchPseudoUser(filter);
         SendRestResp(s,200,ws2s(GetMessagesJson(filter, advancePtr)));
     } else if (method=="POST" && path=="/api/send") {
         std::string from = JsonGet(body,"from");
@@ -1738,12 +1867,22 @@ static void HandleRestRequest(SOCKET s) {
         std::string text = JsonGet(body,"text");
         if (from.empty()) { from = ws2s(GetPrimaryUser()); if (from.empty()) from = ws2s(g_myHostname); }
         if (to.empty()||text.empty()) { SendRestResp(s,400,"{\"ok\":false,\"error\":\"missing to/text\"}"); closesocket(s); return; }
+        TouchPseudoUser(s2ws(from));
         bool ok = false;
         if (IsPseudoUser(s2ws(to))) {
             PushMessage(s2ws(from), s2ws(to), s2ws(text));
+            std::wstring* payload = new std::wstring(s2ws(from) + L"\x01" + s2ws(to) + L"\x01" + s2ws(text));
+            PostMessage(g_hwnd, WM_IPMSG_TEXT_RCVD, 0, (LPARAM)payload);
             ok = true;
         } else {
-            ok = SendTextIpMsg(s2ws(from), s2ws(to), s2ws(text));
+            // Remote peer — always send as primary user, not pseudo user
+            std::wstring realFrom = GetPrimaryUser();
+            if (realFrom.empty()) realFrom = g_myHostname;
+            if (text.size() > 1024) {
+                ok = SendTextHttps(realFrom, s2ws(to), s2ws(text));
+            } else {
+                ok = SendTextIpMsg(realFrom, s2ws(to), s2ws(text));
+            }
         }
         SendRestResp(s,ok?200:404,ok?"{\"ok\":true}":"{\"ok\":false,\"error\":\"peer not found\"}");
     } else if (method=="POST" && path=="/api/login") {
@@ -1751,7 +1890,7 @@ static void HandleRestRequest(SOCKET s) {
         if (username.empty()) { SendRestResp(s,400,"{\"ok\":false,\"error\":\"missing username\"}"); closesocket(s); return; }
         std::wstring uname = s2ws(username);
         if (AddPseudoUser(uname)) {
-            sockaddr_in bc = {}; bc.sin_family=AF_INET; bc.sin_port=htons(IPMSG_PORT); bc.sin_addr.s_addr=INADDR_BROADCAST;
+            sockaddr_in bc = {}; bc.sin_family=AF_INET; bc.sin_port=htons((u_short)g_ipmsgPort); bc.sin_addr.s_addr=INADDR_BROADCAST;
             IpMsgPacket pkt; static DWORD pktNo=1;
             pkt.version=1; pkt.packetNo=pktNo++; pkt.senderUser=uname; pkt.senderHost=g_myHostname;
             pkt.command=IPMSG_BR_ENTRY|IPMSG_CAPUTF8OPT; pkt.extra=uname;
@@ -1784,6 +1923,7 @@ static void HandleRestRequest(SOCKET s) {
             if (qs.find("peek") != std::string::npos) peek = true;
         }
         if (user.empty()) user = GetPrimaryUser();
+        if (!user.empty()) TouchPseudoUser(user);
         std::string filesResp = "[";
         EnterCriticalSection(&g_xferCs);
         auto fit = g_fileInbox.find(user);
@@ -1816,6 +1956,7 @@ static void HandleRestRequest(SOCKET s) {
             if (t != std::string::npos) timeoutSec = atoi(qs.substr(t+8).c_str());
         }
         if (filter.empty() || !IsPseudoUser(filter)) filter = GetPrimaryUser();
+        if (!filter.empty()) TouchPseudoUser(filter);
         if (timeoutSec < 1)   timeoutSec = 1;
         if (timeoutSec > 120) timeoutSec = 120;
         int soTO = (timeoutSec + 5) * 1000;
@@ -1828,9 +1969,37 @@ static void HandleRestRequest(SOCKET s) {
             Sleep(250);
         }
         SendRestResp(s, 200, result.empty() ? "{\"ok\":false,\"empty\":true}" : result);
+    } else if (method=="GET" && path=="/api/ping") {
+        // Touch all users as heartbeat
+        EnterCriticalSection(&g_pseudoCs);
+        for (auto& pu : g_pseudoUsers) pu.lastSeenMs = GetTickCount();
+        LeaveCriticalSection(&g_pseudoCs);
+        std::string pingResp = "{\"ok\":true,\"status\":\"running\"";
+        pingResp += ",\"rest_port\":" + std::to_string(g_restPort);
+        EnterCriticalSection(&g_pseudoCs);
+        pingResp += ",\"users\":[";
+        for (size_t i = 0; i < g_pseudoUsers.size(); ++i) {
+            if (i) pingResp += ",";
+            pingResp += "\"" + EscapeJson(ws2s(g_pseudoUsers[i].username)) + "\"";
+        }
+        pingResp += "]";
+        int userCount = (int)g_pseudoUsers.size();
+        LeaveCriticalSection(&g_pseudoCs);
+        // Add peer count
+        EnterCriticalSection(&g_peerCs);
+        int peerCount = (int)g_peers.size();
+        LeaveCriticalSection(&g_peerCs);
+        pingResp += ",\"user_count\":" + std::to_string(userCount);
+        pingResp += ",\"peer_count\":" + std::to_string(peerCount);
+        pingResp += "}";
+        SendRestResp(s,200,pingResp);
+
     } else {
         SendRestResp(s,404,"{\"error\":\"not found\"}");
     }
+    DWORD _t1 = GetTickCount();
+    if (_t1 - _t0 > 10)
+        DebugLog(L"REST: " + s2ws(method) + L" " + s2ws(path) + L" took " + std::to_wstring(_t1 - _t0) + L"ms");
     closesocket(s);
 }
 
@@ -1849,12 +2018,17 @@ static DWORD WINAPI RestApiThread(LPVOID) {
     listen(g_restSock, SOMAXCONN);
     DebugLog(L"REST API: listening on 127.0.0.1:" + std::to_wstring(g_restPort));
     while (!g_stopThreads) {
-        fd_set fds; FD_ZERO(&fds); FD_SET(g_restSock, &fds);
-        timeval tv = {0,500000};
-        if (select(0,&fds,nullptr,nullptr,&tv)<=0) continue;
         SOCKET client = accept(g_restSock,nullptr,nullptr);
-        if (client == INVALID_SOCKET) continue;
-        HandleRestRequest(client);
+        if (client == INVALID_SOCKET) break;
+        BOOL nodelay = TRUE; setsockopt(client, IPPROTO_TCP, TCP_NODELAY, (char*)&nodelay, sizeof(nodelay));
+        // Handle each request in its own thread so /api/wait doesn't block others
+        HANDLE h = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+            SOCKET cs = (SOCKET)(INT_PTR)p;
+            HandleRestRequest(cs);
+            return 0;
+        }, (LPVOID)(INT_PTR)client, 0, nullptr);
+        if (h) CloseHandle(h);
+        else closesocket(client);
     }
     closesocket(g_restSock); g_restSock = INVALID_SOCKET;
     return 0;
@@ -1863,18 +2037,48 @@ static DWORD WINAPI RestApiThread(LPVOID) {
 // ---------------------------------------------------------------------------
 // [21] UI Helpers
 // ---------------------------------------------------------------------------
+struct PeerRow {
+    std::wstring name, addr, udpPort, httpPort, proto;
+    bool isMe;
+};
+static void ShowMessageViewer(const std::wstring& forUser) {
+    if (forUser.empty()) return;
+    EnterCriticalSection(&g_msgCs);
+    std::wstring out;
+    for (auto& m : g_messages) {
+        if (m.from == forUser || m.to == forUser) {
+            out += m.time + L" ";
+            if (m.from == forUser)
+                out += L"\u2192 " + m.to + L": " + m.text + L"\r\n";
+            else
+                out += m.from + L": " + m.text + L"\r\n";
+        }
+    }
+    LeaveCriticalSection(&g_msgCs);
+    if (out.empty()) {
+        MessageBoxW(g_hwnd, (L"No messages for " + forUser).c_str(), L"Inbox", MB_OK|MB_ICONINFORMATION);
+        return;
+    }
+    SetWindowTextW(g_chatView, out.c_str());
+}
 static void UpdatePeerList() {
-    // Build combined list: pseudo users first, then discovered peers
-    std::vector<std::tuple<std::wstring,std::wstring,std::wstring,bool>> items;
+    std::vector<PeerRow> items;
     EnterCriticalSection(&g_pseudoCs);
     for (auto& pu : g_pseudoUsers)
-        items.push_back({pu.username, L"127.0.0.1", L"IpMsgP", true});
+        items.push_back({pu.username, L"127.0.0.1",
+                         std::to_wstring(g_ipmsgPort), std::to_wstring(g_restPort),
+                         L"IpMsgP", true});
     LeaveCriticalSection(&g_pseudoCs);
     EnterCriticalSection(&g_peerCs);
     int peerCount = (int)g_peers.size();
     for (auto& p : g_peers) {
         std::wstring proto = (p.protocol == Proto::IPMsg) ? L"IPMsg" : L"LS";
-        items.push_back({p.alias, p.ip, proto, false});
+        int udp = (p.protocol == Proto::IPMsg) ? g_ipmsgPort : LS_PORT;
+        int http = 0; // remote HTTP port unknown
+        items.push_back({p.alias, p.ip,
+                         udp > 0 ? std::to_wstring(udp) : L"",
+                         http > 0 ? std::to_wstring(http) : L"\u2014",
+                         proto, false});
     }
     LeaveCriticalSection(&g_peerCs);
 
@@ -1893,15 +2097,17 @@ static void UpdatePeerList() {
     while (listCount > itemCount) { ListView_DeleteItem(g_peerList, --listCount); }
     // Count name occurrences to detect duplicates
     std::map<std::wstring,int> nameCount;
-    for (auto& item : items) nameCount[std::get<0>(item)]++;
+    for (auto& item : items) nameCount[item.name]++;
     for (int i = 0; i < itemCount; ++i) {
-        std::wstring name = std::get<0>(items[i]);
-        std::wstring ip   = std::get<1>(items[i]);
+        auto& row = items[i];
+        std::wstring name = row.name;
         if (nameCount[name] > 1)
-            name += L"@" + ip;
+            name += L"@" + row.addr;
         ListView_SetItemText(g_peerList, i, 0, (LPWSTR)name.c_str());
-        ListView_SetItemText(g_peerList, i, 1, (LPWSTR)ip.c_str());
-        ListView_SetItemText(g_peerList, i, 2, (LPWSTR)std::get<2>(items[i]).c_str());
+        ListView_SetItemText(g_peerList, i, 1, (LPWSTR)row.addr.c_str());
+        ListView_SetItemText(g_peerList, i, 2, (LPWSTR)row.udpPort.c_str());
+        ListView_SetItemText(g_peerList, i, 3, (LPWSTR)row.httpPort.c_str());
+        ListView_SetItemText(g_peerList, i, 4, (LPWSTR)row.proto.c_str());
     }
 }
 
@@ -1961,18 +2167,21 @@ static void DoLayout(HWND hwnd) {
     SendMessageW(g_statusBar, WM_SIZE, 0, 0);
 
     int divW  = 4, lw = g_dividerX, rw = W - lw - divW;
-    int btnH = 26, nameH = 22, inputH = 200, rightX = lw + divW;
+    int btnH = 26, nameH = 22, filterH = 22, inputH = 200, rightX = lw + divW;
     int attachW = 80, sendW = lw - attachW;
 
-    MoveWindow(g_reloadBtn,   0,0,                    lw, btnH, TRUE);
+    int reloadW = lw / 2, recvW = lw - reloadW;
+    MoveWindow(g_reloadBtn,   0,0,                    reloadW, btnH, TRUE);
+    MoveWindow(GetDlgItem(hwnd, IDC_RECEIVE_BTN), reloadW,0, recvW, btnH, TRUE);
     MoveWindow(g_peerList,    0,btnH,                 lw, ch-btnH-inputH-btnH, TRUE);
     MoveWindow(g_textInput,   0,ch-inputH-btnH,       lw, inputH, TRUE);
     MoveWindow(g_attachBtn,   0,ch-btnH,              attachW, btnH, TRUE);
     MoveWindow(g_sendTextBtn, attachW,ch-btnH,        sendW, btnH, TRUE);
 
     MoveWindow(g_peerNameLabel, rightX, 0, rw, nameH, TRUE);
+    MoveWindow(g_userFilter, rightX, nameH, rw, filterH, TRUE);
 
-    int paneTop = nameH, paneH = ch - nameH, sepH = 5, minH = 30;
+    int paneTop = nameH + filterH, paneH = ch - nameH - filterH, sepH = 5, minH = 30;
     if (g_split1Y < 0) g_split1Y = paneTop + paneH * 25 / 100;
     if (g_split2Y < 0) g_split2Y = paneTop + paneH * 55 / 100;
 
@@ -2110,14 +2319,23 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         ListView_SetExtendedListViewStyle(g_peerList, LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
         { LVCOLUMN c{}; c.mask=LVCF_TEXT|LVCF_WIDTH; c.cx=120; c.pszText=(LPWSTR)L"Name"; ListView_InsertColumn(g_peerList,0,&c);
           c.cx=130; c.pszText=(LPWSTR)L"Address"; ListView_InsertColumn(g_peerList,1,&c);
-          c.cx=60;  c.pszText=(LPWSTR)L"Protocol";   ListView_InsertColumn(g_peerList,2,&c); }
+          c.cx=60;  c.pszText=(LPWSTR)L"UDP Port"; ListView_InsertColumn(g_peerList,2,&c);
+          c.cx=60;  c.pszText=(LPWSTR)L"HTTP Port"; ListView_InsertColumn(g_peerList,3,&c);
+          c.cx=60;  c.pszText=(LPWSTR)L"Protocol";  ListView_InsertColumn(g_peerList,4,&c); }
 
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
         g_reloadBtn = CreateWindowExW(0,L"BUTTON",L"Reload", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 0,0,10,10, hwnd, (HMENU)IDC_RELOAD_BTN, nullptr, nullptr);
 
+        CreateWindowExW(0,L"BUTTON",L"Receive", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 0,0,10,10, hwnd, (HMENU)IDC_RECEIVE_BTN, nullptr, nullptr);
+
         g_peerNameLabel = CreateWindowExW(WS_EX_CLIENTEDGE,L"STATIC",L"(no peer selected)", WS_CHILD|WS_VISIBLE|SS_LEFT|SS_CENTERIMAGE, 0,0,10,10, hwnd, (HMENU)IDC_PEER_NAME_LABEL, nullptr, nullptr);
         SendMessageW(g_peerNameLabel, WM_SETFONT, (WPARAM)hFont, FALSE);
+
+        g_userFilter = CreateWindowExW(0, WC_COMBOBOXW, nullptr,
+            WS_CHILD|WS_VISIBLE|CBS_DROPDOWNLIST|WS_VSCROLL,
+            0,0,10,200, hwnd, (HMENU)(INT_PTR)IDC_USER_FILTER, nullptr, nullptr);
+        SendMessageW(g_userFilter, WM_SETFONT, (WPARAM)hFont, FALSE);
 
         g_chatView = CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",nullptr, WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL, 0,0,10,10, hwnd, (HMENU)IDC_CHAT_VIEW, nullptr, nullptr);
         SendMessageW(g_chatView, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -2140,6 +2358,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         g_commLog = CreateWindowExW(WS_EX_CLIENTEDGE,L"RICHEDIT50W",nullptr, WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|ES_NOHIDESEL, 0,0,10,10, hwnd, (HMENU)IDC_COMM_LOG, nullptr, nullptr);
         SendMessageW(g_commLog, WM_SETFONT, (WPARAM)hFont, FALSE);
         g_debugLog = g_commLog; // both feed into the same control
+
+        // Override ports from environment (set by ecode when launching per-instance LocalMsg)
+        { char envBuf[16] = {};
+          if (GetEnvironmentVariableA("LOCALMSG_HTTPPORT", envBuf, sizeof(envBuf)) > 0) {
+            int p = atoi(envBuf);
+            if (p > 0 && p < 65536) g_restPort = p;
+          }
+          if (GetEnvironmentVariableA("LOCALMSG_UDPPORT", envBuf, sizeof(envBuf)) > 0) {
+            int p = atoi(envBuf);
+            if (p > 0 && p < 65536) g_ipmsgPort = p;
+          }
+        }
 
         DragAcceptFiles(hwnd, TRUE);
         g_acceptSem = CreateSemaphoreW(nullptr, LS_MAX_CONNS, LS_MAX_CONNS, nullptr);
@@ -2237,9 +2467,52 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_COMMAND: {
         int id = LOWORD(wp);
         if (id==IDC_RELOAD_BTN) {
+            CleanupStalePseudoUsers();
+            UpdatePeerList();
             g_announceNow=true;
             AnnouncePseudoUsers();
             DebugLog(L"[ls] Reload: re-sending multicast announces");
+            return 0;
+        }
+        if (id==IDC_RECEIVE_BTN) {
+            // Populate user filter combo
+            SendMessage(g_userFilter, CB_RESETCONTENT, 0, 0);
+            SendMessage(g_userFilter, CB_ADDSTRING, 0, (LPARAM)L"[All users]");
+            EnterCriticalSection(&g_pseudoCs);
+            for (auto& pu : g_pseudoUsers)
+                SendMessage(g_userFilter, CB_ADDSTRING, 0, (LPARAM)pu.username.c_str());
+            LeaveCriticalSection(&g_pseudoCs);
+            EnterCriticalSection(&g_peerCs);
+            for (auto& p : g_peers)
+                SendMessage(g_userFilter, CB_ADDSTRING, 0, (LPARAM)p.alias.c_str());
+            LeaveCriticalSection(&g_peerCs);
+            // Select current peer if any
+            std::wstring targetUser;
+            int sel = ListView_GetNextItem(g_peerList, -1, LVNI_SELECTED);
+            if (sel >= 0) {
+                EnterCriticalSection(&g_pseudoCs);
+                int pcount = (int)g_pseudoUsers.size();
+                LeaveCriticalSection(&g_pseudoCs);
+                if (sel < pcount) {
+                    EnterCriticalSection(&g_pseudoCs);
+                    targetUser = g_pseudoUsers[sel].username;
+                    LeaveCriticalSection(&g_pseudoCs);
+                } else {
+                    EnterCriticalSection(&g_peerCs);
+                    int peerIdx = sel - pcount;
+                    if (peerIdx < (int)g_peers.size())
+                        targetUser = g_peers[peerIdx].alias;
+                    LeaveCriticalSection(&g_peerCs);
+                }
+            }
+            if (targetUser.empty())
+                targetUser = GetPrimaryUser();
+            if (targetUser.empty())
+                targetUser = g_myHostname;
+            int ci = (int)SendMessage(g_userFilter, CB_FINDSTRINGEXACT, -1, (LPARAM)targetUser.c_str());
+            if (ci == CB_ERR) ci = 0;
+            SendMessage(g_userFilter, CB_SETCURSEL, ci, 0);
+            ShowMessageViewer(ci == 0 ? L"" : targetUser);
             return 0;
         }
         if (id==IDC_SEND_TEXT_BTN) {
@@ -2265,7 +2538,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     AppendChat(TimeStamp()+L" You \u2192 "+peer.alias+L": "+text);
                     AppendCommLog(L"SEND text to "+peer.alias+L" ("+peer.ip+L"): "+text.substr(0,80)+(text.size()>80?L"\x2026":L""));
                     auto* sp = new TextSendParams;
-                    sp->peerIp=peer.ip; sp->peerPort=peer.port; sp->text=text; sp->senderAlias=g_localAlias; sp->notifyHwnd=hwnd;
+                    sp->peerIp=peer.ip; sp->peerPort=peer.port; sp->text=text; sp->senderAlias=g_localAlias; sp->toUser=peer.alias; sp->notifyHwnd=hwnd;
                     HANDLE h = CreateThread(nullptr,0,SendTextThread,sp,0,nullptr);
                     if (h) CloseHandle(h); else delete sp;
                     SetWindowTextW(g_textInput,L"");
@@ -2305,10 +2578,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if(g_peers.size()!=before) changed=true;
         LeaveCriticalSection(&g_peerCs);
         if(changed) UpdatePeerList();
+        CleanupStalePseudoUsers();
 
         wchar_t s[256];
         swprintf(s,256,L"LS:%d IPMsg:%d | %d peers | REST 127.0.0.1:%d",
-                 g_listenPort, IPMSG_PORT, (int)g_peers.size(), g_restPort);
+                 g_listenPort, g_ipmsgPort, (int)g_peers.size(), g_restPort);
         SendMessageW(g_statusBar,SB_SETTEXT,0,(LPARAM)s);
         return 0;
     }
@@ -2415,6 +2689,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_DESTROY:
         g_stopThreads=true; KillTimer(hwnd,1);
+        // Broadcast BR_EXIT for all local users before closing sockets
+        EnterCriticalSection(&g_pseudoCs);
+        for (auto& pu : g_pseudoUsers)
+            SendBrExit(pu.username);
+        LeaveCriticalSection(&g_pseudoCs);
         if(g_listenSock!=INVALID_SOCKET) closesocket(g_listenSock);
         if(g_udpSock!=INVALID_SOCKET) closesocket(g_udpSock);
         if(g_ipmsgSock!=INVALID_SOCKET) closesocket(g_ipmsgSock);
@@ -2436,8 +2715,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // [24] CLI Dispatch & wWinMain
 // ---------------------------------------------------------------------------
 static void PrintJson(const std::string& s) {
-    DWORD written=0; HANDLE hOut=GetStdHandle(STD_OUTPUT_HANDLE);
-    if(hOut&&hOut!=INVALID_HANDLE_VALUE) { std::string out=s+"\n"; WriteFile(hOut,out.c_str(),(DWORD)out.size(),&written,nullptr); }
+    HANDLE hOut=GetStdHandle(STD_OUTPUT_HANDLE);
+    if(!hOut||hOut==INVALID_HANDLE_VALUE) return;
+    DWORD written=0;
+    if(WriteConsoleW(hOut,s2ws(s).c_str(),(DWORD)s2ws(s).size(),&written,nullptr)) return;
+    // Pipe/redirect: write raw UTF-8 bytes; caller must set [Console]::OutputEncoding = UTF-8
+    std::string out = s + "\n";
+    WriteFile(hOut, out.c_str(), (DWORD)out.size(), &written, nullptr);
 }
 
 static int RunCLI(int argc, wchar_t** argv) {
@@ -2471,6 +2755,7 @@ static int RunCLI(int argc, wchar_t** argv) {
         PrintJson(TryApi("POST","/api/send","{\"from\":\""+EscapeJson(from)+"\",\"to\":\""+EscapeJson(to)+"\",\"text\":\""+EscapeJson(text)+"\"}"));
         return 0;
     }
+    if(cmd=="--ping") { PrintJson(TryApi("GET","/api/ping","")); return 0; }
     if(cmd=="--list") { PrintJson(TryApi("GET","/api/users","")); return 0; }
     if(cmd=="--receive"&&argc>=3) {
         bool peek = (argc>=4 && ws2s(argv[3])=="--peek");
@@ -2486,7 +2771,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow) 
     int argc=0; LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);
     if(argc>1&&argv) {
         std::wstring a1=argv[1];
-        if(a1==L"--login"||a1==L"--logout"||a1==L"--send"||a1==L"--list"||a1==L"--receive") { int r=RunCLI(argc,argv); if(argv) LocalFree(argv); return r; }
+        if(a1==L"--login"||a1==L"--logout"||a1==L"--send"||a1==L"--list"||a1==L"--receive"||a1==L"--ping") { int r=RunCLI(argc,argv); if(argv) LocalFree(argv); return r; }
     }
     if(argv) LocalFree(argv);
 
