@@ -353,6 +353,40 @@ static bool HasRunningProcesses() {
   return false;
 }
 
+static void PumpMessagesWhileWaiting() {
+  MSG msg;
+  while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+    if (msg.message == WM_QUIT) return;
+    TranslateMessage(&msg);
+    DispatchMessage(&msg);
+  }
+}
+
+static bool WaitForProcessesWithPump(DWORD timeoutMs) {
+  DWORD deadline = GetTickCount() + timeoutMs;
+  for (;;) {
+    DWORD now = GetTickCount();
+    if (now >= deadline) return false;
+
+    std::vector<HANDLE> handles;
+    for (auto &t : g_appTabs)
+      if (t.hProcess)
+        handles.push_back(t.hProcess);
+    if (handles.empty()) return true;
+
+    DWORD remaining = (now < deadline) ? deadline - now : 0;
+    DWORD result = MsgWaitForMultipleObjects(
+        (DWORD)handles.size(), handles.data(), TRUE,
+        remaining, QS_ALLINPUT);
+    if (result == WAIT_OBJECT_0) return true;
+    if (result == WAIT_FAILED) {
+      PumpMessagesWhileWaiting();
+      continue;
+    }
+    PumpMessagesWhileWaiting();
+  }
+}
+
 static LRESULT HandleClose(HWND hwnd) {
   const auto &buffers = g_editor->GetBuffers();
   for (size_t i = 0; i < buffers.size(); ++i) {
@@ -372,11 +406,8 @@ static LRESULT HandleClose(HWND hwnd) {
         L"Ecode", MB_YESNO | MB_ICONWARNING);
     if (res != IDYES) return 0;
   }
-  DestroyWindow(hwnd);
-  return 0;
-}
 
-static void HandleDestroy(HWND hwnd) {
+  // Save settings before destroying the window
   auto &settings = SettingsManager::Instance();
   WINDOWPLACEMENT wp = {sizeof(wp)};
   if (GetWindowPlacement(hwnd, &wp)) {
@@ -388,49 +419,42 @@ static void HandleDestroy(HWND hwnd) {
   settings.SetLanguage(
       static_cast<int>(Localization::Instance().GetCurrentLanguage()));
   settings.SetWordWrap(g_renderer->IsWordWrap());
-
   wchar_t curDir[MAX_PATH];
-  if (GetCurrentDirectoryW(MAX_PATH, curDir) > 0) {
+  if (GetCurrentDirectoryW(MAX_PATH, curDir) > 0)
     settings.SetProjectDirectory(curDir);
-  }
-
   settings.Save();
 
   UnregisterHotKey(hwnd, HOTKEY_ID_TABSWITCHER);
   HideTabSwitcher();
 
-  // Step 1: Request graceful shutdown from all terminal windows first
+  // Request graceful shutdown from all terminal windows
   for (auto &t : g_appTabs)
     if (t.hwnd && t.hProcess && t.type == TAB_TYPE_TERMINAL)
       PostMessage(t.hwnd, WM_CLOSE, 0, 0);
-  // Step 2: Collect all process handles and wait in parallel
-  if (!g_appTabs.empty()) {
-    std::vector<HANDLE> processHandles;
-    processHandles.reserve(g_appTabs.size());
-    for (auto &t : g_appTabs)
-      if (t.hProcess)
-        processHandles.push_back(t.hProcess);
-    if (!processHandles.empty()) {
-      DWORD waitResult = WaitForMultipleObjects((DWORD)processHandles.size(),
-          processHandles.data(), TRUE, 5000);
-      if (waitResult == WAIT_TIMEOUT) {
-        // Force-kill any processes that didn't exit
-        for (auto &t : g_appTabs) {
-          if (t.hProcess) {
-            DWORD code;
-            if (!GetExitCodeProcess(t.hProcess, &code) || code == STILL_ACTIVE) {
-              if (t.hwnd) DestroyWindow(t.hwnd);
-              TerminateProcess(t.hProcess, 0);
-            }
-          }
+
+  // Wait for processes with message pumping (UI stays responsive)
+  if (!WaitForProcessesWithPump(5000)) {
+    // Force-kill timed-out processes
+    for (auto &t : g_appTabs) {
+      if (t.hProcess) {
+        DWORD code;
+        if (!GetExitCodeProcess(t.hProcess, &code) || code == STILL_ACTIVE) {
+          if (t.hwnd) DestroyWindow(t.hwnd);
+          TerminateProcess(t.hProcess, 0);
         }
-        // Wait again for force-killed processes
-        WaitForMultipleObjects((DWORD)processHandles.size(),
-            processHandles.data(), TRUE, 3000);
       }
     }
+    WaitForProcessesWithPump(3000);
   }
-  // Step 3: Close all handles and destroy remaining windows
+
+  DestroyWindow(hwnd);
+  return 0;
+}
+
+static void HandleDestroy(HWND hwnd) {
+  (void)hwnd;
+
+  // Close remaining handles and destroy remaining windows
   for (auto &t : g_appTabs) {
     if (t.hWaitObject) { UnregisterWait(t.hWaitObject); t.hWaitObject = nullptr; }
     if (t.hProcess) { CloseHandle(t.hProcess); t.hProcess = nullptr; }
