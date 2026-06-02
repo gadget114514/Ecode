@@ -454,11 +454,26 @@ static LRESULT HandleClose(HWND hwnd) {
 static void HandleDestroy(HWND hwnd) {
   (void)hwnd;
 
-  // Close remaining handles and destroy remaining windows
+  // Destroy embedded windows first to request graceful exit
+  for (auto &t : g_appTabs) {
+    if (t.hwnd) { DestroyWindow(t.hwnd); t.hwnd = nullptr; }
+  }
+  // Terminate embedded processes and wait; close app process handles
+  for (auto &t : g_appTabs) {
+    if (t.hProcess) {
+      if (t.hwnd) {
+        DWORD waitResult = WaitForSingleObject(t.hProcess, 3000);
+        if (waitResult == WAIT_TIMEOUT) {
+          TerminateProcess(t.hProcess, 0);
+          WaitForSingleObject(t.hProcess, INFINITE);
+        }
+      }
+      CloseHandle(t.hProcess);
+    }
+  }
   for (auto &t : g_appTabs) {
     if (t.hWaitObject) { UnregisterWait(t.hWaitObject); t.hWaitObject = nullptr; }
-    if (t.hProcess) { CloseHandle(t.hProcess); t.hProcess = nullptr; }
-    if (t.hwnd) { DestroyWindow(t.hwnd); t.hwnd = nullptr; }
+    if (t.hProcess) { t.hProcess = nullptr; }
   }
   g_appTabs.clear();
 
