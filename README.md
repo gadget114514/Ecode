@@ -141,6 +141,7 @@ Requires: Windows 10/11, Visual Studio 2022, Powershell.
 - [x] Inline IME input 
 - [x] osc1337
 - [x] sixel
+- [x] Cross CLI communication
 - [ ] Theming
 - [ ] Session save/resume
 - [ ] Notepad keybindings
