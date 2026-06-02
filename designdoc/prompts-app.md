@@ -1376,3 +1376,351 @@ Messages ペインはログテキストのみ（バーは表示しない）。
 - Top-level CMake copies to `bin/Release/plugins/Prompts.exe`
 - ecode `ScanPlugins()` auto-discovers → Plugins menu
 - Supports `--embedded` flag
+
+## Pipeline Manager
+
+パイプラインの作成・編集・管理を行う専用 UI。Toolbar `[⚡ Pipelines]` ボタンで開く HTML モーダルパネル。
+
+### 概要
+
+設計書の Basic/Expert 2モードを包含するコンテナとして実装する。
+
+```
+[⚡ Pipelines] ボタン → Pipeline Manager を開く
+
+Pipeline Manager
+├── 左列: パイプライン一覧 + [+ New]
+└── 右列（選択中パイプラインの編集）
+    ├── [Basic] タブ  ← ステップリスト + mermaid プレビュー（現実装ターゲット）
+    └── [Expert] タブ ← Cytoscape.js ノードエディタ（将来実装）
+```
+
+### レイアウト（Basic タブ）
+
+```
+┌────────────────────────────────────────────────────────┐
+│ Pipelines                                  [+ New]     │
+├──────────────────┬─────────────────────────────────────┤
+│ Translate→Review │  Name: [Translate → Review        ] │
+│ Summarize        │                          [Basic][Expert]│
+│ DailyReport 🕐   │                                     │
+│                  │  Steps:                             │
+│                  │  ┌─────────────────────────────┐   │
+│                  │  │ 1. [ai] Translate  [✏][🗑][↕]│   │
+│                  │  │ 2. [ai] Review    [✏][🗑][↕]│   │
+│                  │  │ [+ Add Step ▾]               │   │
+│                  │  └─────────────────────────────┘   │
+│                  │  Flow Preview (mermaid):            │
+│                  │  [Input]→[Translate]→[Review]→[Out] │
+│                  │  ← ステップ追加・削除でリアルタイム更新│
+│                  │                                     │
+│                  │  Triggers: [+ Add Trigger ▾]        │
+│                  │  Output: [child ▾]  Retry: [3x 2s▾] │
+│                  │                                     │
+│                  │  [▶ Run Now]  [💾 Save]  [🗑 Delete] │
+└──────────────────┴─────────────────────────────────────┘
+```
+
+- 左列：パイプライン一覧。🕐 はスケジュールトリガー付きを示す
+- Basic タブ：ステップフォームリスト + mermaid リアルタイムプレビュー
+- Expert タブ：Cytoscape.js インタラクティブノードエディタ（将来実装）
+- Basic → Expert 変換は自動（線形グラフ）。Expert → Basic は線形グラフのみ可能
+
+### ステップ追加 UI（`[+ Add Step ▾]`）
+
+```
+┌──────────────────────────────────────────────────────┐
+│  🤖 AI Call       — AI プロバイダへのプロンプト送信   │
+│  📝 Manual Review — 人間によるレビュー・選択ポイント  │
+│  ⚙️  CLI Command   — コマンド実行・スクリプト連携    │
+│  🔧 External Tool — GUI アプリ起動・結果取得         │
+│  🌐 HTTP Fetch    — Web API / サービス連携           │
+│  🔀 Condition     — 自動分岐・ループ制御             │
+│  🔄 Transform     — 正規表現・JSON Path・整形         │
+│  📦 Call Pipeline — 別パイプラインをサブルーチン呼び出し│
+│  🔁 Foreach       — 配列を1件ずつループ処理          │
+│  ⚡ Parallel      — 複数ステップを並列実行           │
+│  ⏱️  Wait          — 時間待機・条件待ち              │
+│  📜 History       — 実行履歴から入出力を再利用       │
+└──────────────────────────────────────────────────────┘
+```
+
+### ステップ編集フォーム（`[✏]` クリック時）
+
+```
+┌─────────────────────────────────────────────────────┐
+│ ✏ Step: Translate                                   │
+│ Type: [ai ▾]                                       │
+│ Provider: [openai ▾]  Model: [gpt-4.1 ▾]           │
+│ System Prompt: [You are a professional translator.] │
+│ User Prompt:   [Translate to Japanese:\n{input}   ] │
+│ 💡 使用可能変数: {input} {result} {step.N.result}   │
+│ Temperature: [0.3]    Max Tokens: [4096]            │
+│ Retry: count [3]  delay [2000] ms                  │
+│        on: [rate_limit ✕] [timeout ✕] [+]          │
+│ [✓ Save]  [✕ Cancel]                               │
+└─────────────────────────────────────────────────────┘
+```
+
+step type ごとにフォームのフィールドが切り替わる。
+
+| Type | 表示フィールド |
+|------|--------------|
+| `ai` | Provider / Model / System Prompt / User Prompt / Temperature / MaxTokens / attachMedia |
+| `command` | Command / Args / WorkingDir / Timeout / resultAs |
+| `tool` | Command / Args / waitForExit / resultAs / resultFile / confirm |
+| `fetch` | URL / Method / Headers / Body / auth / resultAs |
+| `condition` | expression / operator / value / onTrue / onFalse |
+| `transform` | engine / expression / input |
+| `manual` | mode / prompt / choices[] |
+| `call_pipeline` | pipelineName / input / inheritAttachments |
+| `foreach` | input / itemVariable / steps / concurrency |
+| `parallel` | branches[] / outputMode |
+| `wait` | durationMs / until / pollIntervalMs / timeoutMs |
+| `history` | runId / stepIndex / field |
+
+### Trigger 追加 UI（`[+ Add Trigger ▾]`）
+
+```
+┌────────────────────────────────────────┐
+│  🕐 Schedule  — CRON 式で定期実行      │
+│  📂 File Watch — ファイル変更で起動     │
+│  🌐 Webhook   — HTTP リクエストで起動  │
+└────────────────────────────────────────┘
+```
+
+### Toolbar 変更
+
+```
+[📄 New] [📂 Open] [💾 Save] [💾 Save As] │ [⚡ Pipelines] [▶ Run Pipeline] ⚙ Config
+```
+
+### Context Menu 追加
+
+```
+▶ Run Pipeline  →  [pipeline list] / Custom...
+✏ Edit Pipeline →  [pipeline list]     ← 追加
++ New Pipeline                          ← 追加
+```
+
+### Bridge メッセージ追加
+
+| 方向 | type | payload | 説明 |
+|------|------|---------|------|
+| JS→C++ | `save_pipeline` | `{pipeline}` | パイプライン定義を保存 |
+| JS→C++ | `delete_pipeline` | `{pipelineName}` | パイプライン定義を削除 |
+| C++→JS | `pipeline_list` | `{pipelines[]}` | パイプライン一覧（起動時 + 保存後） |
+
+---
+
+## File Operations
+
+### Recent Files
+
+最近開いたファイルを `recent_files.json` に保存し、起動時に `init` メッセージで JS へ送信する。
+
+```
+%APPDATA%/Ecode/Prompts/recent_files.json
+{ "files": ["C:\\path\\to\\a.json", "C:\\path\\to\\b.json", ...] }
+```
+
+- 最大保持件数: 10（`MAX_RECENT_FILES`）
+- 追加時: 先頭に挿入、重複削除、超過分を末尾から削除
+- `init` payload の `recentFiles[]` フィールドに含めて JS へ通知
+
+### init メッセージの完全 payload
+
+`Bridge::SendInit` は廃止し、`App::SendFullInit` に置き換える。
+
+```json
+{
+  "type": "init",
+  "payload": {
+    "language": "ja",
+    "tabs": [{"name": "General", "file": "general.json"}],
+    "nodes": {
+      "general.json": { ...Node tree... }
+    },
+    "pipelines": [...],
+    "recentFiles": ["C:\\path\\to\\a.json", ...]
+  }
+}
+```
+
+`SendFullInit` は `init_complete` メッセージ受信後に呼ぶ（WebView2 初期化完了後）。
+
+### File Dialog Bridge フロー
+
+#### Open Tab（`[📂 Open]`）
+
+```
+JS: postMessage({type: "open_tab"})
+C++: GetOpenFileNameW(filter="JSON Files|*.json|All|*.*")
+  → キャンセルなら return
+  → storage_.AddToRecentFiles(path)
+  → session に新 tab 追加、SaveSession()
+  → SendFullInit() で全状態を再送信
+```
+
+#### Save As（`[💾 Save As]`）
+
+```
+JS: postMessage({type: "save_tab_as", payload: {tabId: "..."}})
+C++: GetSaveFileNameW(defaultExt="json")
+  → storage_.SaveTabData(newPath, node)
+  → storage_.AddToRecentFiles(newPath)
+  → session の tab.file を更新、SaveSession()
+  → bridge_.PostToJS("tab_saved_as", {newPath})
+```
+
+#### New Tab（`[📄 New]`）
+
+```
+JS: postMessage({type: "new_tab", payload: {name: "Untitled"}})
+C++: 新規 Node を生成（空のルートノード）
+  → storage_.SaveTabData("untitled_TIMESTAMP.json", emptyNode)
+  → session に追加、SaveSession()
+  → SendFullInit()
+```
+
+### save_node ハンドラ
+
+```
+JS: postMessage({type: "save_node", payload: {tabId: "general.json", node: {...}}})
+C++: JsonToNode(payload.node) でデシリアライズ
+  → storage_.SaveTabData(tabId, node)
+  → bridge_.PostToJS("node_saved", {tabId})
+```
+
+### Storage 実装状況
+
+| メソッド | 状態 |
+|---------|------|
+| `LoadSession` / `SaveSession` | ✅ 実装済み |
+| `LoadTabData` / `SaveTabData` | ✅ 実装済み |
+| `LoadBlob` / `SaveBlob` / `RemoveBlob` / `GarbageCollectBlobs` | ✅ 実装済み |
+| `LoadProviders` / `SaveProviders` | ✅ 実装済み |
+| `LoadPipelines` | ✅ 実装済み |
+| `SavePipelines` | ❌ TODO スタブ → 要実装 |
+| `SaveHistory` / `ListHistory` | ❌ TODO スタブ → 要実装 |
+| `LoadRecentFiles` / `AddToRecentFiles` | ❌ 未実装 → 要追加 |
+
+---
+
+## Implementation TODO
+
+### Phase 0: プロジェクト骨格
+- [ ] CMakeLists.txt（WIN32 exe、WebView2Loader.lib リンク）
+- [ ] `main.cpp` — WinMain、メッセージループ
+- [ ] `App.h/cpp` — ウィンドウ作成、WebView2 初期化、RichEdit HWND
+- [ ] `Bridge.h/cpp` — PostWebMessageAsJson / postMessage ラッパー
+- [ ] `JsonParser.h/cpp` — 手書き再帰下降 JSON パーサ
+- [ ] `Base64.h/cpp` — エンコード/デコード
+- [ ] `frontend/index.html` / `app.js` / `style.css` — 骨格
+- [ ] `SetVirtualHostNameToFolderMapping` で `https://prompts.app/` をマップ
+
+### Phase 1: Storage & File Operations
+- [ ] `Storage::LoadRecentFiles` / `AddToRecentFiles`
+- [ ] `Storage::SavePipelines`（TODO 解消）
+- [ ] `Storage::SaveHistory` / `ListHistory`（TODO 解消）
+- [ ] `App::SendFullInit`（tabs + nodes + pipelines + recentFiles）
+- [ ] `App::HandleBridgeMessage` — `save_node` / `new_tab` / `open_tab` / `save_tab_as` / `close_tab` / `rename_tab`
+- [ ] `App::OpenFileDialogW` / `SaveFileDialogW`
+- [ ] Blob GC（起動時スキャン）
+
+### Phase 2: Tree UI & Editor
+- [ ] JS: Tree ペイン（展開・折りたたみ・選択・DnD）
+- [ ] JS: List ペイン（子一覧・ブレッドクラム）
+- [ ] JS: Editor ペイン（text/plain / text/html / image/*）
+- [ ] JS: Attachments セクション（追加・削除・プレビュー）
+- [ ] RTF ハイブリッド（RichEdit HWND overlay）
+- [ ] Auto Save（1.5s debounce）
+- [ ] Context Menu（HTML カスタムドロップダウン）
+- [ ] Copy / Cut / Paste（Bridge + clipboard API）
+- [ ] DnD（Tree/List 並び替え + ファイルドロップ）
+- [ ] Ctrl+F 全文検索
+
+### Phase 3: AI Pipeline — Basic
+- [ ] `AIProvider.h/cpp` — OpenAI / Anthropic / Gemini / Ollama
+- [ ] `PipelineRunner.h/cpp` — WinHTTP 非同期、SSE パーシング
+- [ ] step type: `ai` / `manual` / `command` / `tool` / `fetch`
+- [ ] step type: `condition` / `transform` / `history` / `call_pipeline` / `foreach` / `wait` / `parallel`
+- [ ] Variable 参照展開（`{input}` / `{step.N.result}` / `{step.Name.result}`）
+- [ ] Per-step retry（`on: []` フィルタ付き）
+- [ ] Pipeline-level onError
+- [ ] Dynamic Queue（`std::deque<Step>`）
+- [ ] Pipeline Runner Dialog（mermaid フロー図 + Queue + Output）
+- [ ] Execution History（`history/run_*.json` 書き込み・読み込み）
+
+### Phase 4: Pipeline Manager UI
+- [ ] Pipeline Manager パネル（HTML モーダル）
+- [ ] Basic タブ: ステップリスト + mermaid プレビュー（リアルタイム）
+- [ ] ステップ追加ドロップダウン（全 step type + 説明）
+- [ ] ステップ編集フォーム（type 別フィールド切り替え）
+- [ ] Trigger 追加 UI（schedule / file_watcher / webhook）
+- [ ] `save_pipeline` / `delete_pipeline` Bridge 実装
+
+### Phase 5: Triggers
+- [ ] Schedule Trigger（SetTimer + cron パーサ）
+- [ ] File Watcher Trigger（ReadDirectoryChangesW）
+- [ ] Webhook Trigger（WinSock2 HTTP サーバ）
+
+### Phase 6: Config & Polish
+- [ ] Config Dialog（HTML モーダル）
+- [ ] Test Mode（test_input トグル）
+- [ ] Export Node（ZIP）
+- [ ] --embedded モード
+- [ ] Localization（PromptsLocalization + frontend/lang/*.json）
+- [ ] Expert モード — Cytoscape.js ノードエディタ（将来）
+
+---
+
+## Test Specification
+
+### Unit Tests（C++）
+
+| テスト対象 | テストケース |
+|-----------|------------|
+| `JsonParser` | ネスト JSON・Unicode エスケープ・空オブジェクト・不正 JSON |
+| `Base64` | encode/decode ラウンドトリップ・バイナリ・空文字列 |
+| `Storage::LoadTabData` / `SaveTabData` | children 再帰・attachments inline/external・ラウンドトリップ |
+| `Storage::LoadRecentFiles` / `AddToRecentFiles` | 重複除去・MAX_RECENT_FILES 超過・空リスト |
+| `Blob GC` | 参照あり保持・参照なし削除・history 参照ファイル保持 |
+| Variable 展開 | `{input}` `{step.0.result}` `{step.Translate.result}` `{history[id].steps[0].output}` |
+| `condition` 評価 | contains / equals / startsWith / regex / json_path |
+| Retry ロジック | `on[]` フィルタ一致時のみリトライ・count 超過で中断 |
+| cron パーサ | `0 9 * * 1-5` などのパターンと時刻マッチング |
+| SSE パーサ | 複数チャンク分割・不完全行バッファ残留・`[DONE]` 検出 |
+
+### Integration Tests（手動確認）
+
+| シナリオ | 確認内容 |
+|---------|---------|
+| アプリ起動 | session.json から全タブ復元、Tree/List/Editor が表示される |
+| New Tab | 新規タブが作成され session.json に保存される |
+| Open Tab | GetOpenFileName → ファイル読み込み → recentFiles に追加 |
+| Save As | GetSaveFileName → 別パスに保存 → タブ名更新 |
+| Recent Files | 再起動後に前回開いたファイルが一覧に表示される |
+| ノード編集・保存 | text/plain / text/html / RTF / 画像でラウンドトリップ |
+| パイプライン実行 | ストリーム出力が Messages に表示、完了後に子ノード作成 |
+| Dynamic Queue | 実行中にステップ追加・削除・編集が反映される |
+| キャンセル | 即座に停止、blob 削除、ハンドル競合なし |
+| Execution History | run_*.json が作成され、History UI で参照・再実行できる |
+| File Watcher Trigger | 監視フォルダへのファイル追加でパイプライン自動実行 |
+| Webhook Trigger | `curl -X POST http://localhost:PORT/...` でパイプライン起動 |
+| RTF overlay | RTF ノード選択で RichEdit 表示、リサイズ追従 |
+| --embedded | ecode から SetParent してサイズ追随・多重起動不可 |
+| Localization | Config で言語切り替え後に UI 文字列が切り替わる |
+
+### Edge Cases
+
+| ケース | 期待動作 |
+|--------|---------|
+| pipeline.json が存在しない | エラーなし、空リストで起動 |
+| providers.json が存在しない | 実行時に "API key not configured" |
+| blob ファイル欠損 | `[missing]` 表示、クラッシュしない |
+| WebView2 未インストール | 起動時にフォールバック UI 表示 |
+| 並列ステップ中にキャンセル | 全スレッド停止、リソースリークなし |
+| foreach の入力が空 | ループ0回、`{result}` は空文字列 |
+| goto_step で無限ループ | 最大繰り返し回数（デフォルト 100）でキャンセル |
+| recent_files.json が存在しない | エラーなし、空リストで起動 |
