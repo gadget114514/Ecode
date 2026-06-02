@@ -339,11 +339,11 @@ void UpdateMenu(HWND hwnd) {
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_RUN_MACRO,
              L10N("menu_tools_run_macro"));
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_CONSOLE, L10N("menu_tools_console"));
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_SHELL_MODE, L"Shell Mode");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_SHELL_MODE, L10N("menu_tools_shell_mode"));
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL, L"New Terminal (powershell)");
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_CMD, L"New Terminal (cmd)");
-  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_BASH, L"New Terminal (bash)");
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL, L10N("menu_tools_new_terminal_ps"));
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_CMD, L10N("menu_tools_new_terminal_cmd"));
+  AppendMenu(hTools, MF_STRING, IDM_TOOLS_TERMINAL_BASH, L10N("menu_tools_new_terminal_bash"));
   AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
   AppendMenu(hTools, MF_STRING, IDM_TOOLS_MACRO_GALLERY,
              L10N("menu_tools_macro_gallery"));
@@ -353,12 +353,12 @@ void UpdateMenu(HWND hwnd) {
     if (!appEntries.empty()) {
       AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
       for (size_t i = 0; i < appEntries.size(); ++i) {
-        std::wstring text = appEntries[i].label + L"  \u2192  " + appEntries[i].path;
+        std::wstring text = appEntries[i].label + L"  →  " + appEntries[i].path;
         AppendMenu(hTools, MF_STRING, IDM_APPS_START + i, text.c_str());
       }
     }
     AppendMenu(hTools, MF_SEPARATOR, 0, NULL);
-    AppendMenu(hTools, MF_STRING, IDM_APPS_CONFIGURE, L"Configure App Entries...");
+    AppendMenu(hTools, MF_STRING, IDM_APPS_CONFIGURE, L10N("menu_tools_configure_apps"));
   }
   // Buffers Menu - integrated buffer/app tabs with type indicators and kill actions
   HMENU hBuffers = CreatePopupMenu();
@@ -411,8 +411,8 @@ void UpdateMenu(HWND hwnd) {
 
   // AI Menu (hidden by default, only shown when IsShowAI)
   HMENU hAi = CreatePopupMenu();
-  AppendMenu(hAi, MF_STRING, IDM_AI_MANAGER, L"AI Agent Manager");
-  AppendMenu(hAi, MF_STRING, IDM_AI_SETUP_WIZARD, L"AI Setup Wizard");
+  AppendMenu(hAi, MF_STRING, IDM_AI_MANAGER, L10N("menu_ai_manager"));
+  AppendMenu(hAi, MF_STRING, IDM_AI_SETUP_WIZARD, L10N("menu_ai_setup_wizard"));
 
   // CLI Menu
   HMENU hCli = CreatePopupMenu();
@@ -423,7 +423,7 @@ void UpdateMenu(HWND hwnd) {
   }
   if (!cliEntries.empty())
     AppendMenu(hCli, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hCli, MF_STRING, IDM_CLI_CONFIGURE, L"Configure CLI Entries...");
+  AppendMenu(hCli, MF_STRING, IDM_CLI_CONFIGURE, L10N("menu_cli_configure"));
 
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hFile, L10N("menu_file"));
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hEdit, L10N("menu_edit"));
@@ -440,20 +440,20 @@ void UpdateMenu(HWND hwnd) {
       AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_START + i, g_plugins[i].name.c_str());
     }
     if (!anyVisible)
-      AppendMenu(hPlugins, MF_GRAYED, 0, L"(No plugins found)");
+      AppendMenu(hPlugins, MF_GRAYED, 0, L10N("menu_plugins_no_plugins"));
     else
       AppendMenu(hPlugins, MF_SEPARATOR, 0, NULL);
   }
-  AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_RESCAN, L"Rescan Plugins");
-  AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_CONFIGURE, L"Configure Plugins...");
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hPlugins, L"Plugins");
+  AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_RESCAN, L10N("menu_plugins_rescan"));
+  AppendMenu(hPlugins, MF_STRING, IDM_PLUGINS_CONFIGURE, L10N("menu_plugins_configure"));
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hPlugins, L10N("menu_plugins"));
 
   if (SettingsManager::Instance().IsShowAI())
-    AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hAi, L"AI");
+    AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hAi, L10N("menu_ai"));
   else
     DestroyMenu(hAi);
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hBuffers, L10N("menu_buffers"));
-  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L"CLI");
+  AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hCli, L10N("menu_cli"));
 
   AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hHelp, L10N("menu_help"));
 
@@ -463,16 +463,16 @@ void UpdateMenu(HWND hwnd) {
     NamePopup defs[] = {
       { L10N("menu_file"), hFile }, { L10N("menu_edit"), hEdit },
       { L10N("menu_view"), hView },
-      { L10N("menu_tools"), hTools }, { L"Plugins", hPlugins },
+      { L10N("menu_tools"), hTools }, { L10N("menu_plugins"), hPlugins },
     };
     for (auto &d : defs)
       g_menuLabels.push_back({ d.name, d.popup, {0,0,0,0} });
     if (SettingsManager::Instance().IsShowAI())
-      g_menuLabels.push_back({ L"AI", hAi, {0,0,0,0} });
+      g_menuLabels.push_back({ L10N("menu_ai"), hAi, {0,0,0,0} });
     else
       DestroyMenu(hAi);
     g_menuLabels.push_back({ L10N("menu_buffers"), hBuffers, {0,0,0,0} });
-    g_menuLabels.push_back({ L"CLI", hCli, {0,0,0,0} });
+    g_menuLabels.push_back({ L10N("menu_cli"), hCli, {0,0,0,0} });
     g_menuLabels.push_back({ L10N("menu_help"), hHelp, {0,0,0,0} });
     static HMENU s_prevMenuBar = NULL;
     if (s_prevMenuBar) DestroyMenu(s_prevMenuBar);
