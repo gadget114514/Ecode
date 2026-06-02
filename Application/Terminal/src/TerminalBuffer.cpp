@@ -320,23 +320,26 @@ void TerminalBuffer::saveCursor() {
         savedCursorRowAlt_     = cursorRow_;
         savedCursorColumnAlt_  = cursorColumn_;
         savedCursorVisibleAlt_ = cursorVisible_;
+        savedPendingWrapAlt_   = pendingWrap_;
     } else {
         savedCursorRow_        = cursorRow_;
         savedCursorColumn_     = cursorColumn_;
         savedCursorVisible_    = cursorVisible_;
+        savedPendingWrap_      = pendingWrap_;
     }
 }
 
 void TerminalBuffer::restoreCursor() {
-    pendingWrap_  = false;
     if (alternateScreenActive_) {
         cursorRow_     = savedCursorRowAlt_;
         cursorColumn_  = savedCursorColumnAlt_;
         cursorVisible_ = savedCursorVisibleAlt_;
+        pendingWrap_   = savedPendingWrapAlt_;
     } else {
         cursorRow_     = savedCursorRow_;
         cursorColumn_  = savedCursorColumn_;
         cursorVisible_ = savedCursorVisible_;
+        pendingWrap_   = savedPendingWrap_;
     }
     clampCursor();
 }
