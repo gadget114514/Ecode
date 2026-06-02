@@ -609,6 +609,20 @@ void LaunchApp(HWND hwnd, const std::wstring& exePath, const std::wstring& args,
 
 void LaunchPlugin(HWND hwnd, size_t index) {
   if (index >= g_plugins.size()) return;
+
+  // Per-instance port allocation for LocalMsg (unless shared mode)
+  if (g_plugins[index].name == L"LocalMsg" && !SettingsManager::Instance().IsSharedLocalMsg()) {
+    static long s_localMsgSeq = 0;
+    int seq = (int)InterlockedIncrement(&s_localMsgSeq);
+    int httpPort = 2426 + seq;
+    int udpPort  = 2425 + seq;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", httpPort);
+    SetEnvironmentVariableA("LOCALMSG_HTTPPORT", buf);
+    snprintf(buf, sizeof(buf), "%d", udpPort);
+    SetEnvironmentVariableA("LOCALMSG_UDPPORT", buf);
+  }
+
   LaunchApp(hwnd, g_plugins[index].path, L"", g_plugins[index].name, 10);
 }
 

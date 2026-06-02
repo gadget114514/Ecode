@@ -43,14 +43,14 @@ LocalMsg is a LAN messenger plugin for Ecode that enables AI agents (Claude Code
 
 ### Threads (inside LocalMsg.exe)
 
-| Thread | Function | Line |
-|--------|----------|------|
-| HTTP Accept | `HttpAcceptThread` | Accepts TLS connections on port 53317 |
-| HTTP Connection | `HttpConnThread` (per-connection) | TLS handshake, HTTP parsing, dispatch |
-| UDP Discovery | `DiscoveryThread` | LocalSend UDP multicast/unicast |
-| IPMsg | `IpMsgThread` | IPMsg UDP protocol on port 2425 |
-| REST API | `RestApiThread` | REST API on 127.0.0.1:2426 |
-| GUI (main) | `WndProc` | Window message loop and UI |
+| Thread | Function | Concurrency | Line |
+|--------|----------|-------------|------|
+| HTTP Accept | `HttpAcceptThread` | Accepts TLS connections on port 53317; each connection spun off to `HttpConnThread` | 959 |
+| HTTP Connection | `HttpConnThread` (per-connection) | TLS handshake, HTTP parsing, dispatch | — |
+| UDP Discovery | `DiscoveryThread` | LocalSend UDP multicast; each packet processed in a new thread | 541 |
+| IPMsg | `IpMsgThread` | IPMsg UDP protocol on port 2425; each packet processed in a new thread | 1426 |
+| REST API | `RestApiThread` | REST API on 127.0.0.1; each request in a new thread (`/api/wait` no longer blocks other requests) | 1862 |
+| GUI (main) | `WndProc` | Window message loop and UI | — |
 
 ---
 
@@ -133,13 +133,27 @@ List all registered pseudo-users and discovered LAN peers.
 
 Send a text message.
 
-**Request**: `{"from": "claude", "to": "codex", "text": "Hello"}`
+**Request**: `{"from": "claude", "to": "codex", "text": "Hello"[, "raw": true]}`
 **Response (200)**: `{"ok": true}`
+
+**Fields**:
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `from` | string | primary user | Sender pseudo-user |
+| `to` | string | — | Recipient (pseudo-user or remote peer name) |
+| `text` | string | — | Message body |
+| `raw` | bool | `false` | When `true`, sends as plain text (no sealed/envelop mode) |
+
+**Envelop mode** (default when `raw` is not set):
+- Local delivery → `PushMessage(..., isEnvelop=true)`, `isRead=false`
+- IPMsg delivery → adds `IPMSG_SECRETOPT | IPMSG_READCHECKOPT` flags
+- Recipient sees `[envelop]` prefix in chat view; `●` marker in peer list for unread
+- `--raw` flag on CLI disables envelop mode: `localmsg-cli --send --agent X --to Y --raw "text"`
 
 **Routing logic**:
 1. If `to` is a local pseudo-user → store in `g_messages` (local delivery)
 2. If message size > 1024 bytes → send via **HTTPS** (`/api/localmsg/v1/message`) with `toUser` in payload
-3. Otherwise → send via **IPMsg UDP**
+3. Otherwise → send via **IPMsg UDP** (with `IPMSG_SECRETOPT` in envelop mode)
 
 ### `GET /api/messages?user=<name>[&peek][&advance=0]`
 
@@ -151,7 +165,20 @@ Retrieve pending messages for a pseudo-user.
 | `peek` | false | If set, don't advance read pointer |
 | `advance` | 1 | Set to `0` to peek (same as `peek`) |
 
-**Response**: `[{"id":1,"from":"codex","to":"claude","text":"Hello","time":"14:30:00"}, ...]`
+**Response**: `[{"id":1,"from":"codex","to":"claude","text":"Hello","time":"2026-06-02 14:30:00","isEnvelop":true,"isRead":false}, ...]`
+
+**Fields**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | int | Monotonic message ID |
+| `from` | string | Sender name |
+| `to` | string | Recipient name |
+| `text` | string | Message body |
+| `time` | string | Timestamp (`YYYY-MM-DD HH:MM:SS`) |
+| `isEnvelop` | bool | Whether the message was sent as sealed/envelop |
+| `isRead` | bool | Whether the message has been read (delivered via `--receive`/`--wait`) |
+
+On successful read (`advancePtr=true` or `&peek` absent), `isRead` is set to `true` and the peer list's `●` marker is cleared.
 
 ### `GET /api/wait?user=<name>&timeout=<sec>`
 
@@ -253,15 +280,18 @@ Outgoing messages always set `IPMSG_UTF8OPT | IPMSG_CAPUTF8OPT`.
 |---------|-------|-------------|
 | `--login` | `--agent <name>` | Register a pseudo-user |
 | `--logout` | `--agent <name>` | Unregister a pseudo-user |
-| `--send` | `--agent <name> --to <peer> [<text>]` | Send text message (arg) |
-| `--send` | `--agent <name> --to <peer> --stdin` | Send text message (stdin) |
+| `--send` | `--agent <name> --to <peer> [<text>]` | Send text message (arg, envelop by default) |
+| `--send` | `--agent <name> --to <peer> --stdin` | Send text message (stdin, envelop by default) |
+| `--send` | `--agent <name> --to <peer> --raw <text>` | Send **plain** text (no envelop/sealed) |
 | `--send` | `--agent <name> --to <peer> --file <path>` | Send file(s) |
 | `--receive` | `--agent <name> [--peek]` | Dequeue next message |
 | `--wait` | `--agent <name> [--timeout <sec>]` | Block until message arrives |
 | `--receive --wait` | `--agent <name> [--timeout <sec>]` | Drain then block |
 | `--files` | `--agent <name> [--peek]` | List received files |
-| `--ping` | (none) | Server health check |
+| `--ping` | (none) | Server health check + refresh all TTLs |
+| `--heartbeat` | (none) | Alias for `--ping` (keepalive) |
 | `--list` | (none) | List registered users and peers |
+| `-V` / `--verbose` | (any command) | Print timing diagnostics to stderr |
 
 ### Exit Codes
 
@@ -359,6 +389,8 @@ struct Message {
     std::wstring to;
     std::wstring text;
     std::wstring time;
+    bool isEnvelop;  // sealed/envelop message
+    bool isRead;     // has been read via --receive/--wait
 };
 static std::vector<Message> g_messages;  // capped at 1000
 static std::map<std::wstring, int> g_msgReadPtr;  // per-user read cursor
@@ -371,6 +403,7 @@ struct PseudoUser {
     std::wstring username;
     std::wstring hostname;
     bool active = true;
+    DWORD lastSeenMs;  // updated on every API call; TTL=30min
 };
 static std::vector<PseudoUser> g_pseudoUsers;
 ```
@@ -503,6 +536,41 @@ Output:
 Dependencies: Visual Studio 2022, Windows SDK 10.0.26100.0+, mbedTLS (in-tree at `third_party/mbedtls/`)
 
 ---
+
+## Heartbeat & TTL
+
+Pseudo-users that make **no API calls for 30 minutes** are automatically removed from `g_pseudoUsers`. The cleanup runs on a 500ms timer and on the **Reload** button.
+
+**TTL refresh**: Any API call (`--receive`, `--wait`, `--send`, `--files`, `--heartbeat`, `--ping`) updates `lastSeenMs`.
+
+The `--heartbeat` command (alias for `--ping`) refreshes all pseudo-user TTLs in one call:
+```bash
+localmsg-cli --heartbeat
+```
+
+### Shutdown Cleanup
+
+When `LocalMsg.exe` exits (`WM_DESTROY`):
+1. `SendBrExit()` is called for **every** registered pseudo-user (broadcast IPMsg `BR_EXIT`)
+2. All sockets are closed
+3. Threads are joined and resources freed
+
+## GUI Features
+
+### Receive Button
+
+**Receive** button (left panel, next to Reload) populates the **user filter combo box** (right panel top) with all pseudo-users + LAN peers, then displays messages for the selected user in the chat view.
+
+| Selection | Display |
+|-----------|---------|
+| `[All users]` | All messages from all users |
+| Specific user | Messages to/from that user |
+
+### Unread Envelop Indicator
+
+The **peer list** shows a `●` prefix on names that have unread envelop messages. The mark is cleared when messages are read via `--receive`, `--wait`, or the Receive button.
+
+In the **chat view**, unread envelop messages show `[UNREAD]` prefix.
 
 ## Shared Mode
 

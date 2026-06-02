@@ -407,6 +407,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
                    SettingsManager::Instance().IsReverseScrollDirection() ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(hDlg, IDC_HIDE_MESSAGES_BUFFER,
                    SettingsManager::Instance().GetHideMessagesBuffer() ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(hDlg, IDC_SHARED_LOCALMSG,
+                   SettingsManager::Instance().IsSharedLocalMsg() ? BST_CHECKED : BST_UNCHECKED);
 
     HWND hTabFont = GetDlgItem(hDlg, IDC_TAB_FONT_STYLE);
     SendMessage(hTabFont, CB_ADDSTRING, 0, (LPARAM)L"Regular");
@@ -529,6 +531,8 @@ INT_PTR CALLBACK GeneralSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
           IsDlgButtonChecked(hDlg, IDC_REVERSE_SCROLL_DIRECTION) == BST_CHECKED);
       SettingsManager::Instance().SetHideMessagesBuffer(
           IsDlgButtonChecked(hDlg, IDC_HIDE_MESSAGES_BUFFER) == BST_CHECKED);
+      SettingsManager::Instance().SetSharedLocalMsg(
+          IsDlgButtonChecked(hDlg, IDC_SHARED_LOCALMSG) == BST_CHECKED);
       SettingsManager::Instance().SetTabActiveFontStyle(
           (int)SendMessage(GetDlgItem(hDlg, IDC_TAB_FONT_STYLE), CB_GETCURSEL, 0, 0));
 

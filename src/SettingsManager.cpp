@@ -95,6 +95,8 @@ void SettingsManager::Load() {
       GetPrivateProfileIntW(L"Editor", L"ReverseScrollDirection", 0, path.c_str()) != 0;
   m_hideMessagesBuffer =
       GetPrivateProfileIntW(L"Editor", L"HideMessagesBuffer", 1, path.c_str()) != 0;
+  m_sharedLocalMsg =
+      GetPrivateProfileIntW(L"Editor", L"SharedLocalMsg", 0, path.c_str()) != 0;
   m_tabGridCellW =
       GetPrivateProfileIntW(L"TabGrid", L"CellWidth",  240, path.c_str());
   m_tabGridCellH =
@@ -447,6 +449,7 @@ void SettingsManager::Save() {
   WriteInt(L"Editor", L"VTDebug", m_vtDebug ? 1 : 0);
   WriteInt(L"Editor", L"ReverseScrollDirection", m_reverseScrollDirection ? 1 : 0);
   WriteInt(L"Editor", L"HideMessagesBuffer", m_hideMessagesBuffer ? 1 : 0);
+  WriteInt(L"Editor", L"SharedLocalMsg", m_sharedLocalMsg ? 1 : 0);
   WriteInt(L"TabGrid", L"CellWidth",  m_tabGridCellW);
   WriteInt(L"TabGrid", L"CellHeight", m_tabGridCellH);
   WriteInt(L"TabGrid", L"RefreshEnabled",    m_tabGridRefreshEnabled ? 1 : 0);

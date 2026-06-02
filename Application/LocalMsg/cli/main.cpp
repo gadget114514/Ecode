@@ -550,11 +550,14 @@ int main() {
                 }
             }
             if (text.empty()) { PrintError("--send requires text, --file <path>, or --stdin"); LocalFree(argv); return 2; }
+            bool raw = HasFlag(argc, argv, "--raw");
             double t0 = NowMs();
-            result = CallApi("POST", "/api/send",
-                             "{\"from\":\"" + EscapeJson(agent) +
-                             "\",\"to\":\""   + EscapeJson(to)    +
-                             "\",\"text\":\"" + EscapeJson(text)  + "\"}", httpPort);
+            std::string sendBody = "{\"from\":\"" + EscapeJson(agent) +
+                                   "\",\"to\":\""   + EscapeJson(to)    +
+                                   "\",\"text\":\"" + EscapeJson(text) + "\"";
+            if (raw) sendBody += ",\"raw\":true";
+            sendBody += "}";
+            result = CallApi("POST", "/api/send", sendBody, httpPort);
             Verbose("localmsg-cli: /api/send (%zu bytes) in %.0f ms", result.size(), NowMs() - t0);
         }
 
