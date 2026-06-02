@@ -191,6 +191,15 @@ void UpdateTabs(HWND hwnd) {
   InvalidateRect(g_tabHwnd, NULL, TRUE);
 }
 
+static std::wstring GetMenuString(const char* l10n_key, const wchar_t* shortcut = nullptr) {
+  std::wstring s = L10N(l10n_key);
+  if (shortcut) {
+    s += L"\t";
+    s += shortcut;
+  }
+  return s;
+}
+
 void UpdateMenu(HWND hwnd) {
   HMENU hMenu = CreateMenu();
 
@@ -198,16 +207,16 @@ void UpdateMenu(HWND hwnd) {
   HMENU hFile = CreatePopupMenu();
   {
     HMENU hNew = CreatePopupMenu();
-    AppendMenu(hNew, MF_STRING, IDM_FILE_NEW, L"New File\tCtrl+N");
+    AppendMenu(hNew, MF_STRING, IDM_FILE_NEW, GetMenuString("menu_file_new_file", L"Ctrl+N").c_str());
     AppendMenu(hNew, MF_SEPARATOR, 0, NULL);
     AppendMenu(hNew, MF_STRING, IDM_FILE_SCRATCH, L10N("menu_file_scratch"));
     AppendMenu(hFile, MF_POPUP, (UINT_PTR)hNew, L10N("menu_file_new"));
   }
-  AppendMenu(hFile, MF_STRING, IDM_FILE_OPEN, L"Open\tC-x C-f");
-  AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE, L"Save\tC-x C-s");
-  AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE_AS, L"Save As\tC-x C-w");
-  AppendMenu(hFile, MF_STRING, IDM_FILE_CLOSE, L"Close\tC-x k");
-  AppendMenu(hFile, MF_STRING, IDM_FILE_RELOAD, L"Reload from Disk\tC-x C-v");
+  AppendMenu(hFile, MF_STRING, IDM_FILE_OPEN, GetMenuString("menu_file_open", L"C-x C-f").c_str());
+  AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE, GetMenuString("menu_file_save", L"C-x C-s").c_str());
+  AppendMenu(hFile, MF_STRING, IDM_FILE_SAVE_AS, GetMenuString("menu_file_save_as", L"C-x C-w").c_str());
+  AppendMenu(hFile, MF_STRING, IDM_FILE_CLOSE, GetMenuString("menu_file_close", L"C-x k").c_str());
+  AppendMenu(hFile, MF_STRING, IDM_FILE_RELOAD, GetMenuString("menu_file_reload", L"C-x C-v").c_str());
 
   HMENU hRecent = CreatePopupMenu();
   const auto &recent = SettingsManager::Instance().GetRecentFiles();
@@ -220,7 +229,7 @@ void UpdateMenu(HWND hwnd) {
   }
   AppendMenu(hFile, MF_POPUP, (UINT_PTR)hRecent, L10N("menu_file_recent"));
   AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hFile, MF_STRING, IDM_FILE_OPEN_FOLDER, L"Open Folder in Explorer");
+  AppendMenu(hFile, MF_STRING, IDM_FILE_OPEN_FOLDER, GetMenuString("menu_file_open_folder").c_str());
   // Folder entries submenu
   {
     HMENU hFolders = CreatePopupMenu();
@@ -231,35 +240,35 @@ void UpdateMenu(HWND hwnd) {
     }
     if (!folderEntries.empty())
       AppendMenu(hFolders, MF_SEPARATOR, 0, NULL);
-    AppendMenu(hFolders, MF_STRING, IDM_FOLDER_CONFIGURE, L"Configure Folder Entries...");
-    AppendMenu(hFile, MF_POPUP, (UINT_PTR)hFolders, L"Folders");
+    AppendMenu(hFolders, MF_STRING, IDM_FOLDER_CONFIGURE, GetMenuString("menu_file_configure_folders").c_str());
+    AppendMenu(hFile, MF_POPUP, (UINT_PTR)hFolders, L10N("menu_file_folders"));
   }
   AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hFile, MF_STRING, IDM_FILE_EXIT, L"Exit\tC-x C-c");
+  AppendMenu(hFile, MF_STRING, IDM_FILE_EXIT, GetMenuString("menu_file_exit", L"C-x C-c").c_str());
 
   // Edit Menu
   HMENU hEdit = CreatePopupMenu();
 
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_UNDO, L"Undo\tC-z");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REDO, L"Redo");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_UNDO, GetMenuString("menu_edit_undo", L"C-z").c_str());
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REDO, GetMenuString("menu_edit_redo").c_str());
   AppendMenu(hEdit, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_CUT, L"Cut\tC-w");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_COPY, L"Copy\tM-w");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_PASTE, L"Paste\tC-y");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_CUT, GetMenuString("menu_edit_cut", L"C-w").c_str());
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_COPY, GetMenuString("menu_edit_copy", L"M-w").c_str());
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_PASTE, GetMenuString("menu_edit_paste", L"C-y").c_str());
   AppendMenu(hEdit, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_SELECT_ALL, L"Select All\tC-a");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_SELECT_ALL, GetMenuString("menu_edit_select_all", L"C-a").c_str());
   AppendMenu(hEdit, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND, L"Find\tC-s");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REPLACE, L"Replace");
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND, GetMenuString("menu_edit_find", L"C-s").c_str());
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_REPLACE, GetMenuString("menu_edit_replace").c_str());
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND_IN_FILES,
-             L"Find in Files...\tC-S-f");
+             GetMenuString("menu_edit_find_in_files", L"C-S-f").c_str());
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_GREP,
-             L"Grep...");
+             GetMenuString("menu_edit_grep").c_str());
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_FIND_FILE,
-             L"Find File...\tC-S-F");
-  AppendMenu(hEdit, MF_STRING, IDM_EDIT_GOTO, L"Go to Line...\tAlt+G");
+             GetMenuString("menu_edit_find_file", L"C-S-F").c_str());
+  AppendMenu(hEdit, MF_STRING, IDM_EDIT_GOTO, GetMenuString("menu_edit_goto", L"Alt+G").c_str());
   AppendMenu(hEdit, MF_STRING, IDM_EDIT_TOGGLE_BOX,
-             L"Box Selection Mode\tAlt+Shift+Drag");
+             GetMenuString("menu_edit_toggle_box", L"Alt+Shift+Drag").c_str());
   AppendMenu(hEdit, MF_SEPARATOR, 0, NULL);
 
   // Config Submenu
@@ -282,7 +291,7 @@ void UpdateMenu(HWND hwnd) {
     addLang(Language::Spanish,   IDM_LANG_ES, L"Spanish");
     addLang(Language::French,    IDM_LANG_FR, L"French");
     addLang(Language::German,    IDM_LANG_DE, L"German");
-    AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hLang, L"Language");
+    AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hLang, L10N("menu_language"));
   }
 
   // Themes submenu
@@ -297,7 +306,7 @@ void UpdateMenu(HWND hwnd) {
   if (!themes.empty())
     AppendMenu(hThemes, MF_SEPARATOR, 0, NULL);
   AppendMenu(hThemes, MF_STRING, IDM_CONFIG_THEME, L10N("menu_config_theme"));
-  AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hThemes, L"Themes");
+  AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hThemes, L10N("menu_config_themes"));
 
   AppendMenu(hConfig, MF_SEPARATOR, 0, NULL);
   AppendMenu(hConfig, MF_STRING, IDM_CONFIG_EDIT_INIT,
@@ -310,18 +319,18 @@ void UpdateMenu(HWND hwnd) {
              IDM_SHELL_ENC_UTF8, L"UTF-8");
   AppendMenu(hEnc, MF_STRING | (currentEnc == 1 ? MF_CHECKED : 0),
              IDM_SHELL_ENC_SJIS, L"Shift-JIS");
-  AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hEnc, L"Shell Encoding");
+  AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hEnc, L10N("menu_config_shell_encoding"));
 
   AppendMenu(hEdit, MF_POPUP, (UINT_PTR)hConfig, L10N("menu_config"));
 
   // View Menu
   HMENU hView = CreatePopupMenu();
-  AppendMenu(hView, MF_STRING, IDM_VIEW_TABSWITCHER, L"Tab Grid View\tCtrl+Shift+T");
+  AppendMenu(hView, MF_STRING, IDM_VIEW_TABSWITCHER, GetMenuString("menu_view_tabswitcher", L"Ctrl+Shift+T").c_str());
   AppendMenu(hView, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hView, MF_STRING, IDM_VIEW_TOGGLE_UI, L"Toggle UI\tF11");
+  AppendMenu(hView, MF_STRING, IDM_VIEW_TOGGLE_UI, GetMenuString("menu_view_toggle_ui", L"F11").c_str());
   AppendMenu(hView, MF_SEPARATOR, 0, NULL);
-  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_IN, L"Zoom In\tCtrl++");
-  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_OUT, L"Zoom Out\tCtrl+-");
+  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_IN, GetMenuString("menu_view_zoom_in", L"Ctrl++").c_str());
+  AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_OUT, GetMenuString("menu_view_zoom_out", L"Ctrl+-").c_str());
   AppendMenu(hView, MF_STRING, IDM_VIEW_ZOOM_RESET,
              L10N("menu_view_zoom_reset"));
 
