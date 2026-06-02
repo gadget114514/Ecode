@@ -1738,7 +1738,13 @@ static void HandleRestRequest(SOCKET s) {
         std::string text = JsonGet(body,"text");
         if (from.empty()) { from = ws2s(GetPrimaryUser()); if (from.empty()) from = ws2s(g_myHostname); }
         if (to.empty()||text.empty()) { SendRestResp(s,400,"{\"ok\":false,\"error\":\"missing to/text\"}"); closesocket(s); return; }
-        bool ok = SendTextIpMsg(s2ws(from),s2ws(to),s2ws(text));
+        bool ok = false;
+        if (IsPseudoUser(s2ws(to))) {
+            PushMessage(s2ws(from), s2ws(to), s2ws(text));
+            ok = true;
+        } else {
+            ok = SendTextIpMsg(s2ws(from), s2ws(to), s2ws(text));
+        }
         SendRestResp(s,ok?200:404,ok?"{\"ok\":true}":"{\"ok\":false,\"error\":\"peer not found\"}");
     } else if (method=="POST" && path=="/api/login") {
         std::string username = JsonGet(body,"username");
