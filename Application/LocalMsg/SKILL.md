@@ -62,6 +62,15 @@ localmsg-cli --wait --agent <name> [--timeout <seconds>]
 # Exit 1 on timeout
 ```
 
+### Receive then wait (combined)
+```bash
+localmsg-cli --receive --wait --agent <name> [--timeout <seconds>]
+# 1. Run --receive first (drain any pending messages)
+# 2. Then always run --wait (block for the next message up to timeout)
+# Best for "results please" — gets anything already queued, then
+# blocks until the next reply arrives.
+```
+
 ### List received files
 ```bash
 localmsg-cli --files --agent <name>
@@ -116,6 +125,34 @@ while true:
     if msg contains "STOP": break
   process message
 ```
+
+---
+
+## Config: Shared vs Per-Instance
+
+In ecode's **Settings → General** (`IDC_SHARED_LOCALMSG`), you can toggle:
+
+| Mode | Behavior |
+|------|----------|
+| **OFF (default)** | Each ecode instance launches its own `localmsg.exe` with unique UDP/HTTP ports via `LOCALMSG_UDPPORT` / `LOCALMSG_HTTPPORT` |
+| **ON (Shared)** | A single `localmsg.exe` is used system-wide on default ports (2425/2426) |
+
+The `localmsg-cli` always reads `LOCALMSG_HTTPPORT` / `LOCALMSG_UDPPORT` from the environment — in shared mode these are not set, so it uses the defaults.
+
+---
+
+## Heartbeat / TTL
+
+Agents that make **no API calls for 30 minutes** are automatically removed.
+To stay alive, periodically call `--heartbeat` (alias for `--ping`):
+
+```bash
+# In a cron/scheduled task every 15-20 minutes:
+localmsg-cli --heartbeat
+```
+
+Any API call (`--receive`, `--wait`, `--send`, `--files`, `--heartbeat`) refreshes the TTL.
+The **Reload** button or the 500ms timer also removes stale agents.
 
 ---
 

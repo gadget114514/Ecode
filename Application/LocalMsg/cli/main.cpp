@@ -9,10 +9,13 @@
 //   localmsg-cli --logout  --agent <name>
 //   localmsg-cli --send    --agent <name> --to <peer> <text>
 //   localmsg-cli --send    --agent <name> --to <peer> --file <path> [--file <path2>...]
+//   echo <text> | localmsg-cli --send --agent <name> --to <peer> --stdin
 //   localmsg-cli --receive --agent <name> [--peek]
 //   localmsg-cli --wait    --agent <name> [--timeout <sec>]
 //   localmsg-cli --files   --agent <name> [--peek]
+//   localmsg-cli --ping
 //   localmsg-cli --list
+//   localmsg-cli <cmd> -V          # verbose output to stderr
 //
 // LocalMsg.exe must be running (started by ecode as a plugin).
 // Exit codes: 0=ok, 1=empty/timeout, 2=error
@@ -41,7 +44,32 @@
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <cstdarg>
 #include <ctime>
+
+// ---------------------------------------------------------------------------
+// Verbose global + helpers
+// ---------------------------------------------------------------------------
+static bool g_verbose = false;
+
+static void Verbose(const char* fmt, ...) {
+    if (!g_verbose) return;
+    char buf[512];
+    va_list ap; va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
+    if (hErr && hErr != INVALID_HANDLE_VALUE) {
+        DWORD w; WriteFile(hErr, buf, (DWORD)strlen(buf), &w, nullptr);
+        WriteFile(hErr, "\n", 1, &w, nullptr);
+    }
+}
+static double NowMs() {
+    LARGE_INTEGER f, c;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return (double)c.QuadPart * 1000.0 / (double)f.QuadPart;
+}
 
 // ---------------------------------------------------------------------------
 // String helpers
@@ -70,6 +98,7 @@ static std::string EscapeJson(const std::string& s) {
         else if (c == '\n') r += "\\n";
         else if (c == '\r') r += "\\r";
         else if (c == '\t') r += "\\t";
+        else if (c < 0x20) { char buf[8]; snprintf(buf,8,"\\u%04x",c); r += buf; }
         else                r += (char)c;
     }
     return r;
@@ -79,8 +108,12 @@ static std::string EscapeJson(const std::string& s) {
 // Output helpers
 // ---------------------------------------------------------------------------
 static void PrintJson(const std::string& s) {
-    DWORD written = 0;
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (!hOut || hOut == INVALID_HANDLE_VALUE) return;
+    std::wstring w = s2ws(s) + L"\n";
+    DWORD written = 0;
+    if (WriteConsoleW(hOut, w.c_str(), (DWORD)w.size(), &written, nullptr)) return;
+    // Pipe/redirect: write raw UTF-8 bytes; caller must set [Console]::OutputEncoding = UTF-8
     std::string out = s + "\n";
     WriteFile(hOut, out.c_str(), (DWORD)out.size(), &written, nullptr);
 }
@@ -93,9 +126,12 @@ static void PrintUsage() {
         "\"localmsg-cli --logout  --agent <name>\","
         "\"localmsg-cli --send    --agent <name> --to <peer> <text>\","
         "\"localmsg-cli --send    --agent <name> --to <peer> --file <path> ...\","
+        "\"echo <text> | localmsg-cli --send --agent <name> --to <peer> --stdin\","
         "\"localmsg-cli --receive --agent <name> [--peek]\","
+        "\"localmsg-cli --receive --wait --agent <name> [--timeout <sec>]\","
         "\"localmsg-cli --wait    --agent <name> [--timeout <sec>]\","
         "\"localmsg-cli --files   --agent <name> [--peek]\","
+        "\"localmsg-cli --ping\","
         "\"localmsg-cli --list\""
         "]}");
 }
@@ -128,23 +164,6 @@ static int ResolvePort(int argc, LPWSTR* argv,
     }
     // 3. Default
     return defaultPort;
-}
-
-static bool EnsureServer(int port = 2426) {
-    WSADATA wsa; WSAStartup(MAKEWORD(2,2), &wsa);
-    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s == INVALID_SOCKET) return false;
-    // non-blocking connect with 500ms timeout
-    u_long nb = 1; ioctlsocket(s, FIONBIO, &nb);
-    sockaddr_in a = {}; a.sin_family = AF_INET;
-    a.sin_addr.s_addr = htonl(0x7f000001);
-    a.sin_port = htons((u_short)port);
-    connect(s, (sockaddr*)&a, sizeof(a));
-    fd_set fds; FD_ZERO(&fds); FD_SET(s, &fds);
-    timeval tv = {1, 0};   // 1 second timeout
-    bool alive = (select(0, nullptr, &fds, nullptr, &tv) > 0);
-    closesocket(s);
-    return alive;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,57 +210,82 @@ static std::vector<std::string> GetFiles(int argc, LPWSTR* argv) {
 }
 
 // ---------------------------------------------------------------------------
-// HTTP REST call helper (localhost)
+// HTTP REST call helper (localhost, raw Winsock)
 // ---------------------------------------------------------------------------
 static std::string CallApi(const std::string& method, const std::string& path,
                            const std::string& body, int port = 2426,
                            int timeoutMs = 30000) {
-    HINTERNET hSess = WinHttpOpen(L"localmsg-cli/1.0", WINHTTP_ACCESS_TYPE_NO_PROXY,
-        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!hSess) return "{\"error\":\"WinHttpOpen failed\"}";
+    double t0 = g_verbose ? NowMs() : 0;
 
-    HINTERNET hConn = WinHttpConnect(hSess, L"127.0.0.1", (INTERNET_PORT)port, 0);
-    if (!hConn) {
-        WinHttpCloseHandle(hSess);
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET)
+        return "{\"error\":\"socket() failed\"}";
+
+    if (timeoutMs > 0) {
+        DWORD tv = (DWORD)timeoutMs;
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (char*)&tv, sizeof(tv));
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (char*)&tv, sizeof(tv));
+    }
+
+    double t1 = g_verbose ? NowMs() : 0;
+    sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(0x7f000001);
+    addr.sin_port = htons((u_short)port);
+    if (connect(s, (sockaddr*)&addr, sizeof(addr)) != 0) {
+        closesocket(s);
         return "{\"error\":\"Cannot connect to LocalMsg REST API on port "
                + std::to_string(port) + "\"}";
     }
+    double t2 = g_verbose ? NowMs() : 0;
 
-    HINTERNET hReq = WinHttpOpenRequest(hConn, s2ws(method).c_str(), s2ws(path).c_str(),
-        nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
-    if (!hReq) {
-        WinHttpCloseHandle(hConn); WinHttpCloseHandle(hSess);
-        return "{\"error\":\"WinHttpOpenRequest failed\"}";
+    std::string req = method + " " + path + " HTTP/1.1\r\n"
+                      "Host: 127.0.0.1:" + std::to_string(port) + "\r\n"
+                      "Content-Type: application/json\r\n";
+    if (!body.empty())
+        req += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+    req += "Connection: close\r\n\r\n";
+    if (!body.empty()) req += body;
+
+    int total = 0;
+    while (total < (int)req.size()) {
+        int n = (int)send(s, req.c_str() + total, (int)req.size() - total, 0);
+        if (n <= 0) { closesocket(s); return "{\"error\":\"send() failed\"}"; }
+        total += n;
     }
+    double t3 = g_verbose ? NowMs() : 0;
 
-    // Set timeouts: resolve, connect, send, receive
-    WinHttpSetTimeouts(hReq, 5000, 5000, 5000, timeoutMs);
-
-    std::wstring hdrs = L"Content-Type: application/json\r\n";
-    WinHttpAddRequestHeaders(hReq, hdrs.c_str(), (DWORD)-1, WINHTTP_ADDREQ_FLAG_ADD);
-
-    DWORD bl = (DWORD)body.size();
-    bool sent = WinHttpSendRequest(hReq, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-        body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.c_str(), bl, bl, 0);
-
-    std::string result;
-    if (sent && WinHttpReceiveResponse(hReq, nullptr)) {
-        DWORD avail = 0;
-        while (WinHttpQueryDataAvailable(hReq, &avail) && avail > 0) {
-            std::string buf(avail, 0); DWORD read = 0;
-            WinHttpReadData(hReq, &buf[0], avail, &read);
-            buf.resize(read); result += buf;
-        }
-    } else {
-        DWORD err = GetLastError();
-        char ebuf[64]; snprintf(ebuf, sizeof(ebuf), "%lu", (unsigned long)err);
-        result = "{\"error\":\"API call failed (WinHTTP error " + std::string(ebuf) + ")\"}";
+    std::string resp;
+    char buf[4096];
+    while (true) {
+        int n = (int)recv(s, buf, sizeof(buf), 0);
+        if (n <= 0) break;
+        resp.append(buf, n);
     }
+    closesocket(s);
+    double t4 = g_verbose ? NowMs() : 0;
 
-    WinHttpCloseHandle(hReq);
-    WinHttpCloseHandle(hConn);
-    WinHttpCloseHandle(hSess);
-    return result;
+    if (g_verbose)
+        Verbose("CallApi: socket=%.0fms connect=%.0fms send=%.0fms recv=%.0fms total=%.0fms",
+                 t1 - t0, t2 - t1, t3 - t2, t4 - t3, t4 - t0);
+
+    size_t hdrEnd = resp.find("\r\n\r\n");
+    if (hdrEnd == std::string::npos)
+        return resp;
+
+    std::string statusLine = resp.substr(0, resp.find("\r\n"));
+    size_t sp1 = statusLine.find(' ');
+    size_t sp2 = statusLine.find(' ', sp1 + 1);
+    int statusCode = 200;
+    if (sp1 != std::string::npos && sp2 != std::string::npos)
+        statusCode = atoi(statusLine.substr(sp1 + 1, sp2 - sp1 - 1).c_str());
+
+    std::string body_resp = resp.substr(hdrEnd + 4);
+
+    if (statusCode != 200)
+        return "{\"error\":\"HTTP " + std::to_string(statusCode) + "\"}";
+
+    return body_resp;
 }
 
 // ---------------------------------------------------------------------------
@@ -405,6 +449,8 @@ int main() {
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argv || argc < 2) { PrintUsage(); return 2; }
 
+    WSADATA wsa; WSAStartup(MAKEWORD(2,2), &wsa);
+
     std::string cmd = ws2s(argv[1]);
 
     // Resolve ports: --httpport / LOCALMSG_HTTPPORT / 2426
@@ -413,10 +459,22 @@ int main() {
     int udpPort  = ResolvePort(argc, argv, "--udpport",  "LOCALMSG_UDPPORT",  2425);
     (void)udpPort; // reserved for future direct UDP use
 
-    // --list does not require agent name or server check
+    // Check for --verbose / -V flag
+    g_verbose = HasFlag(argc, argv, "-V") || HasFlag(argc, argv, "--verbose");
+
+    Verbose("localmsg-cli: port=%d cmd=%s", httpPort, cmd.c_str());
+
+    // --ping and --heartbeat do not require agent name
+    if (cmd == "--ping" || cmd == "--heartbeat") {
+        PrintJson(CallApi("GET", "/api/ping", "", httpPort));
+        LocalFree(argv); return 0;
+    }
+
     if (cmd == "--list") {
-        if (!EnsureServer(httpPort)) { PrintError("LocalMsg is not running. Please start ecode first."); return 2; }
-        PrintJson(CallApi("GET", "/api/users", "", httpPort));
+        double t0 = NowMs();
+        std::string resp = CallApi("GET", "/api/users", "", httpPort);
+        Verbose("localmsg-cli: /api/users returned %zu bytes in %.0f ms", resp.size(), NowMs() - t0);
+        PrintJson(resp);
         LocalFree(argv); return 0;
     }
 
@@ -433,23 +491,21 @@ int main() {
         if (to.empty()) { PrintError("--send requires --to <peer>"); LocalFree(argv); return 2; }
     }
 
-    // Check server (except --list already handled above)
-    if (!EnsureServer(httpPort)) {
-        PrintError("LocalMsg is not running. Please start ecode first.");
-        LocalFree(argv); return 2;
-    }
-
     std::string result;
     int exitCode = 0;
 
     if (cmd == "--login") {
+        double t0 = NowMs();
         result = CallApi("POST", "/api/login",
                          "{\"username\":\"" + EscapeJson(agent) + "\"}", httpPort);
+        Verbose("localmsg-cli: /api/login (%zu bytes) in %.0f ms", result.size(), NowMs() - t0);
         if (result.find("\"error\"") != std::string::npos) exitCode = 2;
 
     } else if (cmd == "--logout") {
+        double t0 = NowMs();
         result = CallApi("POST", "/api/logout",
                          "{\"username\":\"" + EscapeJson(agent) + "\"}", httpPort);
+        Verbose("localmsg-cli: /api/logout (%zu bytes) in %.0f ms", result.size(), NowMs() - t0);
         if (result.find("\"error\"") != std::string::npos) exitCode = 2;
 
     } else if (cmd == "--send") {
@@ -458,39 +514,77 @@ int main() {
 
         std::vector<std::string> files = GetFiles(argc, argv);
         if (!files.empty()) {
-            // File transfer via LocalSend HTTPS
             int failed = 0;
+            double t0 = NowMs();
             for (auto& fp : files) {
                 if (!SendFileLocalSend(agent, to, fp)) {
                     PrintError("File send failed: " + fp);
                     ++failed;
                 }
             }
+            Verbose("localmsg-cli: sent %zu files in %.0f ms", files.size(), NowMs() - t0);
             result = failed == 0
                 ? "{\"ok\":true,\"files\":" + std::to_string((int)files.size()) + "}"
                 : "{\"ok\":false,\"failed\":" + std::to_string(failed) + "}";
         } else {
-            // Text message — last non-flag argument is the text
             std::string text;
             for (int i = 2; i < argc; ++i) {
                 std::string a = ws2s(argv[i]);
-                if (a == "--agent" || a == "--to" || a == "--httpport" || a == "--udpport") { ++i; continue; }
+                if (a == "--agent" || a == "--to" || a == "--httpport" || a == "--udpport" || a == "--stdin") { ++i; continue; }
                 if (!a.empty() && a[0] != '-') { text = a; break; }
             }
-            if (text.empty()) { PrintError("--send requires text or --file <path>"); LocalFree(argv); return 2; }
+            if (HasFlag(argc, argv, "--stdin")) {
+                HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+                if (hStdin && hStdin != INVALID_HANDLE_VALUE) {
+                    text.clear();
+                    char buf[4096];
+                    DWORD read = 0;
+                    while (ReadFile(hStdin, buf, sizeof(buf), &read, nullptr) && read > 0) {
+                        text.append(buf, read);
+                    }
+                    while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
+                        text.pop_back();
+                    // Strip UTF-8 BOM if present
+                    if (text.size() >= 3 && (unsigned char)text[0] == 0xEF && (unsigned char)text[1] == 0xBB && (unsigned char)text[2] == 0xBF)
+                        text.erase(0, 3);
+                }
+            }
+            if (text.empty()) { PrintError("--send requires text, --file <path>, or --stdin"); LocalFree(argv); return 2; }
+            double t0 = NowMs();
             result = CallApi("POST", "/api/send",
                              "{\"from\":\"" + EscapeJson(agent) +
                              "\",\"to\":\""   + EscapeJson(to)    +
                              "\",\"text\":\"" + EscapeJson(text)  + "\"}", httpPort);
+            Verbose("localmsg-cli: /api/send (%zu bytes) in %.0f ms", result.size(), NowMs() - t0);
         }
 
     } else if (cmd == "--receive") {
         bool peek = HasFlag(argc, argv, "--peek");
         std::string path = "/api/messages?user=" + agent;
         if (peek) path += "&peek";
+        double t0 = NowMs();
         result = CallApi("GET", path, "", httpPort);
-        if (result.find("\"empty\":true") != std::string::npos ||
-            result == "[]" || result.empty()) exitCode = 1;
+        Verbose("localmsg-cli: /api/messages (%zu bytes) in %.0f ms", result.size(), NowMs() - t0);
+        bool empty = (result.find("\"empty\":true") != std::string::npos ||
+                      result == "[]" || result.empty());
+        if (!empty) {
+            // got a message, done
+        } else if (HasFlag(argc, argv, "--wait")) {
+            // --receive empty + --wait: block for next message
+            Verbose("localmsg-cli: --receive empty, now --wait");
+            std::string timeoutStr = GetFlag(argc, argv, "--timeout");
+            int timeoutSec = timeoutStr.empty() ? 30 : atoi(timeoutStr.c_str());
+            if (timeoutSec < 1)   timeoutSec = 1;
+            if (timeoutSec > 120) timeoutSec = 120;
+            path = "/api/wait?user=" + agent + "&timeout=" + std::to_string(timeoutSec);
+            int httpTimeoutMs = (timeoutSec + 10) * 1000;
+            t0 = NowMs();
+            result = CallApi("GET", path, "", httpPort, httpTimeoutMs);
+            Verbose("localmsg-cli: /api/wait (%zu bytes) in %.0f ms", result.size(), NowMs() - t0);
+            if (result.find("\"empty\":true") != std::string::npos) exitCode = 1;
+        } else {
+            exitCode = 1;
+        }
 
     } else if (cmd == "--wait") {
         std::string timeoutStr = GetFlag(argc, argv, "--timeout");
@@ -500,14 +594,18 @@ int main() {
         std::string path = "/api/wait?user=" + agent
                          + "&timeout=" + std::to_string(timeoutSec);
         int httpTimeoutMs = (timeoutSec + 10) * 1000;
+        double t0 = NowMs();
         result = CallApi("GET", path, "", httpPort, httpTimeoutMs);
+        Verbose("localmsg-cli: /api/wait (%zu bytes, timeout=%ds) in %.0f ms", result.size(), timeoutSec, NowMs() - t0);
         if (result.find("\"empty\":true") != std::string::npos) exitCode = 1;
 
     } else if (cmd == "--files") {
         bool peek = HasFlag(argc, argv, "--peek");
         std::string path = "/api/files?user=" + agent;
         if (peek) path += "&peek";
+        double t0 = NowMs();
         result = CallApi("GET", path, "", httpPort);
+        Verbose("localmsg-cli: /api/files (%zu bytes) in %.0f ms", result.size(), NowMs() - t0);
 
     } else {
         PrintUsage();
