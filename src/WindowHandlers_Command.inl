@@ -422,7 +422,7 @@ void OpenDired(HWND hwnd) {
 void CloseAppTab(size_t idx) {
   if (idx >= g_appTabs.size()) return;
   auto &tab = g_appTabs[idx];
-  // Unregister wait first so the callback can't fire during cleanup
+  // Unregister existing wait
   if (tab.hWaitObject) {
     UnregisterWait(tab.hWaitObject);
     tab.hWaitObject = nullptr;
@@ -430,18 +430,16 @@ void CloseAppTab(size_t idx) {
   // For terminal tabs: send WM_CLOSE to allow graceful ConPTY cleanup
   if (tab.hwnd && tab.hProcess && tab.type == TAB_TYPE_TERMINAL)
     PostMessage(tab.hwnd, WM_CLOSE, 0, 0);
-  // Wait for graceful shutdown (up to 5s)
+  // Register async wait for process exit instead of blocking the UI thread
   if (tab.hProcess) {
-    DWORD waitResult = WaitForSingleObject(tab.hProcess, 5000);
-    if (waitResult == WAIT_TIMEOUT) {
-      if (tab.hwnd) DestroyWindow(tab.hwnd);
-      TerminateProcess(tab.hProcess, 0);
-      WaitForSingleObject(tab.hProcess, INFINITE);
-    }
-    CloseHandle(tab.hProcess);
-    tab.hProcess = nullptr;
+    RegisterWaitForSingleObject(
+        &tab.hWaitObject,
+        tab.hProcess,
+        OnAppTerminated,
+        (PVOID)tab.hProcess,
+        INFINITE,
+        WT_EXECUTEONLYONCE);
   }
-  if (tab.hwnd) DestroyWindow(tab.hwnd);
 }
 
 void KillAppProcessByIndex(HWND hwnd, size_t idx) {

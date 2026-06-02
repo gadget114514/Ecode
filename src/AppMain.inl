@@ -373,11 +373,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   }
   case WM_NOTIFY_APP_TERMINATED: {
     HANDLE hProcess = (HANDLE)lParam;
-    // Find the tab by process handle
+    bool found = false;
     for (size_t i = 0; i < g_appTabs.size(); ++i) {
       if (g_appTabs[i].hProcess == hProcess && g_appTabs[i].hWaitObject) {
-        g_appTabs[i].hWaitObject = nullptr; // wait auto-unregistered (WT_EXECUTEONLYONCE)
-        // Clean up the terminated/crashed app tab
+        g_appTabs[i].hWaitObject = nullptr;
         if (g_appTabs[i].hwnd) {
           DestroyWindow(g_appTabs[i].hwnd);
           g_appTabs[i].hwnd = nullptr;
@@ -391,8 +390,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         else if (g_activeAppTab > static_cast<int>(i)) g_activeAppTab--;
         UpdateMenu(hwnd);
         InvalidateRect(hwnd, NULL, FALSE);
+        found = true;
         break;
       }
+    }
+    if (!found) {
+      // Orphaned handle from async tab close — just release the handle
+      CloseHandle(hProcess);
     }
     return 0;
   }
