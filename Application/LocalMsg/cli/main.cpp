@@ -104,6 +104,32 @@ static void PrintUsage() {
 // Server availability check
 // LocalMsg.exe is started by ecode's plugin system — we never start it here.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Port resolution:
+//   1. --httpport / --udpport CLI flag
+//   2. LOCALMSG_HTTPPORT / LOCALMSG_UDPPORT environment variable
+//   3. Default (2426 / 2425)
+// ---------------------------------------------------------------------------
+static int ResolvePort(int argc, LPWSTR* argv,
+                       const std::string& flag,
+                       const char* envVar,
+                       int defaultPort) {
+    // 1. CLI flag
+    for (int i = 1; i < argc - 1; ++i)
+        if (ws2s(argv[i]) == flag) {
+            int p = atoi(ws2s(argv[i+1]).c_str());
+            if (p > 0 && p < 65536) return p;
+        }
+    // 2. Environment variable
+    char buf[16] = {};
+    if (GetEnvironmentVariableA(envVar, buf, sizeof(buf)) > 0) {
+        int p = atoi(buf);
+        if (p > 0 && p < 65536) return p;
+    }
+    // 3. Default
+    return defaultPort;
+}
+
 static bool EnsureServer(int port = 2426) {
     WSADATA wsa; WSAStartup(MAKEWORD(2,2), &wsa);
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -115,7 +141,7 @@ static bool EnsureServer(int port = 2426) {
     a.sin_port = htons((u_short)port);
     connect(s, (sockaddr*)&a, sizeof(a));
     fd_set fds; FD_ZERO(&fds); FD_SET(s, &fds);
-    timeval tv = {0, 500000};
+    timeval tv = {1, 0};   // 1 second timeout
     bool alive = (select(0, nullptr, &fds, nullptr, &tv) > 0);
     closesocket(s);
     return alive;
@@ -381,10 +407,16 @@ int main() {
 
     std::string cmd = ws2s(argv[1]);
 
+    // Resolve ports: --httpport / LOCALMSG_HTTPPORT / 2426
+    //                --udpport  / LOCALMSG_UDPPORT  / 2425
+    int httpPort = ResolvePort(argc, argv, "--httpport", "LOCALMSG_HTTPPORT", 2426);
+    int udpPort  = ResolvePort(argc, argv, "--udpport",  "LOCALMSG_UDPPORT",  2425);
+    (void)udpPort; // reserved for future direct UDP use
+
     // --list does not require agent name or server check
     if (cmd == "--list") {
-        if (!EnsureServer()) { PrintError("LocalMsg is not running. Please start ecode first."); return 2; }
-        PrintJson(CallApi("GET", "/api/users", ""));
+        if (!EnsureServer(httpPort)) { PrintError("LocalMsg is not running. Please start ecode first."); return 2; }
+        PrintJson(CallApi("GET", "/api/users", "", httpPort));
         LocalFree(argv); return 0;
     }
 
@@ -395,8 +427,14 @@ int main() {
         LocalFree(argv); return 2;
     }
 
+    // Validate --send arguments BEFORE server check (no network needed for validation)
+    if (cmd == "--send") {
+        std::string to = GetFlag(argc, argv, "--to");
+        if (to.empty()) { PrintError("--send requires --to <peer>"); LocalFree(argv); return 2; }
+    }
+
     // Check server (except --list already handled above)
-    if (!EnsureServer()) {
+    if (!EnsureServer(httpPort)) {
         PrintError("LocalMsg is not running. Please start ecode first.");
         LocalFree(argv); return 2;
     }
@@ -406,11 +444,13 @@ int main() {
 
     if (cmd == "--login") {
         result = CallApi("POST", "/api/login",
-                         "{\"username\":\"" + EscapeJson(agent) + "\"}");
+                         "{\"username\":\"" + EscapeJson(agent) + "\"}", httpPort);
+        if (result.find("\"error\"") != std::string::npos) exitCode = 2;
 
     } else if (cmd == "--logout") {
         result = CallApi("POST", "/api/logout",
-                         "{\"username\":\"" + EscapeJson(agent) + "\"}");
+                         "{\"username\":\"" + EscapeJson(agent) + "\"}", httpPort);
+        if (result.find("\"error\"") != std::string::npos) exitCode = 2;
 
     } else if (cmd == "--send") {
         std::string to = GetFlag(argc, argv, "--to");
@@ -434,21 +474,21 @@ int main() {
             std::string text;
             for (int i = 2; i < argc; ++i) {
                 std::string a = ws2s(argv[i]);
-                if (a == "--agent" || a == "--to") { ++i; continue; }
+                if (a == "--agent" || a == "--to" || a == "--httpport" || a == "--udpport") { ++i; continue; }
                 if (!a.empty() && a[0] != '-') { text = a; break; }
             }
             if (text.empty()) { PrintError("--send requires text or --file <path>"); LocalFree(argv); return 2; }
             result = CallApi("POST", "/api/send",
                              "{\"from\":\"" + EscapeJson(agent) +
                              "\",\"to\":\""   + EscapeJson(to)    +
-                             "\",\"text\":\"" + EscapeJson(text)  + "\"}");
+                             "\",\"text\":\"" + EscapeJson(text)  + "\"}", httpPort);
         }
 
     } else if (cmd == "--receive") {
         bool peek = HasFlag(argc, argv, "--peek");
         std::string path = "/api/messages?user=" + agent;
         if (peek) path += "&peek";
-        result = CallApi("GET", path, "");
+        result = CallApi("GET", path, "", httpPort);
         if (result.find("\"empty\":true") != std::string::npos ||
             result == "[]" || result.empty()) exitCode = 1;
 
@@ -460,14 +500,14 @@ int main() {
         std::string path = "/api/wait?user=" + agent
                          + "&timeout=" + std::to_string(timeoutSec);
         int httpTimeoutMs = (timeoutSec + 10) * 1000;
-        result = CallApi("GET", path, "", 2426, httpTimeoutMs);
+        result = CallApi("GET", path, "", httpPort, httpTimeoutMs);
         if (result.find("\"empty\":true") != std::string::npos) exitCode = 1;
 
     } else if (cmd == "--files") {
         bool peek = HasFlag(argc, argv, "--peek");
         std::string path = "/api/files?user=" + agent;
         if (peek) path += "&peek";
-        result = CallApi("GET", path, "");
+        result = CallApi("GET", path, "", httpPort);
 
     } else {
         PrintUsage();
