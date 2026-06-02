@@ -345,7 +345,15 @@ static std::string JsonGet(const std::string& json, const std::string& key) {
     while (vs < json.size() && (json[vs] == ' ' || json[vs] == '\t')) ++vs;
     if (vs >= json.size()) return {};
     if (json[vs] == '"') {
-        size_t ve = json.find('"', vs + 1);
+        size_t ve = std::string::npos;
+        for (size_t i = vs + 1; i < json.size(); ++i) {
+            if (json[i] == '\\') {
+                ++i;
+            } else if (json[i] == '"') {
+                ve = i;
+                break;
+            }
+        }
         return ve == std::string::npos ? std::string{} : json.substr(vs + 1, ve - vs - 1);
     }
     size_t ve = vs;
@@ -588,7 +596,7 @@ static DWORD WINAPI DiscoveryThread(LPVOID) {
             if (n > 0) {
                 std::string raw(buf, n);
                 sockaddr_in fromCopy = from;
-                HANDLE hJob = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+                QueueUserWorkItem([](LPVOID p) -> DWORD {
                     auto* args = (std::pair<std::string,sockaddr_in>*)p;
                     std::string json = args->first;
                     sockaddr_in from = args->second;
@@ -613,8 +621,7 @@ static DWORD WINAPI DiscoveryThread(LPVOID) {
                         sendto(g_udpSock, ann.c_str(), (int)ann.size(), 0, (const sockaddr*)&from, sizeof(sockaddr_in));
                     }
                     return 0;
-                }, new std::pair<std::string,sockaddr_in>(raw, fromCopy), 0, nullptr);
-                if (hJob) CloseHandle(hJob);
+                }, new std::pair<std::string,sockaddr_in>(raw, fromCopy), 0);
             }
         }
         bool force = g_announceNow;
@@ -739,6 +746,28 @@ static void HandleInfo(HttpReq& req) {
     SendResponse(req, 200, resp);
 }
 
+static std::wstring SanitizeFilename(const std::wstring& fn) {
+    size_t lastSlash = fn.find_last_of(L"/\\");
+    std::wstring base = (lastSlash == std::wstring::npos) ? fn : fn.substr(lastSlash + 1);
+    std::wstring clean;
+    for (wchar_t c : base) {
+        if (c == L':' || c == L'*' || c == L'?' || c == L'"' || c == L'<' || c == L'>' || c == L'|' || c == L'/' || c == L'\\') {
+            continue;
+        }
+        clean += c;
+    }
+    while (!clean.empty() && (clean.front() == L' ' || clean.front() == L'.')) {
+        clean.erase(0, 1);
+    }
+    while (!clean.empty() && (clean.back() == L' ' || clean.back() == L'.')) {
+        clean.pop_back();
+    }
+    if (clean.empty() || clean == L".." || clean == L".") {
+        return L"downloaded_file";
+    }
+    return clean;
+}
+
 static void HandlePrepareUpload(HttpReq& req) {
     std::string body;
     if (!RecvBody(req, body)) {
@@ -763,7 +792,7 @@ static void HandlePrepareUpload(HttpReq& req) {
                 std::string obj = body.substr(ob, oe - ob + 1);
                 FileDesc fd;
                 fd.id = s2ws(JsonGet(obj, "id"));
-                fd.filename = s2ws(JsonGet(obj, "filename"));
+                fd.filename = SanitizeFilename(s2ws(JsonGet(obj, "filename")));
                 std::string sz = JsonGet(obj, "size");
                 fd.size = sz.empty() ? 0 : (int64_t)atoll(sz.c_str());
                 fd.token = MakeId();
@@ -1018,8 +1047,9 @@ static DWORD WINAPI HttpAcceptThread(LPVOID) {
         SOCKET client = accept(g_listenSock, nullptr, nullptr); if (client == INVALID_SOCKET) continue;
         WaitForSingleObject(g_acceptSem, INFINITE);
         auto* cp = new TlsConnParams; cp->sock = client; cp->sem = g_acceptSem;
-        HANDLE h = CreateThread(nullptr, 0, HttpConnThread, cp, 0, nullptr);
-        if (h) CloseHandle(h); else { closesocket(client); delete cp; ReleaseSemaphore(g_acceptSem, 1, nullptr); }
+        if (!QueueUserWorkItem(HttpConnThread, cp, 0)) {
+            closesocket(client); delete cp; ReleaseSemaphore(g_acceptSem, 1, nullptr);
+        }
     }
     closesocket(g_listenSock); g_listenSock = INVALID_SOCKET; return 0;
 }
@@ -1202,8 +1232,7 @@ static bool SendTextHttps(const std::wstring& fromUser, const std::wstring& toUs
     sp->senderAlias = fromUser;
     sp->toUser = toUser;
     sp->notifyHwnd = g_hwnd;
-    HANDLE h = CreateThread(nullptr, 0, SendTextThread, sp, 0, nullptr);
-    if (h) CloseHandle(h); else { delete sp; return false; }
+    if (!QueueUserWorkItem(SendTextThread, sp, 0)) { delete sp; return false; }
     return true;
 }
 
@@ -1412,7 +1441,7 @@ static std::vector<PendingSend> g_pendingSends;
 static bool g_pendInit = false;
 
 static void StorePendingSend(const PendingSend& ps) {
-    if (!g_pendInit) { InitializeCriticalSection(&g_pendCs); g_pendInit = true; }
+    if (!g_pendInit) return;
     EnterCriticalSection(&g_pendCs);
     g_pendingSends.push_back(ps);
     LeaveCriticalSection(&g_pendCs);
@@ -1579,7 +1608,7 @@ static DWORD WINAPI IpMsgThread(LPVOID) {
             if (n > 0) {
                 std::string raw(buf, n);
                 sockaddr_in fromCopy = from;
-                HANDLE hJob = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+                QueueUserWorkItem([](LPVOID p) -> DWORD {
                     auto* args = (std::pair<std::string,sockaddr_in>*)p;
                     std::string raw = args->first;
                     sockaddr_in from = args->second;
@@ -1766,8 +1795,7 @@ static DWORD WINAPI IpMsgThread(LPVOID) {
                     }
                     }
                     return 0;
-                }, new std::pair<std::string,sockaddr_in>(raw, fromCopy), 0, nullptr);
-                if (hJob) CloseHandle(hJob);
+                }, new std::pair<std::string,sockaddr_in>(raw, fromCopy), 0);
             }
         }
         RetryPendingSends();
@@ -1981,9 +2009,9 @@ static void HandleRestRequest(SOCKET s) {
         setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (char*)&soTO, sizeof(soTO));
         DWORD deadline = GetTickCount() + (DWORD)timeoutSec * 1000;
         std::string result;
-        while (GetTickCount() < deadline) {
-            std::wstring j = GetMessagesJson(filter, false);
-            if (j != L"[]") { result = ws2s(GetMessagesJson(filter, true)); PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0); break; }
+        while (!g_stopThreads && GetTickCount() < deadline) {
+            std::wstring j = GetMessagesJson(filter, true);
+            if (j != L"[]") { result = ws2s(j); PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0); break; }
             Sleep(250);
         }
         SendRestResp(s, 200, result.empty() ? "{\"ok\":false,\"empty\":true}" : result);
@@ -2039,14 +2067,14 @@ static DWORD WINAPI RestApiThread(LPVOID) {
         SOCKET client = accept(g_restSock,nullptr,nullptr);
         if (client == INVALID_SOCKET) break;
         BOOL nodelay = TRUE; setsockopt(client, IPPROTO_TCP, TCP_NODELAY, (char*)&nodelay, sizeof(nodelay));
-        // Handle each request in its own thread so /api/wait doesn't block others
-        HANDLE h = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+        // Handle each request in its own thread from the thread pool so /api/wait doesn't block others
+        if (!QueueUserWorkItem([](LPVOID p) -> DWORD {
             SOCKET cs = (SOCKET)(INT_PTR)p;
             HandleRestRequest(cs);
             return 0;
-        }, (LPVOID)(INT_PTR)client, 0, nullptr);
-        if (h) CloseHandle(h);
-        else closesocket(client);
+        }, (LPVOID)(INT_PTR)client, 0)) {
+            closesocket(client);
+        }
     }
     closesocket(g_restSock); g_restSock = INVALID_SOCKET;
     return 0;
@@ -2244,8 +2272,7 @@ static void QueueSend(const std::wstring& path, const PeerInfo& peer) {
 
     std::wstring chatLine = TimeStamp() + L" \u2191 Sending " + sp->filename + L" to " + peer.alias + L"...";
     AppendChat(chatLine);
-    HANDLE h = CreateThread(nullptr, 0, SendFileThread, sp, 0, nullptr);
-    if (h) CloseHandle(h); else delete sp;
+    if (!QueueUserWorkItem(SendFileThread, sp, 0)) delete sp;
     UpdateXferList();
 }
 
@@ -2309,6 +2336,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         InitializeCriticalSection(&g_xferCs);
         InitializeCriticalSection(&g_pseudoCs);
         InitializeCriticalSection(&g_msgCs);
+        InitializeCriticalSection(&g_pendCs);
+        g_pendInit = true;
 
         DWORD sz = MAX_COMPUTERNAME_LENGTH + 1;
         GetComputerNameW(g_myHostname, &sz);
@@ -2561,8 +2590,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     AppendCommLog(L"SEND text to "+peer.alias+L" ("+peer.ip+L"): "+text.substr(0,80)+(text.size()>80?L"\x2026":L""));
                     auto* sp = new TextSendParams;
                     sp->peerIp=peer.ip; sp->peerPort=peer.port; sp->text=text; sp->senderAlias=g_localAlias; sp->toUser=peer.alias; sp->notifyHwnd=hwnd;
-                    HANDLE h = CreateThread(nullptr,0,SendTextThread,sp,0,nullptr);
-                    if (h) CloseHandle(h); else delete sp;
+                    if (!QueueUserWorkItem(SendTextThread, sp, 0)) delete sp;
                     SetWindowTextW(g_textInput,L"");
                 }
                 FlushAttachedFiles(peer);

@@ -606,9 +606,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
               if (path.empty()) {
                 path = buffers[bufIdx]->IsScratch() ? L"Scratch" : L"Untitled";
               }
-              wcsncpy_s(pdi->szText, path.c_str(), _countof(pdi->szText));
-              pdi->szText[_countof(pdi->szText) - 1] = L'\0';
-              pdi->lpszText = pdi->szText;
+              static wchar_t s_pathTooltip[1024];
+              wcsncpy_s(s_pathTooltip, path.c_str(), _TRUNCATE);
+              pdi->lpszText = s_pathTooltip;
               pdi->uFlags |= TTF_DI_SETITEM;
             }
           } else {
@@ -626,9 +626,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
               }
               if (tip.empty())
                 tip = tab.label;
-              wcsncpy_s(pdi->szText, tip.c_str(), _countof(pdi->szText));
-              pdi->szText[_countof(pdi->szText) - 1] = L'\0';
-              pdi->lpszText = pdi->szText;
+              static wchar_t s_tipTooltip[1024];
+              wcsncpy_s(s_tipTooltip, tip.c_str(), _TRUNCATE);
+              pdi->lpszText = s_tipTooltip;
               pdi->uFlags |= TTF_DI_SETITEM;
             }
           }

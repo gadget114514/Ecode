@@ -92,9 +92,18 @@ static std::string JsonGet(const std::string& json, const std::string& key) {
     while (vs < json.size() && (json[vs] == ' ' || json[vs] == '\t')) ++vs;
     if (vs >= json.size()) return {};
     if (json[vs] == '"') {
-        size_t ve = json.find('"', vs + 1);
+        size_t ve = std::string::npos;
+        for (size_t i = vs + 1; i < json.size(); ++i) {
+            if (json[i] == '\\') {
+                ++i;
+            } else if (json[i] == '"') {
+                ve = i;
+                break;
+            }
+        }
         return ve == std::string::npos ? std::string{} : json.substr(vs + 1, ve - vs - 1);
     }
+
     size_t ve = vs;
     while (ve < json.size() && json[ve] != ',' && json[ve] != '}' && json[ve] != '\n') ++ve;
     std::string v = json.substr(vs, ve - vs);
@@ -134,8 +143,13 @@ void TestJsonGet() {
     std::string j5 = "{\"count\":42,\"name\":\"test\"}";
     VERIFY(JsonGet(j5, "count") == "42", "numeric value");
     VERIFY(JsonGet(j5, "name") == "test", "string after numeric");
+
+    // Escaped quotes in value
+    std::string j6 = "{\"text\":\"hello \\\"world\\\" test\"}";
+    VERIFY(JsonGet(j6, "text") == "hello \\\"world\\\" test", "escaped quotes");
     std::cout << "  JsonGet: OK\n";
 }
+
 
 // ---------------------------------------------------------------------------
 // IPMsg Packet parsing & composition (from src/main.cpp)
@@ -237,10 +251,29 @@ void TestIpMsgParse() {
         VERIFY(ws2s(p.extra) == "hello:world", "extra with colons preserved");
     }
     {
-        // Empty packet
+        // Malformed: too few parts (4 parts)
         IpMsgPacket p;
-        bool ok = ParseIpMsgPacket("", p);
-        VERIFY(!ok, "empty string");
+        bool ok = ParseIpMsgPacket("1:2:sender:host", p);
+        VERIFY(!ok, "4 parts invalid");
+    }
+    {
+        // Malformed: empty components
+        IpMsgPacket p;
+        bool ok = ParseIpMsgPacket("::::", p);
+        VERIFY(ok, "empty parts parsed");
+        VERIFY(p.version == 0, "empty version is 0");
+        VERIFY(p.packetNo == 0, "empty packetNo is 0");
+        VERIFY(ws2s(p.senderUser) == "", "empty senderUser");
+        VERIFY(ws2s(p.senderHost) == "", "empty senderHost");
+        VERIFY(p.command == 0, "empty command is 0");
+    }
+    {
+        // Non-numeric command and packetNo
+        IpMsgPacket p;
+        bool ok = ParseIpMsgPacket("1:abc:sender:host:xyz", p);
+        VERIFY(ok, "non-numeric parsed safely");
+        VERIFY(p.packetNo == 0, "invalid packetNo falls back to 0");
+        VERIFY(p.command == 0, "invalid command falls back to 0");
     }
     std::cout << "  IpMsgParse: OK\n";
 }
