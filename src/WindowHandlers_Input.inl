@@ -88,6 +88,17 @@ static LRESULT HandlePaint(HWND hwnd) {
       }
     }
 
+    // Adjust highlight ranges for IME composition insertion
+    if (g_imeCompViewLen > 0) {
+      for (auto &h : viewportHighlights) {
+        if (h.start >= g_imeCompViewOffset) {
+          h.start += g_imeCompViewLen;
+        } else if (h.start + h.length > g_imeCompViewOffset) {
+          h.length += g_imeCompViewLen;
+        }
+      }
+    }
+
     std::vector<Buffer::SelectionRange> viewportSelections;
     for (const auto &s : selectionRanges) {
       size_t sStartVisual = activeBuffer->LogicalToVisualOffset(s.start);
@@ -104,6 +115,18 @@ static LRESULT HandlePaint(HWND hwnd) {
                             : content.length();
         if (relEnd > relStart) {
           viewportSelections.push_back({relStart, relEnd});
+        }
+      }
+    }
+
+    // Adjust selection ranges for IME composition insertion
+    if (g_imeCompViewLen > 0) {
+      for (auto &s : viewportSelections) {
+        if (s.start >= g_imeCompViewOffset) {
+          s.start += g_imeCompViewLen;
+          s.end += g_imeCompViewLen;
+        } else if (s.end > g_imeCompViewOffset) {
+          s.end += g_imeCompViewLen;
         }
       }
     }

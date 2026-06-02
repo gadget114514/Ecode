@@ -98,7 +98,9 @@ void EditorBufferRenderer::DrawEditorLines(
     m_lastHighlights.clear();
   }
 
-  if (!m_cachedTextLayout || textChanged || m_lastLayoutWidth != layoutWidth ||
+  bool imeComposing = g_imeComposing;
+  if (!m_cachedTextLayout || textChanged || imeComposing ||
+      m_lastLayoutWidth != layoutWidth ||
       m_lastLayoutHeight != size.height || highlightsChanged) {
     std::wstring locale = Localization::Instance().GetLocaleName();
     HRESULT hr = this->m_dwriteFactory->CreateTextLayout(
@@ -155,9 +157,9 @@ void EditorBufferRenderer::DrawEditorLines(
           }
         }
       }
+      m_lastLayoutWidth = layoutWidth;
+      m_lastLayoutHeight = size.height;
     }
-    m_lastLayoutWidth = layoutWidth;
-    m_lastLayoutHeight = size.height;
   }
 
   IDWriteTextLayout *textLayout = m_cachedTextLayout.Get();
@@ -195,6 +197,32 @@ void EditorBufferRenderer::DrawEditorLines(
                             m.left + m.width + xOffset,
                             m.top + m.height + yOffset),
                 this->m_selBrush.Get());
+          }
+        }
+      }
+    }
+
+    // IME composition range highlight (behind text, like selections)
+    if (g_imeComposing && g_imeCompViewLen > 0 && !g_imeCompAttr.empty()) {
+      int compStartChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
+          static_cast<int>(g_imeCompViewOffset), NULL, 0);
+      int compEndChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
+          static_cast<int>(g_imeCompViewOffset + g_imeCompViewLen), NULL, 0);
+      int compCharLen = compEndChar - compStartChar;
+      if (compCharLen > 0) {
+        UINT32 hitCount = 0;
+        textLayout->HitTestTextRange((UINT32)compStartChar, (UINT32)compCharLen,
+            0, 0, NULL, 0, &hitCount);
+        if (hitCount > 0) {
+          std::vector<DWRITE_HIT_TEST_METRICS> hits(hitCount);
+          textLayout->HitTestTextRange((UINT32)compStartChar, (UINT32)compCharLen,
+              0, 0, hits.data(), hitCount, &hitCount);
+          for (const auto &h : hits) {
+            m_renderTarget->FillRectangle(
+                D2D1::RectF(h.left + xOffset, h.top + yOffset,
+                            h.left + h.width + xOffset,
+                            h.top + h.height + yOffset),
+                m_selBrush.Get());
           }
         }
       }
@@ -312,31 +340,13 @@ void EditorBufferRenderer::DrawEditorLines(
       }
     }
 
-    // IME composition range highlight + underlines (text is in displayContent)
+    // IME composition underlines (text is in displayContent)
     if (g_imeComposing && g_imeCompViewLen > 0 && !g_imeCompAttr.empty()) {
-      // Convert byte offsets to char indices in the modified text
       int compStartChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
           static_cast<int>(g_imeCompViewOffset), NULL, 0);
       int compEndChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
           static_cast<int>(g_imeCompViewOffset + g_imeCompViewLen), NULL, 0);
       int compCharLen = compEndChar - compStartChar;
-
-      // Highlight the composition range
-      UINT32 hitCount = 0;
-      textLayout->HitTestTextRange((UINT32)compStartChar, (UINT32)compCharLen,
-          0, 0, NULL, 0, &hitCount);
-      if (hitCount > 0) {
-        std::vector<DWRITE_HIT_TEST_METRICS> hits(hitCount);
-        textLayout->HitTestTextRange((UINT32)compStartChar, (UINT32)compCharLen,
-            0, 0, hits.data(), hitCount, &hitCount);
-        for (const auto &h : hits) {
-          m_renderTarget->FillRectangle(
-              D2D1::RectF(h.left + xOffset, h.top + yOffset,
-                          h.left + h.width + xOffset,
-                          h.top + h.height + yOffset),
-              m_selBrush.Get());
-        }
-      }
 
       // Underlines per character
       float lineH = GetLineHeight();
