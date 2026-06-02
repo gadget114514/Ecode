@@ -163,6 +163,21 @@ void Localization::LoadTranslations() {
   en["settings_ai_dir"] = L"Allowed Project Directory:";
   en["settings_ai_note"] = L"(Note: AI can only edit files within this folder if specified)";
 
+  en["menu_cli"] = L"CLI";
+  en["menu_plugins"] = L"Plugins";
+  en["menu_ai"] = L"AI";
+  en["menu_tools_shell_mode"] = L"Shell Mode";
+  en["menu_tools_new_terminal_ps"] = L"New Terminal (powershell)";
+  en["menu_tools_new_terminal_cmd"] = L"New Terminal (cmd)";
+  en["menu_tools_new_terminal_bash"] = L"New Terminal (bash)";
+  en["menu_tools_configure_apps"] = L"Configure App Entries...";
+  en["menu_cli_configure"] = L"Configure CLI Entries...";
+  en["menu_plugins_no_plugins"] = L"(No plugins found)";
+  en["menu_plugins_rescan"] = L"Rescan Plugins";
+  en["menu_plugins_configure"] = L"Configure Plugins...";
+  en["menu_ai_manager"] = L"AI Agent Manager";
+  en["menu_ai_setup_wizard"] = L"AI Setup Wizard";
+
   en["settings_caret_line"] = L"Line";
   en["settings_caret_block"] = L"Block";
   en["settings_caret_underline"] = L"Underline";
@@ -269,6 +284,21 @@ void Localization::LoadTranslations() {
   jp["settings_ai_dir"] = L"許可されたプロジェクトディレクトリ:";
   jp["settings_ai_note"] = L"(注: 指定されている場合、AIはこのフォルダー内のファイルのみ編集できます)";
 
+  jp["menu_cli"] = L"CLI";
+  jp["menu_plugins"] = L"プラグイン";
+  jp["menu_ai"] = L"AI";
+  jp["menu_tools_shell_mode"] = L"シェルモード";
+  jp["menu_tools_new_terminal_ps"] = L"新規ターミナル (powershell)";
+  jp["menu_tools_new_terminal_cmd"] = L"新規ターミナル (cmd)";
+  jp["menu_tools_new_terminal_bash"] = L"新規ターミナル (bash)";
+  jp["menu_tools_configure_apps"] = L"アプリエントリの構成...";
+  jp["menu_cli_configure"] = L"CLIエントリの構成...";
+  jp["menu_plugins_no_plugins"] = L"(プラグインが見つかりません)";
+  jp["menu_plugins_rescan"] = L"プラグインの再スキャン";
+  jp["menu_plugins_configure"] = L"プラグインの構成...";
+  jp["menu_ai_manager"] = L"AI エージェント マネージャー";
+  jp["menu_ai_setup_wizard"] = L"AI セットアップ ウィザード";
+
   jp["settings_caret_line"] = L"ライン";
   jp["settings_caret_block"] = L"ブロック";
   jp["settings_caret_underline"] = L"下線";
@@ -361,6 +391,21 @@ void Localization::LoadTranslations() {
   es["settings_ai_key"] = L"Clave de API:";
   es["settings_ai_dir"] = L"Directorio de proyecto permitido:";
   es["settings_ai_note"] = L"(Nota: la IA solo puede editar archivos dentro de esta carpeta si se especifica)";
+
+  es["menu_cli"] = L"CLI";
+  es["menu_plugins"] = L"Complementos";
+  es["menu_ai"] = L"IA";
+  es["menu_tools_shell_mode"] = L"Modo de shell";
+  es["menu_tools_new_terminal_ps"] = L"Nueva terminal (powershell)";
+  es["menu_tools_new_terminal_cmd"] = L"Nueva terminal (cmd)";
+  es["menu_tools_new_terminal_bash"] = L"Nueva terminal (bash)";
+  es["menu_tools_configure_apps"] = L"Configurar entradas de aplicaciones...";
+  es["menu_cli_configure"] = L"Configurar entradas de CLI...";
+  es["menu_plugins_no_plugins"] = L"(No se encontraron complementos)";
+  es["menu_plugins_rescan"] = L"Volver a escanear complementos";
+  es["menu_plugins_configure"] = L"Configurar complementos...";
+  es["menu_ai_manager"] = L"Gestor de agentes de IA";
+  es["menu_ai_setup_wizard"] = L"Asistente de configuración de IA";
 
   es["settings_caret_line"] = L"Línea";
   es["settings_caret_block"] = L"Bloque";
@@ -455,6 +500,21 @@ void Localization::LoadTranslations() {
   fr["settings_ai_dir"] = L"Dossier de projet autorisé :";
   fr["settings_ai_note"] = L"(Note : l'IA ne peut modifier que les fichiers de ce dossier s'il est spécifié)";
 
+  fr["menu_cli"] = L"CLI";
+  fr["menu_plugins"] = L"Plug-ins";
+  fr["menu_ai"] = L"IA";
+  fr["menu_tools_shell_mode"] = L"Mode shell";
+  fr["menu_tools_new_terminal_ps"] = L"Nouveau terminal (powershell)";
+  fr["menu_tools_new_terminal_cmd"] = L"Nouveau terminal (cmd)";
+  fr["menu_tools_new_terminal_bash"] = L"Nouveau terminal (bash)";
+  fr["menu_tools_configure_apps"] = L"Configurer les applications...";
+  fr["menu_cli_configure"] = L"Configurer les CLI...";
+  fr["menu_plugins_no_plugins"] = L"(Aucun plug-in trouvé)";
+  fr["menu_plugins_rescan"] = L"Réanalyser les plug-ins";
+  fr["menu_plugins_configure"] = L"Configurer les plug-ins...";
+  fr["menu_ai_manager"] = L"Gestionnaire d'agents IA";
+  fr["menu_ai_setup_wizard"] = L"Assistant de configuration IA";
+
   fr["settings_caret_line"] = L"Ligne";
   fr["settings_caret_block"] = L"Bloc";
   fr["settings_caret_underline"] = L"Souligné";
@@ -547,6 +607,21 @@ void Localization::LoadTranslations() {
   de["settings_ai_key"] = L"API-Schlüssel:";
   de["settings_ai_dir"] = L"Zulässiges Projektverzeichnis:";
   de["settings_ai_note"] = L"(Hinweis: Die KI kann Dateien nur in diesem Ordner bearbeiten, wenn angegeben)";
+
+  de["menu_cli"] = L"CLI";
+  de["menu_plugins"] = L"Plugins";
+  de["menu_ai"] = L"KI";
+  de["menu_tools_shell_mode"] = L"Shell-Modus";
+  de["menu_tools_new_terminal_ps"] = L"Neues Terminal (powershell)";
+  de["menu_tools_new_terminal_cmd"] = L"Neues Terminal (cmd)";
+  de["menu_tools_new_terminal_bash"] = L"Neues Terminal (bash)";
+  de["menu_tools_configure_apps"] = L"App-Einträge konfigurieren...";
+  de["menu_cli_configure"] = L"CLI-Einträge konfigurieren...";
+  de["menu_plugins_no_plugins"] = L"(Keine Plugins gefunden)";
+  de["menu_plugins_rescan"] = L"Plugins neu scannen";
+  de["menu_plugins_configure"] = L"Plugins konfigurieren...";
+  de["menu_ai_manager"] = L"KI-Agenten-Manager";
+  de["menu_ai_setup_wizard"] = L"KI-Einrichtungsassistent";
 
   de["settings_caret_line"] = L"Linie";
   de["settings_caret_block"] = L"Block";
