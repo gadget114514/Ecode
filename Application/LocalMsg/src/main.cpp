@@ -2819,9 +2819,16 @@ static int RunCLI(int argc, wchar_t** argv) {
 
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow) {
     int argc=0; LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);
+    bool embedded = false;
+    int argIdx = 1;
     if(argc>1&&argv) {
         std::wstring a1=argv[1];
-        if(a1==L"--login"||a1==L"--logout"||a1==L"--send"||a1==L"--list"||a1==L"--receive"||a1==L"--ping") { int r=RunCLI(argc,argv); if(argv) LocalFree(argv); return r; }
+        if(a1==L"--embedded") { embedded = true; argIdx = 2; }
+        else if(a1==L"--login"||a1==L"--logout"||a1==L"--send"||a1==L"--list"||a1==L"--receive"||a1==L"--ping") { int r=RunCLI(argc,argv); if(argv) LocalFree(argv); return r; }
+    }
+    if(argc>argIdx&&argv) {
+        std::wstring a=argv[argIdx];
+        if(a==L"--login"||a==L"--logout"||a==L"--send"||a==L"--list"||a==L"--receive"||a==L"--ping") { int r=RunCLI(argc,argv); if(argv) LocalFree(argv); return r; }
     }
     if(argv) LocalFree(argv);
 
@@ -2830,10 +2837,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow) 
     WNDCLASSEXW wc{}; wc.cbSize=sizeof(wc); wc.style=CS_HREDRAW|CS_VREDRAW; wc.lpfnWndProc=WndProc;
     wc.hInstance=hInst; wc.hCursor=LoadCursorW(nullptr,IDC_ARROW); wc.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     wc.lpszClassName=L"EcodeLocalMsgWindow"; RegisterClassExW(&wc);
-    HWND hwnd=CreateWindowExW(0,L"EcodeLocalMsgWindow",L"LocalMsg - IPMsg + LocalSend",
-        WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,900,600,nullptr,nullptr,hInst,nullptr);
+    HWND hwnd=CreateWindowExW(
+        embedded ? WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW : 0,
+        L"EcodeLocalMsgWindow", L"LocalMsg - IPMsg + LocalSend",
+        embedded ? WS_POPUP : WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT, 900, 600,
+        nullptr, nullptr, hInst, nullptr);
     if(!hwnd) return 1;
-    ShowWindow(hwnd,nCmdShow); UpdateWindow(hwnd);
+    if(!embedded) {
+        ShowWindow(hwnd,nCmdShow); UpdateWindow(hwnd);
+    }
     MSG m;
     while(GetMessageW(&m,nullptr,0,0)) {
         if(m.hwnd==g_textInput&&m.message==WM_KEYDOWN&&m.wParam==VK_RETURN&&(GetKeyState(VK_CONTROL)&0x8000)) { SendMessageW(g_hwnd,WM_COMMAND,IDC_SEND_TEXT_BTN,0); continue; }
