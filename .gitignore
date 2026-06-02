@@ -55,4 +55,6 @@ build
 Application/SmallUV/
 src/generated/
 debug_init.log
+claude2-loop.log
+claude2-loop.ps1
 nul
