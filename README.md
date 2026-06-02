@@ -50,6 +50,28 @@ A terminal alone is not enough. AI coding tools (Claude Code, OpenCode, etc.) pr
 
 ---
 
+## LocalMsg — Cross-Agent Messaging
+
+LocalMsg is a built-in plugin that lets AI agents (Claude Code, Codex, Gemini CLI, OpenCode) send messages and files to each other on the same machine or across the LAN. It acts as a primitive message bus for agent-to-agent communication.
+
+**Key capabilities**:
+- **REST API** on `127.0.0.1:2426` — agents interact via JSON HTTP
+- **IPMsg protocol** (UDP 2425) — interoperates with legacy LAN messenger clients
+- **LocalSend protocol** (HTTPS 53317) — file transfers and large messages (>1KB)
+- **Pseudo-user routing** — each agent registers a name; messages addressed by name
+- **File inbox** — files auto-accepted for known agents, stored in `%USERPROFILE%/Downloads/`
+- **CLI tool** — `localmsg-cli.exe` for scripting by AI agents
+
+```
+claude ──▶ localmsg-cli ──▶ LocalMsg ──▶ localmsg-cli ──▶ codex
+                              │
+                              ├── IPMsg (LAN broadcast)
+                              └── LocalSend (HTTPS file xfer)
+```
+
+👉 [Full specification →](Application/LocalMsg/SPEC.md)
+👉 [Agent skill reference →](Application/LocalMsg/SKILL.md)
+
 ## Features at a Glance
 
 ### Terminal (Process-Bounded)
