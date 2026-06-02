@@ -240,4 +240,20 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
+echo Running LocalMsg CLI Tests...
+..\bin\Release\test_localmsg_cli.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo LocalMsg CLI Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo Running LocalMsg Server Tests...
+..\bin\Release\test_localmsg_server.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo LocalMsg Server Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
 echo === ALL TESTS PASSED ===

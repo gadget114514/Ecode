@@ -232,6 +232,8 @@ struct Message {
     std::wstring to;
     std::wstring text;
     std::wstring time;
+    bool isEnvelop = false;
+    bool isRead = false;
 };
 
 struct IpMsgPacket {
@@ -319,7 +321,7 @@ static SOCKET g_restSock     = INVALID_SOCKET;
 // Forward declarations
 static bool IsPseudoUser(const std::wstring& username);
 static std::wstring GetPrimaryUser();
-static void PushMessage(const std::wstring& from, const std::wstring& to, const std::wstring& text);
+static void PushMessage(const std::wstring& from, const std::wstring& to, const std::wstring& text, bool isEnvelop = false);
 
 // File inbox for pseudo-user auto-accept transfers (protected by g_xferCs)
 struct ReceivedFile {
@@ -1324,12 +1326,23 @@ static void CleanupStalePseudoUsers() {
 // ---------------------------------------------------------------------------
 // [17] IPMsg — Message Inbox
 // ---------------------------------------------------------------------------
-static void PushMessage(const std::wstring& from, const std::wstring& to, const std::wstring& text) {
+static void PushMessage(const std::wstring& from, const std::wstring& to, const std::wstring& text, bool isEnvelop) {
     Message m; m.id = g_nextMsgId++; m.from = from; m.to = to; m.text = text; m.time = TimeStamp();
+    m.isEnvelop = isEnvelop; m.isRead = false;
     EnterCriticalSection(&g_msgCs);
     g_messages.push_back(m);
     if (g_messages.size() > 1000) g_messages.erase(g_messages.begin());
     LeaveCriticalSection(&g_msgCs);
+}
+
+static int CountUnreadEnvelop(const std::wstring& forUser) {
+    int n = 0;
+    EnterCriticalSection(&g_msgCs);
+    for (auto& m : g_messages)
+        if (m.isEnvelop && !m.isRead && (forUser.empty() || m.to == forUser))
+            n++;
+    LeaveCriticalSection(&g_msgCs);
+    return n;
 }
 
 static std::wstring GetMessagesJson(const std::wstring& user, bool advancePtr) {
@@ -1350,7 +1363,10 @@ static std::wstring GetMessagesJson(const std::wstring& user, bool advancePtr) {
              ",\"from\":\"" + EscapeJson(ws2s(m.from)) +
              "\",\"to\":\"" + EscapeJson(ws2s(m.to)) +
              "\",\"text\":\"" + EscapeJson(ws2s(m.text)) +
-             "\",\"time\":\"" + EscapeJson(ws2s(m.time)) + "\"}";
+             "\",\"time\":\"" + EscapeJson(ws2s(m.time)) + "\""
+             ",\"isEnvelop\":" + (m.isEnvelop ? "true" : "false") +
+             ",\"isRead\":" + (m.isRead ? "true" : "false") + "}";
+        if (advancePtr && m.isEnvelop) m.isRead = true;
         if (m.id > lastId) lastId = m.id;
     }
     if (advancePtr && !user.empty() && lastId > 0)
@@ -1455,7 +1471,7 @@ static void SendIpMsg(const IpMsgPacket& pkt, const sockaddr_in& dest) {
 }
 
 static bool SendTextIpMsg(const std::wstring& fromUser, const std::wstring& toUser,
-                          const std::wstring& text) {
+                          const std::wstring& text, bool envelop = false) {
     PeerInfo target;
     bool isIp = toUser.find(L'.') != std::wstring::npos;
     EnterCriticalSection(&g_peerCs);
@@ -1474,6 +1490,7 @@ static bool SendTextIpMsg(const std::wstring& fromUser, const std::wstring& toUs
     pkt.version = 1; pkt.packetNo = pktNo++;
     pkt.senderUser = fromUser; pkt.senderHost = g_myHostname;
     pkt.command = IPMSG_SENDMSG | IPMSG_SENDCHECKOPT | IPMSG_CAPUTF8OPT | IPMSG_UTF8OPT;
+    if (envelop) pkt.command |= IPMSG_SECRETOPT | IPMSG_READCHECKOPT;
     pkt.destUser = toUser; pkt.extra = text;
 
     sockaddr_in dest = {};
@@ -1685,7 +1702,7 @@ static DWORD WINAPI IpMsgThread(LPVOID) {
                             DebugLog(L"IPMSG suppressed (rate-limit) from " + pkt.senderUser + L": " + msgText);
                         } else {
                             std::wstring display = isSecret ? L"[envelop] " + msgText : msgText;
-                            PushMessage(pkt.senderUser, toUser, display);
+                            PushMessage(pkt.senderUser, toUser, display, isSecret);
                             PostMessage(g_hwnd, WM_IPMSG_TEXT_RCVD, 0, (LPARAM)new std::wstring(pkt.senderUser + L"\x01" + toUser + L"\x01" + display));
                         }
                         std::wstring myName = GetPrimaryUser();
@@ -1861,6 +1878,7 @@ static void HandleRestRequest(SOCKET s) {
         }
         if (!filter.empty()) TouchPseudoUser(filter);
         SendRestResp(s,200,ws2s(GetMessagesJson(filter, advancePtr)));
+        if (advancePtr) PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0);
     } else if (method=="POST" && path=="/api/send") {
         std::string from = JsonGet(body,"from");
         std::string to = JsonGet(body,"to");
@@ -1869,19 +1887,19 @@ static void HandleRestRequest(SOCKET s) {
         if (to.empty()||text.empty()) { SendRestResp(s,400,"{\"ok\":false,\"error\":\"missing to/text\"}"); closesocket(s); return; }
         TouchPseudoUser(s2ws(from));
         bool ok = false;
+        bool envelop = JsonGet(body, "raw") != "true";
         if (IsPseudoUser(s2ws(to))) {
-            PushMessage(s2ws(from), s2ws(to), s2ws(text));
-            std::wstring* payload = new std::wstring(s2ws(from) + L"\x01" + s2ws(to) + L"\x01" + s2ws(text));
+            PushMessage(s2ws(from), s2ws(to), s2ws(text), envelop);
+            std::wstring* payload = new std::wstring(s2ws(from) + L"\x01" + s2ws(to) + L"\x01" + (envelop ? L"[envelop] " : L"") + s2ws(text));
             PostMessage(g_hwnd, WM_IPMSG_TEXT_RCVD, 0, (LPARAM)payload);
             ok = true;
         } else {
-            // Remote peer — always send as primary user, not pseudo user
             std::wstring realFrom = GetPrimaryUser();
             if (realFrom.empty()) realFrom = g_myHostname;
             if (text.size() > 1024) {
                 ok = SendTextHttps(realFrom, s2ws(to), s2ws(text));
             } else {
-                ok = SendTextIpMsg(realFrom, s2ws(to), s2ws(text));
+                ok = SendTextIpMsg(realFrom, s2ws(to), s2ws(text), envelop);
             }
         }
         SendRestResp(s,ok?200:404,ok?"{\"ok\":true}":"{\"ok\":false,\"error\":\"peer not found\"}");
@@ -1965,7 +1983,7 @@ static void HandleRestRequest(SOCKET s) {
         std::string result;
         while (GetTickCount() < deadline) {
             std::wstring j = GetMessagesJson(filter, false);
-            if (j != L"[]") { result = ws2s(GetMessagesJson(filter, true)); break; }
+            if (j != L"[]") { result = ws2s(GetMessagesJson(filter, true)); PostMessage(g_hwnd, WM_IPMSG_UPDATE_PEERS, 0, 0); break; }
             Sleep(250);
         }
         SendRestResp(s, 200, result.empty() ? "{\"ok\":false,\"empty\":true}" : result);
@@ -2048,6 +2066,8 @@ static void ShowMessageViewer(const std::wstring& forUser) {
     for (auto& m : g_messages) {
         if (m.from == forUser || m.to == forUser) {
             out += m.time + L" ";
+            if (m.isEnvelop && !m.isRead)
+                out += L"[UNREAD] ";
             if (m.from == forUser)
                 out += L"\u2192 " + m.to + L": " + m.text + L"\r\n";
             else
@@ -2103,6 +2123,8 @@ static void UpdatePeerList() {
         std::wstring name = row.name;
         if (nameCount[name] > 1)
             name += L"@" + row.addr;
+        if (CountUnreadEnvelop(row.name) > 0)
+            name = L"\u25CF " + name;
         ListView_SetItemText(g_peerList, i, 0, (LPWSTR)name.c_str());
         ListView_SetItemText(g_peerList, i, 1, (LPWSTR)row.addr.c_str());
         ListView_SetItemText(g_peerList, i, 2, (LPWSTR)row.udpPort.c_str());

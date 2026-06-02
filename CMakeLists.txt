@@ -461,6 +461,18 @@ set_target_properties(test_editor_buffer_ops PROPERTIES RUNTIME_OUTPUT_DIRECTORY
 set_target_properties(test_piecetable_advanced PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 set_target_properties(test_telnetd_iac PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 
+add_executable(test_localmsg_cli EXCLUDE_FROM_ALL
+    tests/test_localmsg_cli.cpp
+)
+target_link_libraries(test_localmsg_cli kernel32)
+set_target_properties(test_localmsg_cli PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+
+add_executable(test_localmsg_server EXCLUDE_FROM_ALL
+    tests/test_localmsg_server.cpp
+)
+target_link_libraries(test_localmsg_server kernel32)
+set_target_properties(test_localmsg_server PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+
 # Copy scripts directory to output
 add_custom_command(TARGET ecode POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

@@ -131,6 +131,9 @@ public:
   int GetTabGridRefreshIntervalMs() const { return m_tabGridRefreshIntervalMs; }
   void SetTabGridRefreshIntervalMs(int ms) { m_tabGridRefreshIntervalMs = ms; }
 
+  bool IsSharedLocalMsg() const { return m_sharedLocalMsg; }
+  void SetSharedLocalMsg(bool v) { m_sharedLocalMsg = v; }
+
   // Tab font style: 0=regular, 1=bold(default), 2=italic, 3=bold italic
   int GetTabActiveFontStyle() const { return m_tabActiveFontStyle; }
   void SetTabActiveFontStyle(int style) { m_tabActiveFontStyle = style; }
@@ -288,6 +291,7 @@ private:
 
   bool m_reverseScrollDirection = false;
   bool m_hideMessagesBuffer = true;
+  bool m_sharedLocalMsg = false;
   int m_tabActiveFontStyle = 1;
   std::vector<ThemeEntry> m_themes;
   std::wstring m_activeTheme;

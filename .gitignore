@@ -3,6 +3,8 @@ third_party_reference
 build/
 **/build/
 **/build_*/
+**/references/*
+**/references/
 
 # Prerequisites
 *.d
