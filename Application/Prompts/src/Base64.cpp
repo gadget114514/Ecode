@@ -36,35 +36,35 @@ std::string Base64::encode(const unsigned char *data, size_t len) {
 }
 
 bool Base64::isValid(const std::string &s) {
-    if (s.empty()) return false;
+    if (s.empty()) return true;
     for (char c : s) {
         if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
               (c >= '0' && c <= '9') || c == '+' || c == '/' ||
               c == '-' || c == '_' || c == '='))
             return false;
     }
-    return s.length() % 4 == 0;
+    if (s.length() % 4 == 1) return false;
+    return true;
 }
 
 std::string Base64::decode(const std::string &encoded) {
     init_b64rev();
+    if (encoded.empty()) return {};
     std::string result;
     result.reserve(encoded.length() / 4 * 3);
     unsigned char buf[4];
-    int pad = 0;
     for (size_t i = 0; i < encoded.length(); i += 4) {
-        int validChars = 0;
+        int pad = 0;
         for (int j = 0; j < 4; j++) {
             if (i + j >= encoded.length()) { buf[j] = 0; continue; }
             char c = encoded[i + j];
             if (c == '=') { buf[j] = 0; pad++; }
-            else { buf[j] = b64rev[(unsigned char)c]; validChars++; }
+            else { buf[j] = b64rev[(unsigned char)c]; }
         }
-        if (validChars > 0) {
-            result += (char)((buf[0] << 2) | (buf[1] >> 4));
-            if (validChars > 1) result += (char)(((buf[1] & 15) << 4) | (buf[2] >> 2));
-            if (validChars > 2) result += (char)(((buf[2] & 3) << 6) | buf[3]);
-        }
+        int outBytes = 3 - pad;
+        if (outBytes >= 1) result += (char)((buf[0] << 2) | (buf[1] >> 4));
+        if (outBytes >= 2) result += (char)(((buf[1] & 15) << 4) | (buf[2] >> 2));
+        if (outBytes >= 3) result += (char)(((buf[2] & 3) << 6) | buf[3]);
     }
     return result;
 }

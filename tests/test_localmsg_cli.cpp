@@ -219,6 +219,30 @@ void TestFlags() {
     std::cout << "  Flags: OK\n";
 }
 
+static std::vector<std::string> GetFiles(int argc, const char* argv[]) {
+    std::vector<std::string> files;
+    for (int i = 1; i < argc - 1; ++i)
+        if (argv[i] == std::string("--file")) files.push_back(argv[i+1]);
+    return files;
+}
+
+void TestGetFiles() {
+    const char* args1[] = {"prog", "--send", "--file", "a.txt", "--file", "b.txt", "--agent", "abc"};
+    auto f1 = GetFiles(8, args1);
+    VERIFY(f1.size() == 2, "two files found");
+    VERIFY(f1[0] == "a.txt", "first file matches");
+    VERIFY(f1[1] == "b.txt", "second file matches");
+
+    const char* args2[] = {"prog", "--send", "hello"};
+    auto f2 = GetFiles(3, args2);
+    VERIFY(f2.empty(), "no files found");
+
+    const char* args3[] = {"prog", "--file"}; // malformed flag at end
+    auto f3 = GetFiles(2, args3);
+    VERIFY(f3.empty(), "malformed flag at end safely ignored");
+    std::cout << "  GetFiles: OK\n";
+}
+
 int main() {
     std::cout << "localmsg-cli tests:\n";
     TestEscapeJson();
@@ -226,6 +250,7 @@ int main() {
     TestResolvePort();
     TestHttpResponse();
     TestFlags();
+    TestGetFiles();
     std::cout << "All localmsg-cli tests passed.\n";
     return 0;
 }

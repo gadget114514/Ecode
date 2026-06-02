@@ -441,6 +441,14 @@ static bool SendFileLocalSend(const std::string& fromAgent,
     return ok;
 }
 
+static bool IsErrorResponse(const std::string& r) {
+    if (r.empty()) return false;
+    if (r[0] == '[') return false; // JSON array, not an error object
+    if (r.find("\"error\"") != std::string::npos) return true;
+    if (r.find("\"ok\":false") != std::string::npos) return true;
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -466,8 +474,10 @@ int main() {
 
     // --ping and --heartbeat do not require agent name
     if (cmd == "--ping" || cmd == "--heartbeat") {
-        PrintJson(CallApi("GET", "/api/ping", "", httpPort));
-        LocalFree(argv); return 0;
+        std::string result = CallApi("GET", "/api/ping", "", httpPort);
+        PrintJson(result);
+        int ec = IsErrorResponse(result) ? 2 : 0;
+        LocalFree(argv); return ec;
     }
 
     if (cmd == "--list") {
@@ -475,7 +485,8 @@ int main() {
         std::string resp = CallApi("GET", "/api/users", "", httpPort);
         Verbose("localmsg-cli: /api/users returned %zu bytes in %.0f ms", resp.size(), NowMs() - t0);
         PrintJson(resp);
-        LocalFree(argv); return 0;
+        int ec = IsErrorResponse(resp) ? 2 : 0;
+        LocalFree(argv); return ec;
     }
 
     // All other commands need agent name
@@ -613,6 +624,10 @@ int main() {
     } else {
         PrintUsage();
         LocalFree(argv); return 2;
+    }
+
+    if (exitCode == 0 && IsErrorResponse(result)) {
+        exitCode = 2;
     }
 
     PrintJson(result);
