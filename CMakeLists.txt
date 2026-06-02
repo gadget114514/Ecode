@@ -542,6 +542,8 @@ endforeach()
 add_plugin(JYEditor Application/JYEditor)
 message(STATUS "JYEditor enabled (local nlohmann_json)")
 
+add_plugin(LocalMsg Application/LocalMsg)
+
 
 
 # Installer
