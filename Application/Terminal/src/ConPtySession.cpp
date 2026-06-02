@@ -1,6 +1,6 @@
 // ConPtySession.cpp
-// Follows the Microsoft PTYCON (win32 sample) pattern exactly:
-//   https://learn.microsoft.com/en-us/windows/console/creating-a-pseudoconsole-session
+// Single IoThread with OVERLAPPED I/O for select()-style inter-stream serialization.
+// Named pipes are required — anonymous CreatePipe does not support FILE_FLAG_OVERLAPPED.
 
 #include "../include/ConPtySession.h"
 #include <algorithm>
@@ -33,20 +33,15 @@ bool ConPtySession::Start(const std::wstring& shell, int cols, int rows,
     if (SUCCEEDED(hr)) hr = PrepareStartupInformation();
     if (SUCCEEDED(hr)) hr = LaunchProcess(shell, extraEnv);
 
-    if (FAILED(hr)) {
-        Close();
-        return false;
-    }
+    if (FAILED(hr)) { Close(); return false; }
 
     running_ = true;
-    StartReader();
-    StartWriter();
+    StartIoThread();
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// Write — queue data for background writer thread to avoid blocking main thread
-// when the pipe buffer is full.
+// Write — queue data; IoThread drains it with minimum scheduling latency.
 // ---------------------------------------------------------------------------
 bool ConPtySession::Write(const void* data, size_t len) {
     if (!running_ || inputWriteSide_ == INVALID_HANDLE_VALUE || len == 0)
@@ -57,7 +52,7 @@ bool ConPtySession::Write(const void* data, size_t len) {
         std::lock_guard<std::mutex> lock(writeMutex_);
         writeQueue_.push(std::move(copy));
     }
-    SetEvent(writeWakeEvent_);
+    SetEvent(ioWakeEvent_);
     return true;
 }
 
@@ -81,42 +76,45 @@ void ConPtySession::Resize(int cols, int rows) {
 }
 
 // ---------------------------------------------------------------------------
-// Close — follows PTYCON teardown order:
-//   1. politely ask shell to exit
-//   2. close inputWriteSide_ so PTY stdin gets EOF
-//   3. wait / kill process
-//   4. ClosePseudoConsole (unblocks final ReadFile on outputReadSide_)
-//   5. drain / close outputReadSide_
-//   6. join reader thread
-//   7. free attribute list and remaining handles
+// Close — PTYCON teardown order:
+//   1. best-effort "exit\r\n" through IoThread
+//   2. signal closeEvent_ → IoThread cancels pending I/O and exits
+//   3. join IoThread, close event handles
+//   4. close inputWriteSide_ (PTY stdin gets EOF)
+//   5. wait / kill process
+//   6. ClosePseudoConsole (unblocks any residual ReadFile)
+//   7. close outputReadSide_, free attribute list, close process handles
 // ---------------------------------------------------------------------------
 void ConPtySession::Close() {
     if (closing_.exchange(true)) return;
 
-    // Politely ask shell to exit — queue through writer thread
-    if (running_ && inputWriteSide_ != INVALID_HANDLE_VALUE) {
+    // Best-effort: queue exit command and let IoThread flush it
+    if (running_ && inputWriteSide_ != INVALID_HANDLE_VALUE && ioWakeEvent_) {
         const char exitCmd[] = "exit\r\n";
         std::vector<char> cmd(exitCmd, exitCmd + sizeof(exitCmd) - 1);
         {
             std::lock_guard<std::mutex> lock(writeMutex_);
             writeQueue_.push(std::move(cmd));
         }
-        SetEvent(writeWakeEvent_);
+        SetEvent(ioWakeEvent_);
+        Sleep(50);
     }
 
-    // Signal writer thread to flush and exit, then wait briefly
-    if (writerThread_) {
-        SetEvent(writeWakeEvent_);
-        WaitForSingleObject(writerThread_, 1000);
-        CloseHandle(writerThread_);
-        writerThread_ = nullptr;
-    }
-    if (writeWakeEvent_) {
-        CloseHandle(writeWakeEvent_);
-        writeWakeEvent_ = nullptr;
+    // Signal IoThread to cancel pending I/O and exit
+    if (closeEvent_) SetEvent(closeEvent_);
+
+    if (ioThread_) {
+        WaitForSingleObject(ioThread_, 2000);
+        CloseHandle(ioThread_);
+        ioThread_ = nullptr;
     }
 
-    // Close our write end so the PTY sees EOF on stdin
+    if (readEvent_)   { CloseHandle(readEvent_);   readEvent_   = nullptr; }
+    if (writeEvent_)  { CloseHandle(writeEvent_);  writeEvent_  = nullptr; }
+    if (ioWakeEvent_) { CloseHandle(ioWakeEvent_); ioWakeEvent_ = nullptr; }
+    if (closeEvent_)  { CloseHandle(closeEvent_);  closeEvent_  = nullptr; }
+
+    // Close our write end — PTY stdin gets EOF
     if (inputWriteSide_ != INVALID_HANDLE_VALUE) {
         CloseHandle(inputWriteSide_);
         inputWriteSide_ = INVALID_HANDLE_VALUE;
@@ -129,27 +127,16 @@ void ConPtySession::Close() {
         WaitForSingleObject(hProcess_, 500);
     }
 
-    // ClosePseudoConsole — this signals the PTY output pipe so ReadFile unblocks
-    if (hPC_ && fnClose_) {
-        fnClose_(hPC_);
-        hPC_ = nullptr;
-    }
+    // ClosePseudoConsole — unblocks any residual ReadFile on outputReadSide_
+    if (hPC_ && fnClose_) { fnClose_(hPC_); hPC_ = nullptr; }
 
     running_ = false;
 
-    // Close read side — reader loop will exit because ReadFile returns 0/error
     if (outputReadSide_ != INVALID_HANDLE_VALUE) {
         CloseHandle(outputReadSide_);
         outputReadSide_ = INVALID_HANDLE_VALUE;
     }
 
-    if (readerThread_) {
-        WaitForSingleObject(readerThread_, 2000);
-        CloseHandle(readerThread_);
-        readerThread_ = nullptr;
-    }
-
-    // Free attribute list (HeapAlloc'd per PTYCON sample)
     if (attrList_) {
         DeleteProcThreadAttributeList(attrList_);
         HeapFree(GetProcessHeap(), 0, attrList_);
@@ -167,61 +154,80 @@ void ConPtySession::Close() {
 }
 
 // ---------------------------------------------------------------------------
-// LoadApi — load ConPTY entry points from conpty.dll (Windows Terminal package)
+// LoadApi — load ConPTY entry points from conpty.dll
 // ---------------------------------------------------------------------------
 HRESULT ConPtySession::LoadApi() {
-    // conpty.dll sits in the same directory as Terminal.exe (plugins/)
     hConptyDll_ = LoadLibraryExW(L"conpty.dll", nullptr, LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
     if (!hConptyDll_) {
         lastError_ = L"Failed to load conpty.dll from application directory";
         return HRESULT_FROM_WIN32(GetLastError());
     }
-
     fnCreate_ = (FnCreate)GetProcAddress(hConptyDll_, "ConptyCreatePseudoConsole");
     fnResize_ = (FnResize)GetProcAddress(hConptyDll_, "ConptyResizePseudoConsole");
     fnClose_  = (FnClose) GetProcAddress(hConptyDll_, "ConptyClosePseudoConsole");
-
     if (!fnCreate_ || !fnResize_ || !fnClose_) {
         lastError_ = L"ConptyCreatePseudoConsole not found in conpty.dll";
-        FreeLibrary(hConptyDll_);
-        hConptyDll_ = nullptr;
+        FreeLibrary(hConptyDll_); hConptyDll_ = nullptr;
         return E_NOTIMPL;
     }
     return S_OK;
 }
 
 // ---------------------------------------------------------------------------
-// SetUpPseudoConsole (PTYCON: SetUpPseudoConsole)
+// SetUpPseudoConsole — named pipes for OVERLAPPED I/O
 //
-// Creates two anonymous pipes then calls CreatePseudoConsole.
-// The PTY-side handles (inputReadSide_, outputWriteSide_) are closed here
-// immediately after CreatePseudoConsole returns, exactly as the PTYCON sample
-// does (the PTY now owns them internally).
+// Anonymous CreatePipe cannot be opened with FILE_FLAG_OVERLAPPED; named pipes
+// can.  The server ends (our side) carry FILE_FLAG_OVERLAPPED; the client ends
+// (PTY side) are inheritable handles passed to CreatePseudoConsole.
 // ---------------------------------------------------------------------------
 HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
-    // PTYCON sample: pipes must be inheritable for CreatePseudoConsole to duplicate them
-    SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, TRUE };
+    DWORD pid = GetCurrentProcessId();
+    static LONG pipeSeq = 0;
+    LONG seq = InterlockedIncrement(&pipeSeq);
 
-    // Input pipe: we write to inputWriteSide_; PTY reads from inputReadSide_
-    if (!CreatePipe(&inputReadSide_, &inputWriteSide_, &sa, 0)) {
-        lastError_ = L"CreatePipe(input) failed: " + Win32Error();
+    wchar_t inName[64], outName[64];
+    swprintf_s(inName,  L"\\\\.\\pipe\\conpty-in-%lu-%ld",  (unsigned long)pid, (long)seq);
+    swprintf_s(outName, L"\\\\.\\pipe\\conpty-out-%lu-%ld", (unsigned long)pid, (long)seq);
+
+    // Input pipe: server end = inputWriteSide_ (we write, OVERLAPPED)
+    //             client end = inputReadSide_  (PTY reads, inheritable)
+    inputWriteSide_ = CreateNamedPipeW(inName,
+        PIPE_ACCESS_OUTBOUND | FILE_FLAG_OVERLAPPED,
+        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+        1, 4096, 4096, 0, nullptr);
+    if (inputWriteSide_ == INVALID_HANDLE_VALUE) {
+        lastError_ = L"CreateNamedPipe(in) failed: " + Win32Error();
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    // Output pipe: PTY writes to outputWriteSide_; we read from outputReadSide_
-    if (!CreatePipe(&outputReadSide_, &outputWriteSide_, &sa, 0)) {
-        lastError_ = L"CreatePipe(output) failed: " + Win32Error();
+    // Output pipe: server end = outputReadSide_ (we read, OVERLAPPED)
+    //              client end = outputWriteSide_ (PTY writes, inheritable)
+    outputReadSide_ = CreateNamedPipeW(outName,
+        PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+        1, 4096, 4096, 0, nullptr);
+    if (outputReadSide_ == INVALID_HANDLE_VALUE) {
+        lastError_ = L"CreateNamedPipe(out) failed: " + Win32Error();
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    const COORD consoleSize{
-        (SHORT)std::max(20, cols),
-        (SHORT)std::max(5,  rows)
-    };
+    // Client ends: inheritable so CreatePseudoConsole can pass them to the child
+    SECURITY_ATTRIBUTES saInh = { sizeof(saInh), nullptr, TRUE };
 
-    HRESULT hr = fnCreate_(consoleSize, inputReadSide_, outputWriteSide_,
-                           0,
-                           &hPC_);
+    inputReadSide_ = CreateFileW(inName, GENERIC_READ, 0, &saInh, OPEN_EXISTING, 0, nullptr);
+    if (inputReadSide_ == INVALID_HANDLE_VALUE) {
+        lastError_ = L"CreateFile(in client) failed: " + Win32Error();
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    outputWriteSide_ = CreateFileW(outName, GENERIC_WRITE, 0, &saInh, OPEN_EXISTING, 0, nullptr);
+    if (outputWriteSide_ == INVALID_HANDLE_VALUE) {
+        lastError_ = L"CreateFile(out client) failed: " + Win32Error();
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    const COORD consoleSize{ (SHORT)std::max(20, cols), (SHORT)std::max(5, rows) };
+    HRESULT hr = fnCreate_(consoleSize, inputReadSide_, outputWriteSide_, 0, &hPC_);
     if (FAILED(hr)) {
         wchar_t buf[80];
         swprintf_s(buf, L"CreatePseudoConsole failed: 0x%08lX", (unsigned long)hr);
@@ -229,16 +235,12 @@ HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
         return hr;
     }
 
-    // Close PTY-side pipe handles — ConPTY now owns them.
-    // (PTYCON sample closes these immediately after CreatePseudoConsole.)
+    // Close PTY-side handles — ConPTY now owns them internally
     CloseHandle(inputReadSide_);   inputReadSide_   = INVALID_HANDLE_VALUE;
     CloseHandle(outputWriteSide_); outputWriteSide_ = INVALID_HANDLE_VALUE;
 
-    // Prevent our pipe ends from leaking to the child process
     SetHandleInformation(inputWriteSide_, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(outputReadSide_, HANDLE_FLAG_INHERIT, 0);
-
-    // Make the HPCON handle inheritable so CreateProcessW can attach it to the child
     SetHandleInformation(hPC_, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
 
     return S_OK;
@@ -246,39 +248,26 @@ HRESULT ConPtySession::SetUpPseudoConsole(int cols, int rows) {
 
 // ---------------------------------------------------------------------------
 // PrepareStartupInformation (PTYCON: PrepareStartupInformation)
-//
-// Allocates the proc-thread attribute list via HeapAlloc (matching the PTYCON
-// sample), then attaches the HPCON to PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE.
-// The caller (Close) must call DeleteProcThreadAttributeList + HeapFree.
 // ---------------------------------------------------------------------------
 HRESULT ConPtySession::PrepareStartupInformation() {
     siEx_ = {};
     siEx_.StartupInfo.cb = sizeof(siEx_);
-
-    // First call: determine required buffer size
     SIZE_T attrBytes = 0;
     InitializeProcThreadAttributeList(nullptr, 1, 0, &attrBytes);
-    // attrBytes is now set to the required size
-
-    // PTYCON sample uses HeapAlloc, not std::vector
     attrList_ = (PPROC_THREAD_ATTRIBUTE_LIST)HeapAlloc(GetProcessHeap(), 0, attrBytes);
     if (!attrList_) {
         lastError_ = L"HeapAlloc for attribute list failed";
         return E_OUTOFMEMORY;
     }
-
     if (!InitializeProcThreadAttributeList(attrList_, 1, 0, &attrBytes)) {
         lastError_ = L"InitializeProcThreadAttributeList failed: " + Win32Error();
         return HRESULT_FROM_WIN32(GetLastError());
     }
-
-    if (!UpdateProcThreadAttribute(attrList_, 0,
-            PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-            hPC_, sizeof(hPC_), nullptr, nullptr)) {
+    if (!UpdateProcThreadAttribute(attrList_, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+                                   hPC_, sizeof(hPC_), nullptr, nullptr)) {
         lastError_ = L"UpdateProcThreadAttribute failed: " + Win32Error();
         return HRESULT_FROM_WIN32(GetLastError());
     }
-
     siEx_.lpAttributeList = attrList_;
     return S_OK;
 }
@@ -289,47 +278,33 @@ HRESULT ConPtySession::PrepareStartupInformation() {
 HRESULT ConPtySession::LaunchProcess(
         const std::wstring& shell,
         const std::vector<std::pair<std::wstring,std::wstring>>& extraEnv) {
-
     std::wstring envBlock = BuildEnvBlock(extraEnv);
-    std::wstring cmdLine  = shell; // CreateProcessW may mutate; keep a copy
-
+    std::wstring cmdLine  = shell;
     PROCESS_INFORMATION pi{};
-    BOOL ok = CreateProcessW(
-        nullptr,
-        cmdLine.data(),
-        nullptr, nullptr,
-        TRUE,                                               // bInheritHandles (needed for PTY attachment)
+    BOOL ok = CreateProcessW(nullptr, cmdLine.data(), nullptr, nullptr,
+        TRUE,
         EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
-        envBlock.data(),
-        nullptr,                                            // current directory
-        reinterpret_cast<LPSTARTUPINFOW>(&siEx_),
-        &pi);
-
+        envBlock.data(), nullptr,
+        reinterpret_cast<LPSTARTUPINFOW>(&siEx_), &pi);
     if (!ok) {
         lastError_ = L"CreateProcessW failed: " + Win32Error();
         return HRESULT_FROM_WIN32(GetLastError());
     }
-
-    hProcess_  = pi.hProcess;
-    hThread_   = pi.hThread;
-    processId_ = pi.dwProcessId;
+    hProcess_ = pi.hProcess; hThread_ = pi.hThread; processId_ = pi.dwProcessId;
     return S_OK;
 }
 
 // ---------------------------------------------------------------------------
-// BuildEnvBlock — snapshot + override terminal identity + caller extras
+// BuildEnvBlock
 // ---------------------------------------------------------------------------
 std::wstring ConPtySession::BuildEnvBlock(
         const std::vector<std::pair<std::wstring,std::wstring>>& extra) {
-
-    // Mandatory terminal identity vars (same set as termdock + terminalpp)
     const std::vector<std::pair<std::wstring,std::wstring>> termVars = {
         { L"TERM",           L"xterm-256color" },
         { L"COLORTERM",      L"truecolor"      },
         { L"CLICOLOR_FORCE", L"1"              },
         { L"FORCE_COLOR",    L"3"              },
     };
-
     wchar_t* env = GetEnvironmentStringsW();
     std::wstring block;
     if (env) {
@@ -339,81 +314,136 @@ std::wstring ConPtySession::BuildEnvBlock(
             bool skip = false;
             for (auto& kv : termVars)
                 if (entry.size() > kv.first.size() &&
-                    entry.substr(0, kv.first.size() + 1) == kv.first + L'=') {
-                    skip = true; break;
-                }
+                    entry.substr(0, kv.first.size() + 1) == kv.first + L'=')
+                    { skip = true; break; }
             if (!skip)
                 for (auto& kv : extra)
                     if (entry.size() > kv.first.size() &&
-                        entry.substr(0, kv.first.size() + 1) == kv.first + L'=') {
-                        skip = true; break;
-                    }
+                        entry.substr(0, kv.first.size() + 1) == kv.first + L'=')
+                        { skip = true; break; }
             if (!skip) { block += entry; block += L'\0'; }
         }
         FreeEnvironmentStringsW(env);
     }
-
     for (auto& kv : termVars) { block += kv.first + L'=' + kv.second; block += L'\0'; }
     for (auto& kv : extra)    { block += kv.first + L'=' + kv.second; block += L'\0'; }
-    block += L'\0'; // double-null terminator
+    block += L'\0';
     return block;
 }
 
 // ---------------------------------------------------------------------------
-// Reader thread — uses Win32 CreateThread to avoid MSVC <thread>/_beginthreadex issues
+// IoThread — single thread serializes both read and write via OVERLAPPED I/O
+// and WaitForMultipleObjects (Windows equivalent of select(2)).
+//
+// Event array (priority order = index order in WaitForMultipleObjects):
+//   [0] closeEvent_   — manual-reset, highest priority: cancel I/O and exit
+//   [1] readEvent_    — manual-reset, OVERLAPPED ReadFile completion
+//   [2] ioWakeEvent_  — auto-reset,   new data added to write queue
+//   [3] writeEvent_   — manual-reset, OVERLAPPED WriteFile completion
+//
+// Write-first discipline: before waiting, always check the write queue and
+// issue a write if one is pending.  This ensures user input reaches ConPTY
+// with minimum latency relative to the output stream, replicating the causal
+// ordering that Unix select() provides on a single PTY fd.
 // ---------------------------------------------------------------------------
-static DWORD WINAPI ReaderThreadProc(LPVOID param) {
-    reinterpret_cast<ConPtySession*>(param)->ReaderLoop();
+DWORD WINAPI IoThreadProc(LPVOID param) {
+    reinterpret_cast<ConPtySession*>(param)->IoLoop();
     return 0;
 }
 
-void ConPtySession::StartReader() {
+void ConPtySession::StartIoThread() {
+    closeEvent_  = CreateEventW(nullptr, TRUE,  FALSE, nullptr); // manual-reset
+    readEvent_   = CreateEventW(nullptr, TRUE,  FALSE, nullptr); // manual-reset
+    ioWakeEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr); // auto-reset
+    writeEvent_  = CreateEventW(nullptr, TRUE,  FALSE, nullptr); // manual-reset
+
     DWORD threadId = 0;
-    readerThread_ = CreateThread(nullptr, 0, ReaderThreadProc, this, 0, &threadId);
+    ioThread_ = CreateThread(nullptr, 0, IoThreadProc, this, 0, &threadId);
 }
 
-void ConPtySession::ReaderLoop() {
-    char buf[4096];
-    while (true) {
-        DWORD bytesRead = 0;
-        // ReadFile returns FALSE when ClosePseudoConsole unblocks the output pipe
-        BOOL ok = ReadFile(outputReadSide_, buf, (DWORD)sizeof(buf), &bytesRead, nullptr);
-        if (!ok || bytesRead == 0) break;
-        if (onOutput_) onOutput_(buf, bytesRead);
+void ConPtySession::IoLoop() {
+    HANDLE events[4] = { closeEvent_, readEvent_, ioWakeEvent_, writeEvent_ };
+
+    // Issue the initial overlapped read
+    readOv_ = {};
+    readOv_.hEvent = readEvent_;
+    ResetEvent(readEvent_);
+    DWORD bytesRead = 0;
+    if (!ReadFile(outputReadSide_, readBuf_, sizeof(readBuf_), &bytesRead, &readOv_)) {
+        if (GetLastError() != ERROR_IO_PENDING) { running_ = false; return; }
     }
-    running_ = false;
-}
 
-// ---------------------------------------------------------------------------
-// Writer thread — dequeues queued writes and writes to the pipe asynchronously.
-// ---------------------------------------------------------------------------
-static DWORD WINAPI WriterThreadProc(LPVOID param) {
-    reinterpret_cast<ConPtySession*>(param)->WriterLoop();
-    return 0;
-}
+    bool writePending = false;
 
-void ConPtySession::StartWriter() {
-    writeWakeEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    DWORD threadId = 0;
-    writerThread_ = CreateThread(nullptr, 0, WriterThreadProc, this, 0, &threadId);
-}
-
-void ConPtySession::WriterLoop() {
-    while (true) {
-        WaitForSingleObject(writeWakeEvent_, INFINITE);
-        if (closing_) break;
-        while (true) {
+    for (;;) {
+        // Write-first: issue one write before waiting so user input reaches
+        // ConPTY before we process the next read event.
+        if (!writePending) {
             std::vector<char> data;
             {
                 std::lock_guard<std::mutex> lock(writeMutex_);
-                if (writeQueue_.empty()) break;
-                data = std::move(writeQueue_.front());
-                writeQueue_.pop();
+                if (!writeQueue_.empty()) {
+                    data = std::move(writeQueue_.front());
+                    writeQueue_.pop();
+                }
             }
-            DWORD written = 0;
-            WriteFile(inputWriteSide_, data.data(), (DWORD)data.size(), &written, nullptr);
+            if (!data.empty()) {
+                writeBuf_ = std::move(data);
+                writeOv_ = {};
+                writeOv_.hEvent = writeEvent_;
+                ResetEvent(writeEvent_);
+                DWORD written = 0;
+                if (!WriteFile(inputWriteSide_, writeBuf_.data(), (DWORD)writeBuf_.size(),
+                               &written, &writeOv_)) {
+                    if (GetLastError() != ERROR_IO_PENDING) break;
+                }
+                writePending = true;
+            }
+        }
+
+        DWORD r = WaitForMultipleObjects(4, events, FALSE, INFINITE);
+
+        if (r == WAIT_OBJECT_0) {
+            // closeEvent_: cancel any pending I/O and exit
+            CancelIoEx(outputReadSide_, &readOv_);
+            if (writePending) CancelIoEx(inputWriteSide_, &writeOv_);
+            DWORD bytes = 0;
+            GetOverlappedResult(outputReadSide_, &readOv_, &bytes, TRUE);
+            if (writePending) GetOverlappedResult(inputWriteSide_, &writeOv_, &bytes, TRUE);
+            break;
+
+        } else if (r == WAIT_OBJECT_0 + 1) {
+            // readEvent_: read completed
+            DWORD bytes = 0;
+            BOOL ok = GetOverlappedResult(outputReadSide_, &readOv_, &bytes, FALSE);
+            if (ok && bytes > 0 && onOutput_) onOutput_(readBuf_, bytes);
+            if (!ok) break;
+
+            // Rearm: issue next overlapped read immediately
+            readOv_ = {};
+            readOv_.hEvent = readEvent_;
+            ResetEvent(readEvent_);
+            if (!ReadFile(outputReadSide_, readBuf_, sizeof(readBuf_), &bytes, &readOv_)) {
+                if (GetLastError() != ERROR_IO_PENDING) break;
+            }
+
+        } else if (r == WAIT_OBJECT_0 + 2) {
+            // ioWakeEvent_: new write data queued — write-first check at top handles it
+            (void)0;
+
+        } else if (r == WAIT_OBJECT_0 + 3) {
+            // writeEvent_: write completed
+            DWORD bytes = 0;
+            GetOverlappedResult(inputWriteSide_, &writeOv_, &bytes, FALSE);
+            writePending = false;
+            ResetEvent(writeEvent_);
+
+        } else {
+            break;
         }
     }
+
+    running_ = false;
 }
 
 // ---------------------------------------------------------------------------
