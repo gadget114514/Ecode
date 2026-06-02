@@ -60,3 +60,10 @@ debug_init.log
 claude2-loop.log
 claude2-loop.ps1
 nul
+
+# Build output
+bin/Debug/
+bin/Release/
+
+# Visual Studio user files
+**/.vs/
