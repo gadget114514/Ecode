@@ -432,6 +432,7 @@ static void HandleDestroy(HWND hwnd) {
   }
   // Step 3: Close all handles and destroy remaining windows
   for (auto &t : g_appTabs) {
+    if (t.hWaitObject) { UnregisterWait(t.hWaitObject); t.hWaitObject = nullptr; }
     if (t.hProcess) { CloseHandle(t.hProcess); t.hProcess = nullptr; }
     if (t.hwnd) { DestroyWindow(t.hwnd); t.hwnd = nullptr; }
   }

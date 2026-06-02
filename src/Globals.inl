@@ -206,6 +206,10 @@ void HandleDestroy(HWND hwnd);
 #define WM_DEFERRED_FOCUS (WM_USER + 207)
 #define WM_SET_PROCESS_HANDLE (WM_USER + 206)
 #define WM_TERMINAL_PROGRESS (WM_USER + 299)
+#define WM_NOTIFY_APP_TERMINATED (WM_USER + 300)
+
+// Forward declaration – defined in WindowHandlers_Command.inl
+static void CALLBACK OnAppTerminated(PVOID lpParam, BOOLEAN TimerOrWaitFired);
 
 struct GrepSearchParams {
     std::wstring dir;
@@ -291,6 +295,7 @@ struct AppTabInfo {
 
     void *data = nullptr; // type-specific data (e.g. ListView HWND or result list)
     HANDLE hProcess = nullptr; // process handle for killing
+    HANDLE hWaitObject = nullptr; // RegisterWaitForSingleObject registration
     std::wstring command;   // CLI command (for terminal tabs)
     std::wstring directory; // working directory (for terminal tabs)
 };

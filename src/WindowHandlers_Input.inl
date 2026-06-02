@@ -704,7 +704,9 @@ LRESULT HandleMouseDown(HWND hwnd, LPARAM lParam) {
 
   // Redirect mouse clicks to the active app tab child window
   if (g_activeAppTab >= 0 && (size_t)g_activeAppTab < g_appTabs.size()) {
-    SetFocus(g_appTabs[g_activeAppTab].hwnd);
+    HWND target = g_appTabs[g_activeAppTab].hwnd;
+    if (target && IsWindow(target))
+      SetFocus(target);
     return 0;
   }
 
