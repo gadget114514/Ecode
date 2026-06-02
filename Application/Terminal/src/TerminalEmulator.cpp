@@ -491,7 +491,7 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
     case L's': buffer_->saveCursor();    break;
     case L'u':
         if (!params.empty() && params[0] == L'?') { queryKittyKeyboardProtocol(); break; }
-        if (params.empty()) { buffer_->restoreCursor(); break; }
+        if (params.empty() || paramInt(parts, 0, -1) == 0) { buffer_->restoreCursor(); break; }
         handleKittyKeyboardProtocol(params); break;
 
     // --- SGR ---
