@@ -96,7 +96,7 @@ private:
     void UpdateMetrics();
     void DrawCell(ID2D1RenderTarget* rt, int row, int col,
                   const TerminalCell& cell, bool isCursor, bool cursorVisible,
-                  bool isSelected = false);
+                  bool isSelected = false, bool textOnly = false);
     ID2D1SolidColorBrush* GetBrush(const TermColor& c, float alpha = 1.0f);
     D2D1_COLOR_F ToD2DColor(const TermColor& c, float alpha = 1.0f);
 
