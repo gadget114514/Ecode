@@ -1,13 +1,6 @@
 #include "../include/TerminalView.h"
 #include <algorithm>
 #include <cstring>
-#include <cstdio>
-static void ImeLog(const std::wstring& s) {
-    OutputDebugStringW(s.c_str());
-    static FILE* f = nullptr;
-    if (!f) f = _wfopen(L"C:\\ime_debug.txt", L"a, ccs=UTF-8");
-    if (f) { fwprintf(f, L"%s\n", s.c_str()); fflush(f); }
-}
 #include <shellapi.h>   // ShellExecuteW for hyperlink open
 #include <windowsx.h>  // GET_X_LPARAM / GET_Y_LPARAM
 #include <shlobj.h>    // SHGetFolderPathW, SHGetKnownFolderPath
@@ -467,8 +460,6 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ---------------------------------------------------------------------------
 LRESULT TerminalView::OnCreate(HWND hwnd) {
     hwnd_ = hwnd;
-    ImeLog(L"[IME-INIT] TerminalView created - debug logging active");
-
     // D2D factory
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2dFactory_);
 
@@ -609,13 +600,6 @@ void TerminalView::OnSize(int w, int h) {
 // OnTerminalOutput — called on UI thread via PostMessage
 // ---------------------------------------------------------------------------
 void TerminalView::OnTerminalOutput(const char* data, size_t len) {
-    // [DEBUG] IME中にPTY出力が来たかログ
-    if (imeActive_) {
-        std::wstring dbg = L"[IME-OUTPUT] PTY data arrived len=" + std::to_wstring(len) + L" :";
-        for (size_t i = 0; i < std::min(len, (size_t)40); ++i)
-            dbg += (data[i] >= 0x20 && data[i] < 0x7f) ? (wchar_t)data[i] : L'.';
-        ImeLog(dbg);
-    }
     // Combine with any partial multi-byte sequence from the previous chunk.
     std::string combined;
     if (!pendingPartial_.empty()) {
@@ -1027,31 +1011,9 @@ void TerminalView::OnPaint() {
                               (buffer_.cursorRow() < buffer_.scrollTop() ||
                                buffer_.cursorRow() > buffer_.scrollBottom());
     if (imeActive_ && !imeComposition_.empty() && (scrollOffset_ == 0 || cursorPinned)) {
-        // [DEBUG] バッファ内容とオーバーレイ座標をログ出力
-        {
-            int logRow = firstRow + buffer_.cursorRow();
-            std::wstring dbg = L"[IME-PAINT] cursorCol=" + std::to_wstring(buffer_.cursorColumn())
-                + L" imeShift=" + std::to_wstring(imeShift_)
-                + L" comp=" + imeComposition_
-                + L" cells:";
-            if (logRow >= 0 && logRow < totalLog) {
-                const auto& line = buffer_.lineAt(logRow);
-                int end = std::min((int)line.size(), buffer_.cursorColumn() + 8);
-                for (int c = buffer_.cursorColumn(); c < end; ++c)
-                    dbg += line[c].text.empty() ? L"_" : line[c].text;
-            }
-            ImeLog(dbg);
-        }
-
         const float cx = buffer_.cursorColumn() * cellWidth_;
         const float cy = buffer_.cursorRow()    * cellHeight_;
         float compW = (float)imeShift_ * cellWidth_;
-
-        // [DEBUG] オーバーレイ座標ログ
-        ImeLog(L"[IME-OVERLAY] cx=" + std::to_wstring((int)cx)
-            + L" cy=" + std::to_wstring((int)cy)
-            + L" compW=" + std::to_wstring((int)compW)
-            + L" cellW=" + std::to_wstring((int)cellWidth_));
 
         // 背景（薄いハイライト）
         TermColor imeBg;
@@ -1748,10 +1710,6 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
 
     std::string seq = EncodeKey(vk, ctrl, shift, alt);
     if (!seq.empty()) {
-        // [DEBUG] IME中にPTYへ送信しているか確認
-        if (imeActive_)
-            ImeLog(L"[IME-KEY] WARN sending to PTY while imeActive vk=" + std::to_wstring(vk)
-                + L" seq=" + std::wstring(seq.begin(), seq.end()));
         if (clearSel && selAnchorRow_ >= 0) {
             selAnchorRow_ = -1; selAnchorCol_ = -1;
             selEndRow_ = -1; selEndCol_ = -1;
