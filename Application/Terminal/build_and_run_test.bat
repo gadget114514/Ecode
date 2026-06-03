@@ -10,3 +10,8 @@ cl /std:c++17 /EHsc /utf-8 /DUNICODE /D_UNICODE /Iinclude tests/test_cursor_move
 if %ERRORLEVEL% EQU 0 (
     test_cursor_move.exe
 )
+echo.
+cl /std:c++17 /EHsc /utf-8 /DUNICODE /D_UNICODE /Iinclude tests/test_buffer_boundary.cpp src/TerminalBuffer.cpp src/TerminalEmulator.cpp user32.lib gdi32.lib shell32.lib ole32.lib d2d1.lib dwrite.lib /Fe:test_buffer_boundary.exe
+if %ERRORLEVEL% EQU 0 (
+    test_buffer_boundary.exe
+)
