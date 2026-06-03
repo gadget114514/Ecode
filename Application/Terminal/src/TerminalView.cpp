@@ -276,6 +276,9 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             // 確定文字列を PTY へ送信
             if (lp & GCS_RESULTSTR) {
+                // 変換確定: オーバーレイを即座に消し、残像表示を防ぐ
+                imeComposition_.clear();
+                imeCompAttr_.clear();
                 imeShift_ = 0;
                 int bytes = ImmGetCompositionStringW(hImc, GCS_RESULTSTR, nullptr, 0);
                 if (bytes > 0) {
@@ -1004,6 +1007,26 @@ void TerminalView::OnPaint() {
         }
     }
 
+    // IME シフト中: カーソル行のシフトされたセルのテキストを再描画（背景による上書きを防ぐ）
+    if (imeShift_ > 0 && (scrollOffset_ == 0)) {
+        const int curScreenRow = buffer_.cursorRow();
+        if (curScreenRow >= 0 && curScreenRow < visRows) {
+            int logRow = firstRow + curScreenRow;
+            if (logRow >= 0 && logRow < totalLog) {
+                const auto& line = buffer_.lineAt(logRow);
+                for (int col = buffer_.cursorColumn(); col < buffer_.columns(); ++col) {
+                    if (col >= (int)line.size()) break;
+                    const TerminalCell& cell = line[col];
+                    if (cell.wideContinuation) continue;
+                    bool isCursor = (col == buffer_.cursorColumn() && buffer_.cursorVisible());
+                    bool isSelected = IsSelected(logRow, col);
+                    bool showCursor = cursorBlink_ || !buffer_.cursorBlink();
+                    DrawCell(rt, curScreenRow, col, cell, isCursor, showCursor, isSelected, /*textOnly=*/true);
+                }
+            }
+        }
+    }
+
     // IME 変換中文字列をカーソル位置にインライン描画
     // ピン固定行にカーソルがある場合（スクロールバック中）も表示する。
     const bool cursorPinned = buffer_.hasScrollRegion() && scrollOffset_ > 0 &&
@@ -1083,7 +1106,7 @@ void TerminalView::OnPaint() {
 
 void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
                             const TerminalCell& cell, bool isCursor, bool cursorVisible,
-                            bool isSelected) {
+                            bool isSelected, bool textOnly) {
     // --- OSC 1337 inline image rendering (before IME shift) ---
     if (cell.imageId != 0 && cell.imagePlaceholderIndex == 0 && imageManager_) {
         const float x = col * cellWidth_;
@@ -1136,7 +1159,7 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     }
 
     // Cell background at original column position
-    if (!bg.isDefault) {
+    if (!textOnly && !bg.isDefault) {
         if (auto* b = GetBrush(bg))
             rt->FillRectangle(D2D1::RectF(bgX, y, bgX + w, y + h), b);
     }
