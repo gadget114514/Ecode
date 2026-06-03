@@ -2838,9 +2838,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow) 
     wc.hInstance=hInst; wc.hCursor=LoadCursorW(nullptr,IDC_ARROW); wc.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     wc.lpszClassName=L"EcodeLocalMsgWindow"; RegisterClassExW(&wc);
     HWND hwnd=CreateWindowExW(
-        embedded ? WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW : 0,
+        0,
         L"EcodeLocalMsgWindow", L"LocalMsg - IPMsg + LocalSend",
-        embedded ? WS_POPUP : WS_OVERLAPPEDWINDOW,
+        WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 900, 600,
         nullptr, nullptr, hInst, nullptr);
     if(!hwnd) return 1;
