@@ -2,6 +2,13 @@
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
+#include <fstream>
+static std::wofstream g_imeLog;
+static void ImeLog(const std::wstring& s) {
+    if (!g_imeLog.is_open()) g_imeLog.open(L"C:\\ime_debug.txt", std::ios::app);
+    g_imeLog << s << L"\n";
+    g_imeLog.flush();
+}
 #include <shellapi.h>   // ShellExecuteW for hyperlink open
 #include <windowsx.h>  // GET_X_LPARAM / GET_Y_LPARAM
 #include <shlobj.h>    // SHGetFolderPathW, SHGetKnownFolderPath
@@ -602,6 +609,13 @@ void TerminalView::OnSize(int w, int h) {
 // OnTerminalOutput — called on UI thread via PostMessage
 // ---------------------------------------------------------------------------
 void TerminalView::OnTerminalOutput(const char* data, size_t len) {
+    // [DEBUG] IME中にPTY出力が来たかログ
+    if (imeActive_) {
+        std::wstring dbg = L"[IME-OUTPUT] PTY data arrived len=" + std::to_wstring(len) + L" :";
+        for (size_t i = 0; i < std::min(len, (size_t)40); ++i)
+            dbg += (data[i] >= 0x20 && data[i] < 0x7f) ? (wchar_t)data[i] : L'.';
+        ImeLog(dbg);
+    }
     // Combine with any partial multi-byte sequence from the previous chunk.
     std::string combined;
     if (!pendingPartial_.empty()) {
@@ -1007,35 +1021,37 @@ void TerminalView::OnPaint() {
         }
     }
 
-    // IME シフト中: カーソル行のシフトされたセルのテキストを再描画（背景による上書きを防ぐ）
-    if (imeShift_ > 0 && (scrollOffset_ == 0)) {
-        const int curScreenRow = buffer_.cursorRow();
-        if (curScreenRow >= 0 && curScreenRow < visRows) {
-            int logRow = firstRow + curScreenRow;
-            if (logRow >= 0 && logRow < totalLog) {
-                const auto& line = buffer_.lineAt(logRow);
-                for (int col = buffer_.cursorColumn(); col < buffer_.columns(); ++col) {
-                    if (col >= (int)line.size()) break;
-                    const TerminalCell& cell = line[col];
-                    if (cell.wideContinuation) continue;
-                    bool isCursor = (col == buffer_.cursorColumn() && buffer_.cursorVisible());
-                    bool isSelected = IsSelected(logRow, col);
-                    bool showCursor = cursorBlink_ || !buffer_.cursorBlink();
-                    DrawCell(rt, curScreenRow, col, cell, isCursor, showCursor, isSelected, /*textOnly=*/true);
-                }
-            }
-        }
-    }
-
     // IME 変換中文字列をカーソル位置にインライン描画
     // ピン固定行にカーソルがある場合（スクロールバック中）も表示する。
     const bool cursorPinned = buffer_.hasScrollRegion() && scrollOffset_ > 0 &&
                               (buffer_.cursorRow() < buffer_.scrollTop() ||
                                buffer_.cursorRow() > buffer_.scrollBottom());
     if (imeActive_ && !imeComposition_.empty() && (scrollOffset_ == 0 || cursorPinned)) {
+        // [DEBUG] バッファ内容とオーバーレイ座標をログ出力
+        {
+            int logRow = firstRow + buffer_.cursorRow();
+            std::wstring dbg = L"[IME-PAINT] cursorCol=" + std::to_wstring(buffer_.cursorColumn())
+                + L" imeShift=" + std::to_wstring(imeShift_)
+                + L" comp=" + imeComposition_
+                + L" cells:";
+            if (logRow >= 0 && logRow < totalLog) {
+                const auto& line = buffer_.lineAt(logRow);
+                int end = std::min((int)line.size(), buffer_.cursorColumn() + 8);
+                for (int c = buffer_.cursorColumn(); c < end; ++c)
+                    dbg += line[c].text.empty() ? L"_" : line[c].text;
+            }
+            ImeLog(dbg);
+        }
+
         const float cx = buffer_.cursorColumn() * cellWidth_;
         const float cy = buffer_.cursorRow()    * cellHeight_;
         float compW = (float)imeShift_ * cellWidth_;
+
+        // [DEBUG] オーバーレイ座標ログ
+        ImeLog(L"[IME-OVERLAY] cx=" + std::to_wstring((int)cx)
+            + L" cy=" + std::to_wstring((int)cy)
+            + L" compW=" + std::to_wstring((int)compW)
+            + L" cellW=" + std::to_wstring((int)cellWidth_));
 
         // 背景（薄いハイライト）
         TermColor imeBg;
@@ -1106,7 +1122,7 @@ void TerminalView::OnPaint() {
 
 void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
                             const TerminalCell& cell, bool isCursor, bool cursorVisible,
-                            bool isSelected, bool textOnly) {
+                            bool isSelected) {
     // --- OSC 1337 inline image rendering (before IME shift) ---
     if (cell.imageId != 0 && cell.imagePlaceholderIndex == 0 && imageManager_) {
         const float x = col * cellWidth_;
@@ -1135,9 +1151,6 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     }
 
     int visualCol = col;
-    if (imeShift_ > 0 && row == buffer_.cursorRow() && col >= buffer_.cursorColumn()) {
-        visualCol = col + imeShift_;
-    }
     const float bgX = col * cellWidth_;
     const float y = row * cellHeight_;
     const float w = cellWidth_ * (cell.wide ? 2.0f : 1.0f);
@@ -1159,7 +1172,7 @@ void TerminalView::DrawCell(ID2D1RenderTarget* rt, int row, int col,
     }
 
     // Cell background at original column position
-    if (!textOnly && !bg.isDefault) {
+    if (!bg.isDefault) {
         if (auto* b = GetBrush(bg))
             rt->FillRectangle(D2D1::RectF(bgX, y, bgX + w, y + h), b);
     }
@@ -1735,6 +1748,10 @@ void TerminalView::OnKeyDown(WPARAM vk, LPARAM /*lParam*/) {
 
     std::string seq = EncodeKey(vk, ctrl, shift, alt);
     if (!seq.empty()) {
+        // [DEBUG] IME中にPTYへ送信しているか確認
+        if (imeActive_)
+            ImeLog(L"[IME-KEY] WARN sending to PTY while imeActive vk=" + std::to_wstring(vk)
+                + L" seq=" + std::wstring(seq.begin(), seq.end()));
         if (clearSel && selAnchorRow_ >= 0) {
             selAnchorRow_ = -1; selAnchorCol_ = -1;
             selEndRow_ = -1; selEndCol_ = -1;
