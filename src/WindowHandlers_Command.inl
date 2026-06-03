@@ -997,17 +997,20 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
   case IDM_HELP_MESSAGES: {
     Buffer *msgBuf = g_editor->GetBufferByName(L"*Messages*");
     if (msgBuf) {
-      msgBuf->SetHidden(false);
-      const auto &buffers = g_editor->GetBuffers();
-      for (size_t i = 0; i < buffers.size(); ++i) {
-        if (buffers[i].get() == msgBuf) {
-          g_editor->SwitchToBuffer(i);
-          UpdateTabs(hwnd);
-          UpdateMenu(hwnd);
-          InvalidateRect(hwnd, NULL, FALSE);
-          break;
+      bool hidden = msgBuf->IsHidden();
+      msgBuf->SetHidden(!hidden);
+      if (hidden) {
+        const auto &buffers = g_editor->GetBuffers();
+        for (size_t i = 0; i < buffers.size(); ++i) {
+          if (buffers[i].get() == msgBuf) {
+            g_editor->SwitchToBuffer(i);
+            break;
+          }
         }
       }
+      UpdateTabs(hwnd);
+      UpdateMenu(hwnd);
+      InvalidateRect(hwnd, NULL, FALSE);
     }
     break;
   }
