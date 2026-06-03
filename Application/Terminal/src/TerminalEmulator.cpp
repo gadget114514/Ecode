@@ -140,11 +140,16 @@ void TerminalEmulator::process(const std::wstring& text) {
                 handleOsc(oscText_);
                 oscText_.clear();
                 state_ = State::Ground;
-            } else if (ch == L'\x1b' && i + 1 < text.size() && text[i+1] == L'\\') {
+            } else if (ch == L'\x1b') {
+                // ESC always terminates OSC (handles cross-chunk ESC\ splits too)
                 handleOsc(oscText_);
                 oscText_.clear();
-                state_ = State::Ground;
-                ++i;
+                if (i + 1 < text.size() && text[i+1] == L'\\') {
+                    ++i; // consume the ST backslash
+                    state_ = State::Ground;
+                } else {
+                    state_ = State::Escape; // let next char be processed as ESC sequence
+                }
             } else {
                 oscText_ += ch;
             }
