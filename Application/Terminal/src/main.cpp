@@ -9,6 +9,7 @@ static TerminalView* g_view  = nullptr;
 static std::wstring  g_shell = L"powershell.exe";
 static UINT          g_codePage = CP_UTF8;
 
+
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:

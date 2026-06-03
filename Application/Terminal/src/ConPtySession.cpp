@@ -7,7 +7,7 @@
 #include <array>
 #include <cstdio>
 
-// PTY送信ログ（デバッグ用）
+// PTY送信ログ（デバッグ用・常時有効）
 static void LogPtyWrite(const void* data, size_t len) {
     static FILE* f = nullptr;
     if (!f) f = fopen("C:\\pty_write.txt", "a");
