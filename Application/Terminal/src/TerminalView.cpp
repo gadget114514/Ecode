@@ -2,13 +2,7 @@
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
-#include <fstream>
-static std::wofstream g_imeLog;
-static void ImeLog(const std::wstring& s) {
-    if (!g_imeLog.is_open()) g_imeLog.open(L"C:\\ime_debug.txt", std::ios::app);
-    g_imeLog << s << L"\n";
-    g_imeLog.flush();
-}
+static void ImeLog(const std::wstring& s) { OutputDebugStringW(s.c_str()); }
 #include <shellapi.h>   // ShellExecuteW for hyperlink open
 #include <windowsx.h>  // GET_X_LPARAM / GET_Y_LPARAM
 #include <shlobj.h>    // SHGetFolderPathW, SHGetKnownFolderPath
