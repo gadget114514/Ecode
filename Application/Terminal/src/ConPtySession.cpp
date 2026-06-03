@@ -5,22 +5,6 @@
 #include "../include/ConPtySession.h"
 #include <algorithm>
 #include <array>
-#include <cstdio>
-
-// PTY送信ログ（デバッグ用・常時有効）
-static void LogPtyWrite(const void* data, size_t len) {
-    static FILE* f = nullptr;
-    if (!f) f = fopen("C:\\pty_write.txt", "a");
-    if (!f) return;
-    fprintf(f, "[PTY-WRITE %zu bytes]: ", len);
-    const unsigned char* p = (const unsigned char*)data;
-    for (size_t i = 0; i < len; ++i) {
-        if (p[i] >= 0x20 && p[i] < 0x7f) fputc(p[i], f);
-        else fprintf(f, "\\x%02X", p[i]);
-    }
-    fprintf(f, "\n");
-    fflush(f);
-}
 
 #ifndef PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
 #define PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE 0x00020016
@@ -60,7 +44,6 @@ bool ConPtySession::Start(const std::wstring& shell, int cols, int rows,
 // Write — queue data; IoThread drains it with minimum scheduling latency.
 // ---------------------------------------------------------------------------
 bool ConPtySession::Write(const void* data, size_t len) {
-    LogPtyWrite(data, len);
     if (!running_ || inputWriteSide_ == INVALID_HANDLE_VALUE || len == 0)
         return false;
     std::vector<char> copy(static_cast<const char*>(data),
