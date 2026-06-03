@@ -353,41 +353,13 @@ static bool HasRunningProcesses() {
   return false;
 }
 
-static void PumpMessagesWhileWaiting() {
-  MSG msg;
-  while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-    if (msg.message == WM_QUIT) return;
-    TranslateMessage(&msg);
-    DispatchMessage(&msg);
-  }
-}
-
-static bool WaitForProcessesWithPump(DWORD timeoutMs) {
-  DWORD deadline = GetTickCount() + timeoutMs;
-  for (;;) {
-    DWORD now = GetTickCount();
-    if (now >= deadline) return false;
-
-    std::vector<HANDLE> handles;
-    for (auto &t : g_appTabs)
-      if (t.hProcess)
-        handles.push_back(t.hProcess);
-    if (handles.empty()) return true;
-
-    DWORD remaining = (now < deadline) ? deadline - now : 0;
-    DWORD result = MsgWaitForMultipleObjects(
-        (DWORD)handles.size(), handles.data(), TRUE,
-        remaining, QS_ALLINPUT);
-    if (result == WAIT_OBJECT_0) return true;
-    if (result == WAIT_FAILED) {
-      PumpMessagesWhileWaiting();
-      continue;
-    }
-    PumpMessagesWhileWaiting();
-  }
-}
-
 static LRESULT HandleClose(HWND hwnd) {
+  // Request graceful shutdown from all terminal windows early
+  // (gives them a head start while we check dirty buffers & prompt the user)
+  for (auto &t : g_appTabs)
+    if (t.hwnd && t.hProcess && t.type == TAB_TYPE_TERMINAL)
+      PostMessage(t.hwnd, WM_CLOSE, 0, 0);
+
   const auto &buffers = g_editor->GetBuffers();
   for (size_t i = 0; i < buffers.size(); ++i) {
     if (buffers[i]->IsDirty()) {
@@ -427,24 +399,15 @@ static LRESULT HandleClose(HWND hwnd) {
   UnregisterHotKey(hwnd, HOTKEY_ID_TABSWITCHER);
   HideTabSwitcher();
 
-  // Request graceful shutdown from all terminal windows
-  for (auto &t : g_appTabs)
-    if (t.hwnd && t.hProcess && t.type == TAB_TYPE_TERMINAL)
-      PostMessage(t.hwnd, WM_CLOSE, 0, 0);
-
-  // Wait for processes with message pumping (UI stays responsive)
-  if (!WaitForProcessesWithPump(5000)) {
-    // Force-kill timed-out processes
-    for (auto &t : g_appTabs) {
-      if (t.hProcess) {
-        DWORD code;
-        if (!GetExitCodeProcess(t.hProcess, &code) || code == STILL_ACTIVE) {
-          if (t.hwnd) DestroyWindow(t.hwnd);
-          TerminateProcess(t.hProcess, 0);
-        }
+  // Force-kill all processes immediately
+  for (auto &t : g_appTabs) {
+    if (t.hProcess) {
+      DWORD code;
+      if (!GetExitCodeProcess(t.hProcess, &code) || code == STILL_ACTIVE) {
+        if (t.hwnd) { DestroyWindow(t.hwnd); t.hwnd = nullptr; }
+        TerminateProcess(t.hProcess, 0);
       }
     }
-    WaitForProcessesWithPump(3000);
   }
 
   DestroyWindow(hwnd);
@@ -458,22 +421,17 @@ static void HandleDestroy(HWND hwnd) {
   for (auto &t : g_appTabs) {
     if (t.hwnd) { DestroyWindow(t.hwnd); t.hwnd = nullptr; }
   }
-  // Terminate embedded processes and wait; close app process handles
+  // Close process handles and unregister wait objects
   for (auto &t : g_appTabs) {
     if (t.hProcess) {
-      if (t.hwnd) {
-        DWORD waitResult = WaitForSingleObject(t.hProcess, 3000);
-        if (waitResult == WAIT_TIMEOUT) {
-          TerminateProcess(t.hProcess, 0);
-          WaitForSingleObject(t.hProcess, INFINITE);
-        }
-      }
+      TerminateProcess(t.hProcess, 0);
       CloseHandle(t.hProcess);
+      t.hProcess = nullptr;
     }
-  }
-  for (auto &t : g_appTabs) {
-    if (t.hWaitObject) { UnregisterWait(t.hWaitObject); t.hWaitObject = nullptr; }
-    if (t.hProcess) { t.hProcess = nullptr; }
+    if (t.hWaitObject) {
+      UnregisterWait(t.hWaitObject);
+      t.hWaitObject = nullptr;
+    }
   }
   g_appTabs.clear();
 

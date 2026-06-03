@@ -745,6 +745,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
       ImmSetCompositionWindow(himc, &cf);
       CANDIDATEFORM ccf = {0, CFS_CANDIDATEPOS, ptScreen};
       ImmSetCandidateWindow(himc, &ccf);
+      // Set composition font to match editor font (TerminalView compat)
+      if (g_renderer) {
+        LOGFONTW lf{};
+        lf.lfHeight = (LONG)g_renderer->GetLineHeight();
+        lf.lfCharSet = DEFAULT_CHARSET;
+        std::wstring family = g_renderer->GetFontFamily();
+        wcsncpy_s(lf.lfFaceName, family.c_str(), LF_FACESIZE);
+        ImmSetCompositionFontW(himc, &lf);
+      }
       ImmReleaseContext(hwnd, himc);
     }
     InvalidateRect(hwnd, NULL, FALSE);
