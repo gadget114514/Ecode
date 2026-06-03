@@ -462,6 +462,7 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ---------------------------------------------------------------------------
 LRESULT TerminalView::OnCreate(HWND hwnd) {
     hwnd_ = hwnd;
+    ImeLog(L"[IME-INIT] TerminalView created - debug logging active");
 
     // D2D factory
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2dFactory_);
