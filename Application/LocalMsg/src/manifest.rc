@@ -1,2 +1,5 @@
 #include <windows.h>
+#define IDI_APP_ICON 100
+IDI_APP_ICON ICON "localmsg.ico"
+
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
