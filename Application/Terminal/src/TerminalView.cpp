@@ -400,7 +400,7 @@ LRESULT TerminalView::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     case WM_KILLFOCUS:
-        if (buffer_.focusEventReportingEnabled())
+        if (buffer_.focusEventReportingEnabled() && !imeActive_)
             session_.Write("\x1b[O", 3);
         StopCursorTimer();
         cursorBlink_ = true;
