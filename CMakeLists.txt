@@ -53,7 +53,7 @@ add_custom_command(TARGET Prompts POST_BUILD
 )
 
 set_target_properties(Prompts PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin/$<CONFIG>/plugins"
 )
 
 # Test executables
