@@ -2,7 +2,12 @@
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
-static void ImeLog(const std::wstring& s) { OutputDebugStringW(s.c_str()); }
+static void ImeLog(const std::wstring& s) {
+    OutputDebugStringW(s.c_str());
+    static FILE* f = nullptr;
+    if (!f) f = _wfopen(L"C:\\ime_debug.txt", L"a, ccs=UTF-8");
+    if (f) { fwprintf(f, L"%s\n", s.c_str()); fflush(f); }
+}
 #include <shellapi.h>   // ShellExecuteW for hyperlink open
 #include <windowsx.h>  // GET_X_LPARAM / GET_Y_LPARAM
 #include <shlobj.h>    // SHGetFolderPathW, SHGetKnownFolderPath
