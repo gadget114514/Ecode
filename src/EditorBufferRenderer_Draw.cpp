@@ -202,32 +202,6 @@ void EditorBufferRenderer::DrawEditorLines(
       }
     }
 
-    // IME composition range highlight (behind text, like selections)
-    if (g_imeComposing && g_imeCompViewLen > 0 && !g_imeCompAttr.empty()) {
-      int compStartChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
-          static_cast<int>(g_imeCompViewOffset), NULL, 0);
-      int compEndChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
-          static_cast<int>(g_imeCompViewOffset + g_imeCompViewLen), NULL, 0);
-      int compCharLen = compEndChar - compStartChar;
-      if (compCharLen > 0) {
-        UINT32 hitCount = 0;
-        textLayout->HitTestTextRange((UINT32)compStartChar, (UINT32)compCharLen,
-            0, 0, NULL, 0, &hitCount);
-        if (hitCount > 0) {
-          std::vector<DWRITE_HIT_TEST_METRICS> hits(hitCount);
-          textLayout->HitTestTextRange((UINT32)compStartChar, (UINT32)compCharLen,
-              0, 0, hits.data(), hitCount, &hitCount);
-          for (const auto &h : hits) {
-            m_renderTarget->FillRectangle(
-                D2D1::RectF(h.left + xOffset, h.top + yOffset,
-                            h.left + h.width + xOffset,
-                            h.top + h.height + yOffset),
-                m_selBrush.Get());
-          }
-        }
-      }
-    }
-
     this->m_renderTarget->DrawTextLayout(D2D1::Point2F(xOffset, yOffset),
                                          textLayout, this->m_brush.Get());
 
@@ -304,7 +278,7 @@ void EditorBufferRenderer::DrawEditorLines(
       }
     }
 
-    // Draw Caret (position from text layout, already includes composition in displayContent)
+    // Draw Caret (position from text layout, composition is drawn as overlay)
     bool cv = m_enableCaretBlinking ? this->m_bIsCaretVisibleVal : true;
     if (cv) {
       DWRITE_HIT_TEST_METRICS metrics;
@@ -340,40 +314,89 @@ void EditorBufferRenderer::DrawEditorLines(
       }
     }
 
-    // IME composition underlines (text is in displayContent)
-    if (g_imeComposing && g_imeCompViewLen > 0 && !g_imeCompAttr.empty()) {
-      int compStartChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
+    // IME composition overlay (background + text + underlines + caret)
+    if (g_imeComposing && g_imeCompViewLen > 0 && !g_imeComposition.empty()) {
+      int compCharIdx = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
           static_cast<int>(g_imeCompViewOffset), NULL, 0);
-      int compEndChar = MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
-          static_cast<int>(g_imeCompViewOffset + g_imeCompViewLen), NULL, 0);
-      int compCharLen = compEndChar - compStartChar;
+      DWRITE_HIT_TEST_METRICS hm;
+      float cx, cy;
+      if (SUCCEEDED(textLayout->HitTestTextPosition(compCharIdx, FALSE, &cx, &cy, &hm))) {
+        float lineH = GetLineHeight();
+        float charW = (std::max)(hm.width, 4.0f);
+        float sx = cx + xOffset;
+        float sy = cy + yOffset;
 
-      // Underlines per character
-      float lineH = GetLineHeight();
-      for (int ci = 0; ci < (int)g_imeCompAttr.size() && ci < compCharLen; ++ci) {
-        int tp = compStartChar + ci;
-        DWRITE_HIT_TEST_METRICS hm;
-        float ux, uy;
-        if (SUCCEEDED(textLayout->HitTestTextPosition(tp, FALSE, &ux, &uy, &hm))) {
-          float sx = ux + xOffset;
-          float sy = uy + yOffset + lineH - 1.5f;
-          float sw = (std::max)(hm.width, 4.0f);
+        // cell width: 1=half, 2=full
+        auto cellW = [](wchar_t ch) -> int {
+          if (ch >= 0x3000 && ch <= 0x9FFF) return 2;
+          if (ch >= 0xFF00 && ch <= 0xFFEF) return 2;
+          return 1;
+        };
+
+        // total composition width
+        float totalW = 0;
+        for (size_t ci = 0; ci < g_imeComposition.size(); ++ci)
+          totalW += (float)cellW(g_imeComposition[ci]) * charW;
+
+        // background highlight
+        m_renderTarget->FillRectangle(
+            D2D1::RectF(sx, sy, sx + totalW, sy + lineH),
+            m_selBrush.Get());
+
+        // text per character
+        float cellPos = 0;
+        for (size_t ci = 0; ci < g_imeComposition.size(); ++ci) {
+          wchar_t ch = g_imeComposition[ci];
+          int cw = cellW(ch);
+          float chx = sx + cellPos * charW;
+          D2D1_RECT_F cr = D2D1::RectF(chx, sy, chx + (float)cw * charW, sy + lineH);
+          m_renderTarget->DrawText(&ch, 1, m_textFormat.Get(), cr, m_brush.Get(),
+              D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+          cellPos += (float)cw;
+        }
+
+        // underlines per character
+        cellPos = 0;
+        float uy = sy + lineH - 1.5f;
+        for (size_t ci = 0; ci < g_imeComposition.size() && ci < g_imeCompAttr.size(); ++ci) {
+          int cw = cellW(g_imeComposition[ci]);
+          float ux = sx + cellPos * charW;
+          float uw = (float)cw * charW;
           BYTE attr = g_imeCompAttr[ci];
           if (attr == ATTR_INPUT) {
             float amp = 1.5f, step = 2.0f;
-            for (float wx = 0; wx < sw; wx += step) {
-              float x0 = sx + wx, x1 = sx + (std::min)(wx + step, sw);
-              float y0 = sy + amp * sinf(wx / 4.0f * 3.14159f);
-              float y1 = sy + amp * sinf((wx + step) / 4.0f * 3.14159f);
+            for (float wx = 0; wx < uw; wx += step) {
+              float x0 = ux + wx, x1 = ux + (std::min)(wx + step, uw);
+              float y0 = uy + amp * sinf(wx / 4.0f * 3.14159f);
+              float y1 = uy + amp * sinf((wx + step) / 4.0f * 3.14159f);
               m_renderTarget->DrawLine(
                   D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1),
                   m_caretBrush.Get(), 1.0f);
             }
           } else {
             m_renderTarget->DrawLine(
-                D2D1::Point2F(sx, sy), D2D1::Point2F(sx + sw, sy),
+                D2D1::Point2F(ux, uy), D2D1::Point2F(ux + uw, uy),
                 m_caretBrush.Get(), 1.0f);
           }
+          cellPos += (float)cw;
+        }
+
+        // caret at end of composition
+        float caretEndX = sx + totalW;
+        if (m_caretStyle == CaretStyle::Block) {
+          D2D1_RECT_F rect = D2D1::RectF(caretEndX, sy, caretEndX + charW, sy + lineH);
+          m_caretBrush->SetOpacity(0.5f);
+          m_renderTarget->FillRectangle(rect, m_caretBrush.Get());
+          m_caretBrush->SetOpacity(1.0f);
+        } else if (m_caretStyle == CaretStyle::Underline) {
+          float yPos = sy + lineH;
+          m_renderTarget->DrawLine(
+              D2D1::Point2F(caretEndX, yPos), D2D1::Point2F(caretEndX + charW, yPos),
+              m_caretBrush.Get(), 2.0f);
+        } else {
+          m_renderTarget->DrawLine(
+              D2D1::Point2F(caretEndX, sy), D2D1::Point2F(caretEndX, sy + lineH),
+              m_caretBrush.Get(), 2.0f);
         }
       }
     }

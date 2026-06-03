@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(Ecode LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Git-based version auto-detection
 execute_process(
@@ -14,8 +15,6 @@ execute_process(
 if(NOT GIT_DESCRIBE)
     set(GIT_DESCRIBE "v1.0")
 endif()
-# Parse into string and numeric components
-# Strip leading 'v' or 'V' if present
 string(REGEX MATCH "^[vV]" HAS_PREFIX "${GIT_DESCRIBE}")
 if(HAS_PREFIX)
     string(REGEX REPLACE "^[vV]" "" GIT_CLEAN "${GIT_DESCRIBE}")
@@ -38,31 +37,14 @@ configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/include/version_config.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/include/version_config.h"
 )
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Define Unicode for Win32
-add_definitions(-DUNICODE -D_UNICODE)
+add_compile_definitions(UNICODE _UNICODE)
 
-# Treat all source files as UTF-8 on MSVC (avoids encoding errors with Unicode literals)
 if(MSVC)
   add_compile_options(/utf-8)
 endif()
 
-# Include directories
-include_directories(include)
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
-include_directories(FastFileSearch/src)
-
-# Source files
-file(GLOB SOURCES "src/*.cpp")
-list(APPEND SOURCES "src/copyright.c")
-list(APPEND SOURCES "Application/Terminal/src/TerminalGridView.cpp")
-file(GLOB FASTFS_SOURCES "FastFileSearch/src/MFTReader.cpp" "FastFileSearch/src/FatReader.cpp" "FastFileSearch/src/exFatReader.cpp")
-list(APPEND SOURCES ${FASTFS_SOURCES})
-list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/test_piecetable.cpp")
-set(DUKTAPE_SOURCES "src-duktape/duktape.c")
-
-# Generate icon resource file from 24x24 icon set (output in source tree for RC compiler)
+# Generate icon resource file from 24x24 icon set
 set(ICONS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/images/24x24-free-application-icons/24x24-free-application-icons/ico")
 set(GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/generated")
 execute_process(
@@ -79,251 +61,92 @@ execute_process(
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/icons.rc")
     file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/icons.rc" "")
 endif()
-set(RESOURCES "src/Ecode.rc")
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/generated)
 
-# Executable (GUI)
-add_executable(ecode WIN32 ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
+set(ECODE_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/AppMain.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Dialogs.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EditorBufferRenderer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EditorBufferRenderer_Draw.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/FileUtils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Globals.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Globals.test.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/IMEState.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/JsApi_EditorSettings.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/JsApi_FileAndBuffer.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/JsApi_Lsp.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/JsApi_ShellAndMinibuffer.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/JsApi_StatusAndDialogs.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/JsApi_TextEditing.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Localization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/LspClient.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MinibufferHandler.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ScriptEngine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TabDragHandler.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TabIconHelper.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TabSwitcherView.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TopBar.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/TreeViewHelpers.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/UIHelpers.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/WindowHandlers_Command.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/WindowHandlers_Core.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/WindowHandlers_Input.inl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/copyright.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ecode.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/Application/Terminal/src/TerminalGridView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Application/FastFileSearch/src/MFTReader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Application/FastFileSearch/src/FatReader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Application/FastFileSearch/src/exFatReader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src-duktape/duktape.c
+)
 
-# Executable (Console for testing)
-add_executable(ecode_console EXCLUDE_FROM_ALL ${SOURCES} ${DUKTAPE_SOURCES} ${RESOURCES})
+set(ECODE_LIBS
+    user32
+    gdi32
+    shell32
+    ole32
+    comdlg32
+    comctl32
+    d2d1
+    dwrite
+    imm32
+    dwmapi
+)
+
+add_executable(ecode WIN32 ${ECODE_SOURCES})
+
+target_include_directories(ecode PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/Application/FastFileSearch/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/generated
+)
+
+target_link_libraries(ecode PRIVATE ${ECODE_LIBS})
+
+# Console build for testing
+add_executable(ecode_console EXCLUDE_FROM_ALL ${ECODE_SOURCES})
 target_compile_definitions(ecode_console PRIVATE ECODE_CONSOLE_BUILD)
-
-# Test executables base
-set(TEST_BASE_SOURCES 
-    tests/TestGlobals.cpp
-    src/FileUtils.cpp
+target_include_directories(ecode_console PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/Application/FastFileSearch/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/generated
 )
+target_link_libraries(ecode_console PRIVATE ${ECODE_LIBS})
 
-add_executable(test_piecetable EXCLUDE_FROM_ALL
-    tests/test_piecetable.cpp 
-    src/PieceTable.cpp
-)
-
-add_executable(test_piecetable_stress EXCLUDE_FROM_ALL
-    tests/test_piecetable_stress.cpp
-    src/PieceTable.cpp
+set(TEST_BASE_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/TestGlobals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/FileUtils.cpp
 )
 
-add_executable(test_editor_core EXCLUDE_FROM_ALL
-    tests/test_editor_core.cpp
-    ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-    src-duktape/duktape.c
-    src-duktape/duktape.c
-    src/FileUtils.cpp
-)
-target_link_libraries(test_editor_core 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(test_session_management EXCLUDE_FROM_ALL
-    tests/test_session_management.cpp
-    ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-    src/FileUtils.cpp
-)
-target_link_libraries(test_session_management 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(test_undoredo_stress EXCLUDE_FROM_ALL
-    tests/test_undoredo_stress.cpp
-    src/PieceTable.cpp
-)
-target_link_libraries(test_undoredo_stress 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(test_search_replace EXCLUDE_FROM_ALL
-    tests/test_search_replace.cpp
-    ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-    src-duktape/duktape.c
-    src-duktape/duktape.c
-)
-target_link_libraries(test_search_replace 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(test_file_io EXCLUDE_FROM_ALL
-    tests/test_file_io.cpp
-    ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-)
-target_link_libraries(test_file_io 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(performance_benchmark EXCLUDE_FROM_ALL
-    tests/performance_benchmark.cpp
-    ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/PieceTable.cpp
-    src/Buffer.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-)
-target_link_libraries(performance_benchmark 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(test_visual_wrap EXCLUDE_FROM_ALL
-    tests/test_visual_wrap.cpp
-    ${TEST_BASE_SOURCES}
-    src/IMEState.cpp
-    src/EditorBufferRenderer.cpp
-    src/EditorBufferRenderer_Draw.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Localization.cpp
-    src/SettingsManager.cpp
-    src/Editor.cpp
-    src/Process.cpp
-)
-target_link_libraries(test_visual_wrap 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(test_find_in_files EXCLUDE_FROM_ALL
-    tests/test_find_in_files.cpp
-    ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-    src-duktape/duktape.c
-)
-target_link_libraries(test_find_in_files 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(test_shortcuts EXCLUDE_FROM_ALL
-    tests/test_shortcuts.cpp
-    ${TEST_BASE_SOURCES}
-    src/IMEState.cpp
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-    src/Localization.cpp
-    src/EditorBufferRenderer.cpp
-    src/EditorBufferRenderer_Draw.cpp
-)
-target_link_libraries(test_shortcuts 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32
-    comctl32
-    d2d1 
-    dwrite
-)
-
-add_executable(test_string_helpers EXCLUDE_FROM_ALL
-    tests/test_string_helpers.cpp
-)
-
-add_executable(test_localization EXCLUDE_FROM_ALL
-    tests/test_localization.cpp
-    src/Localization.cpp
-)
-
-add_executable(test_buffer_stress EXCLUDE_FROM_ALL
-    tests/test_buffer_stress.cpp
-    ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-    src-duktape/duktape.c
-)
-target_link_libraries(test_buffer_stress
+set(TEST_COMMON_LIBS
     user32
     gdi32
     shell32
@@ -334,174 +157,261 @@ target_link_libraries(test_buffer_stress
     dwrite
 )
 
-add_executable(test_cursor_move EXCLUDE_FROM_ALL
-    tests/test_cursor_move.cpp
+function(add_ecode_test name)
+    add_executable(${name} EXCLUDE_FROM_ALL ${ARGN})
+    target_include_directories(${name} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    )
+endfunction()
+
+# Test executables
+add_ecode_test(test_piecetable
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_piecetable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+)
+
+add_ecode_test(test_piecetable_stress
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_piecetable_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+)
+
+add_ecode_test(test_editor_core
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_editor_core.cpp
     ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-    src-duktape/duktape.c
-    src-duktape/duktape.c
-    src/FileUtils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/FileUtils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src-duktape/duktape.c
 )
-target_link_libraries(test_cursor_move
-    user32
-    gdi32
-    shell32
-    ole32
-    comdlg32
-    comctl32
-    d2d1
-    dwrite
-)
+target_link_libraries(test_editor_core PRIVATE ${TEST_COMMON_LIBS})
 
-add_executable(test_memorymappedfile EXCLUDE_FROM_ALL
-    tests/test_memorymappedfile.cpp
-    src/MemoryMappedFile.cpp
-)
-
-add_executable(test_fileutils EXCLUDE_FROM_ALL
-    tests/test_fileutils.cpp
-    tests/FileUtilsTestGlobals.cpp
-    src/FileUtils.cpp
-)
-target_link_libraries(test_fileutils
-    user32
-    gdi32
-    shell32
-    ole32
-    comdlg32
-    comctl32
-)
-
-add_executable(test_editor_buffer_ops EXCLUDE_FROM_ALL
-    tests/test_editor_buffer_ops.cpp
+add_ecode_test(test_session_management
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_session_management.cpp
     ${TEST_BASE_SOURCES}
-    src/Editor.cpp
-    src/Buffer.cpp
-    src/PieceTable.cpp
-    src/MemoryMappedFile.cpp
-    src/Process.cpp
-    src/SettingsManager.cpp
-    src/FileUtils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/FileUtils.cpp
 )
-target_link_libraries(test_editor_buffer_ops
-    user32
-    gdi32
-    shell32
-    ole32
-    comdlg32
-    comctl32
-    d2d1
-    dwrite
+target_link_libraries(test_session_management PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_undoredo_stress
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_undoredo_stress.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+)
+target_link_libraries(test_undoredo_stress PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_search_replace
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_search_replace.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src-duktape/duktape.c
+)
+target_link_libraries(test_search_replace PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_file_io
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_file_io.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+)
+target_link_libraries(test_file_io PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(performance_benchmark
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/performance_benchmark.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+)
+target_link_libraries(performance_benchmark PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_visual_wrap
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_visual_wrap.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/IMEState.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EditorBufferRenderer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EditorBufferRenderer_Draw.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Localization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+)
+target_link_libraries(test_visual_wrap PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_find_in_files
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_find_in_files.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src-duktape/duktape.c
+)
+target_link_libraries(test_find_in_files PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_shortcuts
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_shortcuts.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/IMEState.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Localization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EditorBufferRenderer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/EditorBufferRenderer_Draw.cpp
+)
+target_link_libraries(test_shortcuts PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_string_helpers
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_string_helpers.cpp
 )
 
-add_executable(test_piecetable_advanced EXCLUDE_FROM_ALL
-    tests/test_piecetable_advanced.cpp
-    src/PieceTable.cpp
+add_ecode_test(test_localization
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_localization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Localization.cpp
 )
 
-add_executable(test_telnetd_iac EXCLUDE_FROM_ALL
-    tests/test_telnetd_iac.c
+add_ecode_test(test_buffer_stress
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_buffer_stress.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src-duktape/duktape.c
+)
+target_link_libraries(test_buffer_stress PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_cursor_move
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cursor_move.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src-duktape/duktape.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/FileUtils.cpp
+)
+target_link_libraries(test_cursor_move PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_memorymappedfile
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_memorymappedfile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
 )
 
-# Libraries to link
-target_link_libraries(ecode
-    user32
-    gdi32
-    shell32
-    ole32
-    comdlg32
-    comctl32
-    d2d1
-    dwrite
-    imm32
-    dwmapi
+add_ecode_test(test_fileutils
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fileutils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/FileUtilsTestGlobals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/FileUtils.cpp
+)
+target_link_libraries(test_fileutils PRIVATE
+    user32 gdi32 shell32 ole32 comdlg32 comctl32
 )
 
-target_link_libraries(ecode_console 
-    user32 
-    gdi32 
-    shell32 
-    ole32 
-    comdlg32 
-    comctl32 
-    d2d1 
-    dwrite
-    imm32
-    dwmapi
+add_ecode_test(test_editor_buffer_ops
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_editor_buffer_ops.cpp
+    ${TEST_BASE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/FileUtils.cpp
 )
+target_link_libraries(test_editor_buffer_ops PRIVATE ${TEST_COMMON_LIBS})
+
+add_ecode_test(test_piecetable_advanced
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_piecetable_advanced.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
+)
+
+add_ecode_test(test_telnetd_iac
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_telnetd_iac.c
+)
+
+add_ecode_test(test_localmsg_cli
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_localmsg_cli.cpp
+)
+target_link_libraries(test_localmsg_cli PRIVATE kernel32)
+
+add_ecode_test(test_localmsg_server
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_localmsg_server.cpp
+)
+target_link_libraries(test_localmsg_server PRIVATE kernel32)
 
 # Output directory
 set(OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 set_target_properties(ecode PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
 set_target_properties(ecode_console PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+
 set(TEST_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin/tests")
-set_target_properties(test_piecetable PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_piecetable_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_editor_core PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_session_management PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_undoredo_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_search_replace PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_file_io PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_visual_wrap PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_find_in_files PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_shortcuts PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(performance_benchmark PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_string_helpers PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_localization PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_buffer_stress PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_cursor_move PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_memorymappedfile PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_fileutils PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_editor_buffer_ops PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_piecetable_advanced PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
-set_target_properties(test_telnetd_iac PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+foreach(tgt
+    test_piecetable test_piecetable_stress test_editor_core
+    test_session_management test_undoredo_stress test_search_replace
+    test_file_io test_visual_wrap test_find_in_files test_shortcuts
+    performance_benchmark test_string_helpers test_localization
+    test_buffer_stress test_cursor_move test_memorymappedfile
+    test_fileutils test_editor_buffer_ops test_piecetable_advanced
+    test_telnetd_iac test_localmsg_cli test_localmsg_server
+)
+    set_target_properties(${tgt} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+endforeach()
 
-add_executable(test_localmsg_cli EXCLUDE_FROM_ALL
-    tests/test_localmsg_cli.cpp
-)
-target_link_libraries(test_localmsg_cli kernel32)
-set_target_properties(test_localmsg_cli PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+# Copy scripts and doc to output
+macro(copy_assets_to_target target)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
+        "$<TARGET_FILE_DIR:${target}>/scripts"
+        COMMENT "Copying scripts to output directory..."
+    )
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/doc"
+        "$<TARGET_FILE_DIR:${target}>/doc"
+        COMMENT "Copying doc to output directory..."
+    )
+endmacro()
 
-add_executable(test_localmsg_server EXCLUDE_FROM_ALL
-    tests/test_localmsg_server.cpp
-)
-target_link_libraries(test_localmsg_server kernel32)
-set_target_properties(test_localmsg_server PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
+copy_assets_to_target(ecode)
+copy_assets_to_target(ecode_console)
 
-# Copy scripts directory to output
-add_custom_command(TARGET ecode POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
-    "$<TARGET_FILE_DIR:ecode>/scripts"
-    COMMENT "Copying scripts to output directory..."
-)
-add_custom_command(TARGET ecode POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc"
-    "$<TARGET_FILE_DIR:ecode>/doc"
-    COMMENT "Copying doc to output directory..."
-)
+# ── Plugin system ──────────────────────────────────────────────────────────
 
-add_custom_command(TARGET ecode_console POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
-    "$<TARGET_FILE_DIR:ecode_console>/scripts"
-    COMMENT "Copying scripts to output directory..."
-)
-add_custom_command(TARGET ecode_console POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc"
-    "$<TARGET_FILE_DIR:ecode_console>/doc"
-    COMMENT "Copying doc to output directory..."
-)
-
-# Copy each pre-built plugin EXE into the output directory.
-# Each plugin is built independently via its own CMakeLists.txt.
 macro(add_plugin name dir)
     set(plugin_src "${CMAKE_CURRENT_SOURCE_DIR}/${dir}")
     set(plugin_build "${plugin_src}/build")
@@ -519,13 +429,16 @@ macro(add_plugin name dir)
     )
 endmacro()
 
-add_plugin(Dired     Application/Dired)
-add_plugin(CSVEditor Application/CSVEditor)
+add_plugin(Dired          Application/Dired)
+add_plugin(CSVEditor      Application/CSVEditor)
 add_plugin(FastFileSearch Application/FastFileSearch)
-add_plugin(FastFD Application/FastFD)
-add_plugin(Terminal  Application/Terminal)
-add_plugin(SureBackup Application/SureBackup)
-add_plugin(dukluv    Application/dukluv)
+add_plugin(FastFD         Application/FastFD)
+add_plugin(Terminal       Application/Terminal)
+add_plugin(SureBackup     Application/SureBackup)
+add_plugin(dukluv         Application/dukluv)
+add_plugin(JYEditor       Application/JYEditor)
+add_plugin(Prompts        Application/Prompts)
+add_plugin(FastDired      Application/FastDired)
 
 # Copy FastFileSearch to apps/ directory for app launcher
 set(plugin_out "$<TARGET_FILE_DIR:ecode>")
@@ -537,7 +450,7 @@ add_custom_command(TARGET ecode POST_BUILD
     COMMENT "Copying FastFileSearch.exe to apps/..."
 )
 
-# Custom/unknown plugins: copy any .exe from plugins_custom/ to output
+# Custom/unknown plugins: copy any .exe from plugins_custom/
 set(CUSTOM_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/plugins_custom")
 set(PLUGIN_OUT_DIR "$<TARGET_FILE_DIR:ecode>/plugins")
 file(GLOB CUSTOM_PLUGINS "${CUSTOM_PLUGIN_DIR}/*.exe")
@@ -551,15 +464,17 @@ foreach(PLUGIN ${CUSTOM_PLUGINS})
     )
 endforeach()
 
-add_plugin(JYEditor Application/JYEditor)
-message(STATUS "JYEditor enabled (local nlohmann_json)")
+# Build LocalMsg plugin via its own CMake build tree
+set(LOCALMSG_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Application/LocalMsg/build")
+add_custom_command(TARGET ecode PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_out}/plugins"
+    COMMAND ${CMAKE_COMMAND} --build "${LOCALMSG_BUILD_DIR}" --config $<CONFIG>
+    COMMENT "Building LocalMsg..."
+)
 
-add_plugin(LocalMsg Application/LocalMsg)
+# ── Installer ─────────────────────────────────────────────────────────────
 
-
-
-# Installer
-find_program(ISCC_EXECUTABLE ISCC 
+find_program(ISCC_EXECUTABLE ISCC
     PATHS "C:/Program Files (x86)/Inno Setup 6"
 )
 
@@ -573,7 +488,6 @@ if(ISCC_EXECUTABLE)
     )
     add_dependencies(installer ecode)
 
-    # All-plugins installer
     add_custom_target(installer_allplugins
         COMMAND ${ISCC_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/installer/ecode_allplugins.iss"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -584,10 +498,3 @@ if(ISCC_EXECUTABLE)
 else()
     message(WARNING "Inno Setup compiler (ISCC.exe) not found. Installer target will not be available.")
 endif()
-
-# Build instructions for the user
-# mkdir build
-# cd build
-# cmake ..
-# cmake --build . --target installer
-# cmake --build . --target installer_allplugins

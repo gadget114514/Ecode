@@ -206,7 +206,7 @@ void Process::Stop() {
     m_hOutRead = NULL;
   }
   if (m_hThread) {
-    WaitForSingleObject(m_hThread, 2000);
+    WaitForSingleObject(m_hThread, 500);
     CloseHandle(m_hThread);
     m_hThread = NULL;
   }

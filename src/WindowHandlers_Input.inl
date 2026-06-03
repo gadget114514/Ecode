@@ -33,7 +33,7 @@ static LRESULT HandlePaint(HWND hwnd) {
     size_t viewportStartVisual =
         activeBuffer->LogicalToVisualOffset(viewportStartLogical);
 
-    // IME composition: insert into viewport text to push existing text right
+    // IME composition: store offset/length for overlay rendering (no text insertion)
     std::string displayContent = content;
     size_t adjustedCaret = logicalCaret;
     g_imeCompViewOffset = 0;
@@ -47,9 +47,7 @@ static LRESULT HandlePaint(HWND hwnd) {
         g_imeCompUtf8.resize(utf8Len);
         WideCharToMultiByte(CP_UTF8, 0, g_imeComposition.c_str(),
             (int)g_imeComposition.size(), g_imeCompUtf8.data(), utf8Len, NULL, NULL);
-        displayContent.insert(g_imeCompViewOffset, g_imeCompUtf8);
         g_imeCompViewLen = g_imeCompUtf8.length();
-        adjustedCaret = logicalCaret + g_imeCompViewLen;
       }
     }
 
@@ -88,17 +86,6 @@ static LRESULT HandlePaint(HWND hwnd) {
       }
     }
 
-    // Adjust highlight ranges for IME composition insertion
-    if (g_imeCompViewLen > 0) {
-      for (auto &h : viewportHighlights) {
-        if (h.start >= g_imeCompViewOffset) {
-          h.start += g_imeCompViewLen;
-        } else if (h.start + h.length > g_imeCompViewOffset) {
-          h.length += g_imeCompViewLen;
-        }
-      }
-    }
-
     std::vector<Buffer::SelectionRange> viewportSelections;
     for (const auto &s : selectionRanges) {
       size_t sStartVisual = activeBuffer->LogicalToVisualOffset(s.start);
@@ -119,21 +106,7 @@ static LRESULT HandlePaint(HWND hwnd) {
       }
     }
 
-    // Adjust selection ranges for IME composition insertion
-    if (g_imeCompViewLen > 0) {
-      for (auto &s : viewportSelections) {
-        if (s.start >= g_imeCompViewOffset) {
-          s.start += g_imeCompViewLen;
-          s.end += g_imeCompViewLen;
-        } else if (s.end > g_imeCompViewOffset) {
-          s.end += g_imeCompViewLen;
-        }
-      }
-    }
-
-    size_t caretInDisplay = g_imeCompViewLen > 0
-        ? (g_imeCompViewOffset + g_imeCompViewLen)
-        : (visualCaret - viewportStartVisual);
+    size_t caretInDisplay = visualCaret - viewportStartVisual;
     g_renderer->DrawEditorLines(
         displayContent, caretInDisplay, &viewportSelections,
         &viewportHighlights, scrollLine + 1, activeBuffer->GetScrollX(),
