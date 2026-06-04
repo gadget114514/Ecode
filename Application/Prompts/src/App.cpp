@@ -342,6 +342,23 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
             Node root = NodeFromJson(val["root"]);
             storage_.SaveTabData(fullPath, root);
         }
+    } else if (type == "set_language") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("language")) {
+            localization_.SetLanguage(val["language"].string());
+        }
+    } else if (type == "save_session") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("tabs")) {
+            SessionData session;
+            for (auto &t : val["tabs"].array()) {
+                TabData tab;
+                if (t.has("name")) tab.name = t["name"].string();
+                if (t.has("file")) tab.file = t["file"].string();
+                session.tabs.push_back(tab);
+            }
+            storage_.SaveSession(session);
+        }
     } else if (type == "run_pipeline") {
         auto val = JsonValue::parse(payload);
         if (val.has("pipelineName")) {
