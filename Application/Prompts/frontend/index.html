@@ -12,6 +12,7 @@
 <body>
 <div id="app">
     <div id="toolbar">
+        <button id="btn-hamburger" onclick="app.showHamburger(event)" data-hint="メニュー" style="display:none">☰</button>
         <button id="btn-nav-back" onclick="app.navBack()" data-hint="前のノードに戻る (Alt+←)" disabled>←</button>
         <button id="btn-nav-fwd"  onclick="app.navForward()" data-hint="次のノードへ進む (Alt+→)" disabled>→</button>
         <span class="separator">|</span>
@@ -80,6 +81,54 @@
 </div>
 <!-- Hint Tooltip -->
 <div id="hint-tooltip" class="hint-tooltip" style="display:none"></div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal">
+    <div class="modal-content settings-modal-content">
+        <span class="modal-close" onclick="app.closeSettings()">&times;</span>
+        <h2 data-i18n="SettingsTitle">Settings</h2>
+        <div class="settings-row">
+            <label class="settings-label" data-i18n="SettingsLanguageLabel">Display Language</label>
+            <select id="settings-lang" class="settings-select">
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="fr">Français</option>
+                <option value="es">Español</option>
+                <option value="pt">Português</option>
+                <option value="de">Deutsch</option>
+            </select>
+        </div>
+        <div class="settings-actions">
+            <button onclick="app.saveSettings()" class="btn-primary" data-i18n="SettingsSave">Save</button>
+            <button onclick="app.closeSettings()" data-i18n="SettingsClose">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- About Modal -->
+<div id="about-modal" class="modal">
+    <div class="modal-content about-modal-content">
+        <span class="modal-close" onclick="app.closeAbout()">&times;</span>
+        <div class="about-icon">🤖</div>
+        <h2 id="about-title" data-i18n="AboutTitle">About Prompts</h2>
+        <p id="about-desc" class="about-desc" data-i18n="AboutDesc">AI prompt and pipeline management tool.</p>
+        <div class="about-version"><span data-i18n="AboutVersion">Version</span> <span id="about-ver">1.0</span></div>
+        <div class="about-links">
+            <a href="#" onclick="app.closeAbout(); app.showCopyright(); return false;" data-i18n="MenuCopyright">Copyright &amp; Licenses</a>
+        </div>
+    </div>
+</div>
+
+<!-- Copyright Modal -->
+<div id="copyright-modal" class="modal">
+    <div class="modal-content copyright-modal-content">
+        <span class="modal-close" onclick="app.closeCopyright()">&times;</span>
+        <h2 data-i18n="CopyrightTitle">Copyright &amp; Licenses</h2>
+        <pre id="copyright-body" class="copyright-body"></pre>
+    </div>
+</div>
+
+<!-- Hamburger Dropdown (created dynamically) -->
 
 <!-- Setup Wizard Modal -->
 <div id="setup-wizard-modal" class="modal">

@@ -1,1 +1,26 @@
-{"AppName":"Prompts","New":"New","Open":"Open","Save":"Save","SaveAs":"Save As","Config":"Config","RunPipeline":"Run Pipeline","Search":"Search","Tree":"Tree","List":"List","Editor":"Editor","Messages":"Messages","AddChild":"Add Child","Update":"Update","Remove":"Remove","Copy":"Copy","Copied":"Copied!","Cancel":"Cancel","Pipeline":"Pipeline","History":"History","Settings":"Settings","Language":"Language","Up":"Up","Down":"Down","Test":"Test","Root":"Root"}
+{
+  "AppName":"Prompts","New":"New","Open":"Open","Save":"Save","SaveAs":"Save As",
+  "Config":"Config","RunPipeline":"Run Pipeline","Search":"Search",
+  "Tree":"Tree","List":"List","Editor":"Editor","Messages":"Messages",
+  "AddChild":"Add Child","Update":"Update","Remove":"Remove","Copy":"Copy",
+  "Copied":"Copied!","Cancel":"Cancel","Pipeline":"Pipeline","History":"History",
+  "Settings":"Settings","Language":"Language","Up":"Up","Down":"Down","Test":"Test","Root":"Root",
+  "Menu":"Menu",
+  "MenuFile":"File","MenuEdit":"Edit","MenuSettings":"Settings","MenuHelp":"Help",
+  "MenuNewTab":"New Tab","MenuOpen":"Open...","MenuSave":"Save","MenuSaveAs":"Save As...",
+  "MenuImportZip":"Import ZIP...","MenuExportNode":"Export Node...",
+  "MenuWelcomeWizard":"Welcome Guide","MenuSetupWizard":"Setup Wizard...",
+  "MenuUndo":"Undo","MenuRedo":"Redo","MenuCut":"Cut","MenuCopyText":"Copy","MenuPaste":"Paste","MenuSelectAll":"Select All",
+  "MenuSettingsItem":"Settings...","MenuLanguage":"Language",
+  "MenuAbout":"About Prompts","MenuCopyright":"Copyright & Licenses",
+  "MenuKeyboardShortcuts":"Keyboard Shortcuts",
+  "SettingsTitle":"Settings","SettingsLanguageLabel":"Display Language",
+  "SettingsSave":"Save","SettingsClose":"Close",
+  "AboutTitle":"About Prompts",
+  "AboutDesc":"AI prompt and pipeline management tool.",
+  "AboutVersion":"Version",
+  "CopyrightTitle":"Copyright & Licenses",
+  "CopyrightBody":"Prompts — Part of the Ecode project.\n\nThird-party libraries:\n• marked.js — MIT License\n• mark.js — MIT License\n• mermaid.js — MIT License\n• cytoscape.js — MIT License\n• Microsoft WebView2 SDK — BSD 3-Clause\n• Mbed TLS — Apache 2.0 / GPL 2.0+",
+  "Providers":"Providers","General":"General","TestConnection":"Test Connection",
+  "Providers":"Providers","GeneralSettingsPlaceholder":"General settings coming soon."
+}

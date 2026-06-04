@@ -1,6 +1,37 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px; background: #1e1e1e; color: #ccc; overflow: hidden; }
 
+/* Hamburger dropdown */
+.hamburger-dropdown { position: fixed; z-index: 8000; background: #252525; border: 1px solid #444; border-radius: 6px; min-width: 220px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.5); padding: 4px 0; }
+.hmenu-section { font-size: 10px; font-weight: bold; color: #666; letter-spacing: 0.08em; padding: 6px 14px 2px; text-transform: uppercase; }
+.hmenu-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 14px; cursor: pointer; font-size: 13px; color: #ccc; }
+.hmenu-item:hover { background: #094771; color: #fff; }
+.hmenu-shortcut { font-size: 11px; color: #666; font-family: 'Consolas', monospace; }
+.hmenu-item:hover .hmenu-shortcut { color: #aaa; }
+.hmenu-sep { height: 1px; background: #333; margin: 3px 0; }
+
+/* Settings modal */
+.settings-modal-content { min-width: 340px; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 16px 0; }
+.settings-label { color: #aaa; font-size: 13px; }
+.settings-select { background: #1a1a1a; border: 1px solid #555; border-radius: 4px; color: #ccc; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+.settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.settings-actions button { background: #333; border: 1px solid #555; border-radius: 4px; color: #ccc; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+.settings-actions .btn-primary { background: #4a9eff; border-color: #4a9eff; color: #fff; }
+
+/* About modal */
+.about-modal-content { min-width: 320px; text-align: center; }
+.about-icon { font-size: 48px; margin-bottom: 10px; }
+.about-desc { color: #aaa; font-size: 13px; margin: 8px 0; }
+.about-version { font-size: 12px; color: #666; margin: 8px 0; }
+.about-links { margin-top: 14px; }
+.about-links a { color: #4a9eff; text-decoration: none; font-size: 12px; }
+.about-links a:hover { text-decoration: underline; }
+
+/* Copyright modal */
+.copyright-modal-content { min-width: 420px; max-width: 560px; }
+.copyright-body { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 12px 14px; font-size: 12px; color: #aaa; line-height: 1.7; white-space: pre-wrap; margin-top: 12px; max-height: 320px; overflow-y: auto; }
+
 /* Hint tooltip */
 .hint-tooltip { position: fixed; z-index: 9999; background: #1a2a40; border: 1px solid #4a9eff; border-radius: 5px; color: #cce4ff; font-size: 12px; padding: 5px 10px; pointer-events: none; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
 
