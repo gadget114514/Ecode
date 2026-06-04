@@ -64,6 +64,7 @@ private:
     // Helpers
     std::wstring GetAppDataPath();
     static Node NodeFromJson(const JsonValue &val);
+    void SendFullInit();
 
     // Pipeline run context
     std::string inputNodeId_;
