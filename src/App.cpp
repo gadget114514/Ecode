@@ -238,22 +238,86 @@ void App::ShowFallbackUI() {
     }
 }
 
+Node App::NodeFromJson(const JsonValue &val) {
+    Node node;
+    if (val.has("title"))   node.title   = val["title"].string();
+    if (val.has("content")) node.content = val["content"].string();
+    if (val.has("mimetype")) node.mimetype = val["mimetype"].string();
+    if (val.has("pipelineMeta")) node.pipelineMeta = val["pipelineMeta"].string();
+    if (val.has("attachments")) {
+        for (auto &a : val["attachments"].array()) {
+            Attachment att;
+            if (a.has("id"))      att.id       = a["id"].string();
+            if (a.has("mimetype")) att.mimetype = a["mimetype"].string();
+            if (a.has("inline"))  att.inlineData = a["inline"].boolean();
+            if (a.has("content")) att.content  = a["content"].string();
+            if (a.has("file"))    att.file     = a["file"].string();
+            if (a.has("size"))    att.size     = (size_t)a["size"].number();
+            node.attachments.push_back(att);
+        }
+    }
+    if (val.has("children")) {
+        for (auto &c : val["children"].array())
+            node.children.push_back(NodeFromJson(c));
+    }
+    return node;
+}
+
 void App::HandleBridgeMessage(const std::string &type, const std::string &payload) {
     (void)payload;
     if (type == "save_node") {
     } else if (type == "run_pipeline") {
         auto val = JsonValue::parse(payload);
         if (val.has("pipelineName")) {
+            std::string inputContent = val.has("content") ? val["content"].string() : "";
+            inputNodeId_ = val.has("nodeId") ? val["nodeId"].string() : "";
+            inputTabFile_ = val.has("tabFile") ? val["tabFile"].string() : "";
             auto pipelines = storage_.LoadPipelines();
             for (auto &p : pipelines) {
                 if (p.name == val["pipelineName"].string()) {
-                    runner_.Run(p.name, p.steps, "", {}, p.outputMode);
+                    runner_.Run(p.name, p.steps, inputContent, {}, p.outputMode);
                     break;
                 }
             }
         }
+    } else if (type == "save_node") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("tabFile") && val.has("root")) {
+            std::string tabFile = val["tabFile"].string();
+            std::wstring wTabFile(tabFile.begin(), tabFile.end());
+            Node root = NodeFromJson(val["root"]);
+            storage_.SaveTabData(storage_.DataPath(wTabFile), root);
+        }
     } else if (type == "cancel_pipeline") {
         runner_.Cancel();
+    } else if (type == "manual_step_resume") {
+        auto val = JsonValue::parse(payload);
+        std::string content = val.has("content") ? val["content"].string() : "";
+        runner_.ResumeManual(content);
+    } else if (type == "manual_step_cancel") {
+        runner_.CancelManual();
+    } else if (type == "get_providers") {
+        auto providers = storage_.LoadProviders();
+        std::string json = "{";
+        bool first = true;
+        for (auto &kv : providers) {
+            if (!first) json += ",";
+            first = false;
+            json += "\"" + kv.first + "\":{\"apiKey\":\"" + kv.second.apiKey + "\",\"baseUrl\":\"" + kv.second.baseUrl + "\"}";
+        }
+        json += "}";
+        bridge_.PostToJS("providers_result", json);
+    } else if (type == "save_providers") {
+        auto val = JsonValue::parse(payload);
+        std::map<std::string, ProviderConfig> providers;
+        for (auto &kv : val.object()) {
+            ProviderConfig cfg;
+            if (kv.second.has("apiKey"))  cfg.apiKey  = kv.second["apiKey"].string();
+            if (kv.second.has("baseUrl")) cfg.baseUrl = kv.second["baseUrl"].string();
+            providers[kv.first] = cfg;
+            runner_.RegisterProvider(kv.first, cfg.apiKey, cfg.baseUrl);
+        }
+        storage_.SaveProviders(providers);
     }
 }
 
