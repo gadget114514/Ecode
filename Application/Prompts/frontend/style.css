@@ -1,6 +1,37 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px; background: #1e1e1e; color: #ccc; overflow: hidden; }
 
+/* Hint tooltip */
+.hint-tooltip { position: fixed; z-index: 9999; background: #1a2a40; border: 1px solid #4a9eff; border-radius: 5px; color: #cce4ff; font-size: 12px; padding: 5px 10px; pointer-events: none; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+
+/* Wizard */
+.wizard-content { min-width: 480px; max-width: 560px; padding: 28px 32px 20px; }
+.wizard-progress { display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; }
+.wizard-dot { width: 10px; height: 10px; border-radius: 50%; background: #444; transition: background 0.2s; }
+.wizard-dot.active { background: #4a9eff; }
+.wizard-body { min-height: 260px; }
+.wizard-icon { font-size: 40px; text-align: center; margin-bottom: 12px; }
+.wizard-title { font-size: 18px; font-weight: bold; color: #eee; text-align: center; margin-bottom: 16px; }
+.wizard-text { color: #bbb; line-height: 1.7; font-size: 13px; }
+.wizard-text p { margin-bottom: 10px; }
+.wizard-text b { color: #ddd; }
+.wizard-concept { display: flex; align-items: center; justify-content: center; gap: 12px; background: #1a2035; border-radius: 8px; padding: 14px; margin: 14px 0; }
+.wizard-concept-item { text-align: center; font-size: 13px; color: #ccc; line-height: 1.5; }
+.wizard-concept-arrow { font-size: 20px; color: #4a9eff; font-weight: bold; }
+.wizard-list { padding-left: 4px; list-style: none; margin: 10px 0; }
+.wizard-list li { padding: 4px 0; color: #bbb; }
+.wizard-action-btn { display: block; margin: 14px auto 0; background: #1e3a5f; border: 1px solid #4a9eff; border-radius: 5px; color: #4a9eff; padding: 7px 20px; cursor: pointer; font-size: 13px; }
+.wizard-action-btn:hover { background: #4a9eff; color: #fff; }
+.wizard-shortcut-box { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px 14px; margin-top: 12px; font-size: 12px; line-height: 2; color: #aaa; }
+.wizard-shortcut-box span { display: inline-block; background: #2a2a2a; border: 1px solid #555; border-radius: 3px; padding: 1px 7px; font-family: 'Consolas', monospace; color: #7ab0ff; min-width: 120px; margin-right: 8px; }
+.wizard-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; padding-top: 14px; border-top: 1px solid #333; }
+.wizard-footer #wizard-skip { background: none; border: none; color: #666; cursor: pointer; font-size: 12px; padding: 6px; }
+.wizard-footer #wizard-skip:hover { color: #aaa; }
+.wizard-nav { display: flex; gap: 8px; }
+.wizard-nav button { background: #333; border: 1px solid #555; border-radius: 4px; color: #ccc; padding: 7px 18px; cursor: pointer; font-size: 13px; }
+.wizard-nav .btn-primary { background: #4a9eff; border-color: #4a9eff; color: #fff; }
+.wizard-nav button:hover { filter: brightness(1.15); }
+
 #app { display: flex; flex-direction: column; height: 100vh; }
 
 /* Toolbar */
