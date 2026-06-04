@@ -209,6 +209,22 @@ void TestGetTabFiles() {
     std::cout << "Test Passed: Get Tab Files" << std::endl;
 }
 
+void TestPipelineMetaRoundTrip() {
+    TempStorage ts;
+
+    Node root;
+    root.title = "Um9vdA==";
+    root.mimetype = "text/plain";
+    root.pipelineMeta = "{\"pipelineName\":\"TestPipe\",\"executedAt\":\"2026-06-04T12:00:00Z\",\"steps\":[]}";
+
+    ts.storage.SaveTabData(L"meta_test.json", root);
+
+    auto loaded = ts.storage.LoadTabData(L"meta_test.json");
+    VERIFY(loaded.title == "Um9vdA==", "title match");
+    VERIFY(loaded.pipelineMeta == root.pipelineMeta, "pipelineMeta should be serialized and deserialized correctly");
+    std::cout << "Test Passed: Pipeline Meta Round-Trip" << std::endl;
+}
+
 int main() {
     try {
         TestInit();
@@ -220,6 +236,7 @@ int main() {
         TestProvidersRoundTrip();
         TestPipelinesRoundTrip();
         TestGetTabFiles();
+        TestPipelineMetaRoundTrip();
         std::cout << "=== ALL STORAGE TESTS PASSED ===" << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Test suite failed: " << e.what() << std::endl;

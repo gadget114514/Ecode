@@ -266,6 +266,13 @@ Node App::NodeFromJson(const JsonValue &val) {
 void App::HandleBridgeMessage(const std::string &type, const std::string &payload) {
     (void)payload;
     if (type == "save_node") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("tabFile") && val.has("root")) {
+            std::string tabFile = val["tabFile"].string();
+            std::wstring wTabFile(tabFile.begin(), tabFile.end());
+            Node root = NodeFromJson(val["root"]);
+            storage_.SaveTabData(storage_.DataPath(wTabFile), root);
+        }
     } else if (type == "run_pipeline") {
         auto val = JsonValue::parse(payload);
         if (val.has("pipelineName")) {
@@ -279,14 +286,6 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
                     break;
                 }
             }
-        }
-    } else if (type == "save_node") {
-        auto val = JsonValue::parse(payload);
-        if (val.has("tabFile") && val.has("root")) {
-            std::string tabFile = val["tabFile"].string();
-            std::wstring wTabFile(tabFile.begin(), tabFile.end());
-            Node root = NodeFromJson(val["root"]);
-            storage_.SaveTabData(storage_.DataPath(wTabFile), root);
         }
     } else if (type == "cancel_pipeline") {
         runner_.Cancel();
