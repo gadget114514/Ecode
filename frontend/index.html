@@ -12,19 +12,20 @@
 <body>
 <div id="app">
     <div id="toolbar">
-        <button id="btn-nav-back" onclick="app.navBack()" title="Back (Alt+←)" disabled>←</button>
-        <button id="btn-nav-fwd"  onclick="app.navForward()" title="Forward (Alt+→)" disabled>→</button>
+        <button id="btn-nav-back" onclick="app.navBack()" data-hint="前のノードに戻る (Alt+←)" disabled>←</button>
+        <button id="btn-nav-fwd"  onclick="app.navForward()" data-hint="次のノードへ進む (Alt+→)" disabled>→</button>
         <span class="separator">|</span>
-        <button id="btn-new" onclick="app.newTab()">📄 <span data-i18n="New">New</span></button>
-        <button id="btn-open" onclick="app.openFile()">📂 <span data-i18n="Open">Open</span></button>
-        <button id="btn-save" onclick="app.saveFile()">💾 <span data-i18n="Save">Save</span></button>
-        <button id="btn-saveas" onclick="app.saveFileAs()">💾 <span data-i18n="SaveAs">Save As</span></button>
+        <button id="btn-new" onclick="app.newTab()" data-hint="新しいタブを作成 (Ctrl+T)">📄 <span data-i18n="New">New</span></button>
+        <button id="btn-open" onclick="app.openFile()" data-hint="JSONファイルを開く (Ctrl+O)">📂 <span data-i18n="Open">Open</span></button>
+        <button id="btn-save" onclick="app.saveFile()" data-hint="現在のタブを保存 (Ctrl+S)">💾 <span data-i18n="Save">Save</span></button>
+        <button id="btn-saveas" onclick="app.saveFileAs()" data-hint="別名で保存 (Ctrl+Shift+S)">💾 <span data-i18n="SaveAs">Save As</span></button>
         <span class="separator">|</span>
-        <button id="btn-pipeline" onclick="app.runPipeline()">▶ <span data-i18n="RunPipeline">Run</span></button>
-        <button id="btn-config" onclick="app.showConfig()">⚙ <span data-i18n="Config">Config</span></button>
+        <button id="btn-pipeline" onclick="app.runPipeline()" data-hint="選択中のノードにパイプラインを実行 (F5)">▶ <span data-i18n="RunPipeline">Run</span></button>
+        <button id="btn-config" onclick="app.showConfig()" data-hint="APIキー・プロバイダの設定">⚙ <span data-i18n="Config">Config</span></button>
         <span class="spacer"></span>
         <input type="text" id="search-box" placeholder="Search..." oninput="app.search(this.value)">
         <button onclick="app.toggleTestMode()" id="btn-test-mode">🧪 <span data-i18n="Test">Test</span></button>
+        <button id="btn-help" onclick="app.showWizard()" data-hint="使い方ガイドを表示 (F1)">❓</button>
     </div>
     <div id="tab-bar"></div>
     <div id="main-content">
@@ -76,6 +77,24 @@
         <div id="messages-content"></div>
     </div>
 </div>
+<!-- Hint Tooltip -->
+<div id="hint-tooltip" class="hint-tooltip" style="display:none"></div>
+
+<!-- Wizard Modal -->
+<div id="wizard-modal" class="modal">
+    <div class="modal-content wizard-content">
+        <div class="wizard-progress" id="wizard-progress"></div>
+        <div class="wizard-body" id="wizard-body"></div>
+        <div class="wizard-footer">
+            <button id="wizard-skip" onclick="app.closeWizard()">スキップ</button>
+            <div class="wizard-nav">
+                <button id="wizard-prev" onclick="app.wizardPrev()">← 前へ</button>
+                <button id="wizard-next" class="btn-primary">次へ →</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Manual Step Modal -->
 <div id="manual-modal" class="modal">
     <div class="modal-content manual-modal-content">
