@@ -3,9 +3,22 @@
 #include "JsonParser.h"
 #include <sstream>
 #include <algorithm>
+#include <ctime>
 
 PipelineRunner::PipelineRunner() {}
 PipelineRunner::~PipelineRunner() { Cancel(); }
+
+/*static*/ std::string PipelineRunner::JsonEscape(const std::string &s) {
+    std::string out;
+    for (char c : s) {
+        if      (c == '"')  out += "\\\"";
+        else if (c == '\\') out += "\\\\";
+        else if (c == '\n') out += "\\n";
+        else if (c == '\r') out += "\\r";
+        else                out += c;
+    }
+    return out;
+}
 
 void PipelineRunner::SetBridgeCallback(std::function<void(const std::string&, const std::string&)> cb) {
     bridgeCb_ = cb;
@@ -57,8 +70,12 @@ void PipelineRunner::Run(const std::string &pipelineName,
         historySteps_[0].status = "running";
     }
     
+    // Record step params for metadata
+    executedStepParams_.clear();
+    for (auto &s : steps) executedStepParams_.push_back(s);
+
     PostBridge("step_started", "{\"index\":0,\"name\":\"" + steps[0].name + "\"}");
-    
+
     RunNextStep();
 }
 
@@ -66,7 +83,7 @@ void PipelineRunner::RunNextStep() {
     if (cancelled_ || pendingSteps_.empty()) {
         running_ = false;
         if (!cancelled_) {
-            PostBridge("step_done", "{\"status\":\"completed\"}");
+            PostBridge("pipeline_completed", BuildMetaJson());
         } else {
             PostBridge("pipeline_error", "{\"message\":\"Canceled\"}");
         }
@@ -134,6 +151,74 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
             [this](const std::string &error) {
                 HandleError(error);
             });
+    } else if (type == "manual") {
+        std::string mode   = step.params.count("mode")   ? step.params.at("mode")   : "view";
+        std::string prompt = step.params.count("prompt") ? step.params.at("prompt") : "";
+        std::string content = currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()
+                              ? historySteps_[currentStepIndex_ - 1].output
+                              : inputContent_;
+
+        waitingForManual_ = true;
+
+        if (mode == "compare") {
+            // Build branches JSON from previous parallel step's results
+            std::string branchesJson = "[";
+            bool first = true;
+            if (currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()) {
+                for (auto &kv : historySteps_[currentStepIndex_ - 1].parallelBranches) {
+                    if (!first) branchesJson += ",";
+                    first = false;
+                    branchesJson += "{\"name\":\"" + JsonEscape(kv.first) + "\""
+                                  + ",\"content\":\"" + JsonEscape(kv.second) + "\"}";
+                }
+            }
+            branchesJson += "]";
+            PostBridge("manual_step_pause",
+                "{\"index\":" + std::to_string(currentStepIndex_) +
+                ",\"mode\":\"compare\"" +
+                ",\"prompt\":\"" + JsonEscape(prompt) + "\"" +
+                ",\"branches\":" + branchesJson + "}");
+        } else {
+            std::string choicesJson = step.params.count("choices") ? step.params.at("choices") : "[]";
+            PostBridge("manual_step_pause",
+                "{\"index\":" + std::to_string(currentStepIndex_) +
+                ",\"mode\":\"" + mode + "\"" +
+                ",\"prompt\":\"" + JsonEscape(prompt) + "\"" +
+                ",\"content\":\"" + JsonEscape(content) + "\"" +
+                ",\"choices\":" + choicesJson + "}");
+        }
+        return; // wait for ResumeManual()
+
+    } else if (type == "parallel") {
+        auto branchesJsonStr = step.params.count("branches") ? step.params.at("branches") : "[]";
+        auto branchesVal = JsonValue::parse(branchesJsonStr);
+
+        parallelState_ = std::make_unique<ParallelState>();
+        parallelState_->inputContent = currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()
+                                       ? historySteps_[currentStepIndex_ - 1].output
+                                       : inputContent_;
+
+        for (auto &b : branchesVal.array()) {
+            ParallelState::Branch branch;
+            branch.name = b.has("name") ? b["name"].string() : "branch";
+            if (b.has("steps")) {
+                for (auto &s : b["steps"].array()) {
+                    PipelineStep ps;
+                    ps.type = s.has("type") ? s["type"].string() : "ai";
+                    ps.name = s.has("name") ? s["name"].string() : branch.name;
+                    if (s.has("provider"))    ps.params["provider"]    = s["provider"].string();
+                    if (s.has("model"))       ps.params["model"]       = s["model"].string();
+                    if (s.has("userPrompt"))  ps.params["userPrompt"]  = s["userPrompt"].string();
+                    if (s.has("systemPrompt"))ps.params["systemPrompt"]= s["systemPrompt"].string();
+                    if (s.has("temperature")) ps.params["temperature"] = s["temperature"].string();
+                    branch.steps.push_back(ps);
+                }
+            }
+            parallelState_->branches.push_back(branch);
+        }
+        ExecuteNextParallelBranch();
+        return;
+
     } else if (type == "condition") {
         // Evaluate condition
         std::string expr = step.params.count("expression") ? step.params.at("expression") : "{result}";
@@ -222,6 +307,150 @@ void PipelineRunner::UpdateStep(size_t index, const PipelineStep &step) {
         std::advance(it, index);
         *it = step;
     }
+}
+
+void PipelineRunner::ExecuteNextParallelBranch() {
+    if (!parallelState_ || cancelled_) {
+        parallelState_.reset();
+        RunNextStep();
+        return;
+    }
+
+    int idx = parallelState_->currentBranch;
+    if (idx >= (int)parallelState_->branches.size()) {
+        // All branches done — store results and move on
+        auto &hs = historySteps_[currentStepIndex_];
+        hs.parallelBranches = parallelState_->results;
+        hs.status = "completed";
+
+        // Build output as JSON summary
+        std::string out = "{";
+        bool first = true;
+        for (auto &kv : parallelState_->results) {
+            if (!first) out += ",";
+            first = false;
+            out += "\"" + JsonEscape(kv.first) + "\":\"" + JsonEscape(kv.second) + "\"";
+        }
+        out += "}";
+        hs.output = out;
+
+        PostBridge("step_done", "{\"index\":" + std::to_string(currentStepIndex_) + "}");
+        parallelState_.reset();
+        RunNextStep();
+        return;
+    }
+
+    auto &branch = parallelState_->branches[idx];
+    std::string branchName = branch.name;
+
+    // Notify JS which branch is running
+    PostBridge("stream_chunk",
+        "{\"stepIndex\":" + std::to_string(currentStepIndex_) +
+        ",\"branch\":\"" + JsonEscape(branchName) + "\"" +
+        ",\"text\":\"\"}");
+
+    if (branch.steps.empty()) {
+        parallelState_->results[branchName] = parallelState_->inputContent;
+        parallelState_->currentBranch++;
+        ExecuteNextParallelBranch();
+        return;
+    }
+
+    auto &bStep = branch.steps[0]; // MVP: first step only per branch
+    auto providerIt = providers_.find(bStep.params.count("provider") ? bStep.params.at("provider") : "openai");
+    if (providerIt == providers_.end()) {
+        parallelState_->results[branchName] = "[Provider not configured]";
+        parallelState_->currentBranch++;
+        ExecuteNextParallelBranch();
+        return;
+    }
+
+    AIRequest req;
+    req.model        = bStep.params.count("model")        ? bStep.params.at("model")        : "gpt-4.1";
+    req.systemPrompt = bStep.params.count("systemPrompt") ? bStep.params.at("systemPrompt") : "";
+    req.userPrompt   = bStep.params.count("userPrompt")   ? bStep.params.at("userPrompt")   : "{content}";
+
+    auto replaceAll = [](std::string &s, const std::string &from, const std::string &to) {
+        size_t pos = 0;
+        while ((pos = s.find(from, pos)) != std::string::npos) {
+            s.replace(pos, from.length(), to);
+            pos += to.length();
+        }
+    };
+    replaceAll(req.userPrompt, "{content}", parallelState_->inputContent);
+    replaceAll(req.userPrompt, "{result}",  parallelState_->inputContent);
+
+    providerIt->second->CallStreaming(req,
+        [this, branchName](const std::string &chunk) {
+            PostBridge("stream_chunk",
+                "{\"stepIndex\":" + std::to_string(currentStepIndex_) +
+                ",\"branch\":\"" + JsonEscape(branchName) + "\"" +
+                ",\"text\":\"" + JsonEscape(chunk) + "\"}");
+        },
+        [this, branchName](const AIResponse &resp) {
+            if (parallelState_) {
+                parallelState_->results[branchName] = resp.content;
+                parallelState_->currentBranch++;
+            }
+            ExecuteNextParallelBranch();
+        },
+        [this, branchName](const std::string &error) {
+            if (parallelState_) {
+                parallelState_->results[branchName] = "[Error: " + error + "]";
+                parallelState_->currentBranch++;
+            }
+            ExecuteNextParallelBranch();
+        });
+}
+
+std::string PipelineRunner::BuildMetaJson() {
+    // Timestamp
+    time_t now = time(nullptr);
+    char timebuf[32];
+    struct tm *tm_info = localtime(&now);
+    strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", tm_info);
+
+    std::string lastOutput = historySteps_.empty() ? "" : historySteps_.back().output;
+
+    std::string json = "{";
+    json += "\"outputContent\":\"" + JsonEscape(lastOutput) + "\"";
+    json += ",\"pipelineName\":\"" + JsonEscape(pipelineName_) + "\"";
+    json += ",\"executedAt\":\"" + std::string(timebuf) + "\"";
+    json += ",\"steps\":[";
+    for (int i = 0; i < (int)executedStepParams_.size(); i++) {
+        auto &step = executedStepParams_[i];
+        if (i > 0) json += ",";
+        json += "{";
+        json += "\"name\":\"" + JsonEscape(step.name) + "\"";
+        json += ",\"type\":\"" + JsonEscape(step.type) + "\"";
+        for (auto &kv : step.params) {
+            json += ",\"" + JsonEscape(kv.first) + "\":\"" + JsonEscape(kv.second) + "\"";
+        }
+        if (i < (int)historySteps_.size()) {
+            json += ",\"output\":\"" + JsonEscape(historySteps_[i].output) + "\"";
+            json += ",\"tokens\":" + std::to_string(historySteps_[i].completionTokens);
+        }
+        json += "}";
+    }
+    json += "]}";
+    return json;
+}
+
+void PipelineRunner::ResumeManual(const std::string &content) {
+    if (!waitingForManual_) return;
+    waitingForManual_ = false;
+    if (currentStepIndex_ < (int)historySteps_.size()) {
+        historySteps_[currentStepIndex_].output = content;
+        historySteps_[currentStepIndex_].status = "completed";
+    }
+    PostBridge("step_done", "{\"index\":" + std::to_string(currentStepIndex_) + "}");
+    RunNextStep();
+}
+
+void PipelineRunner::CancelManual() {
+    if (!waitingForManual_) return;
+    waitingForManual_ = false;
+    Cancel();
 }
 
 void PipelineRunner::AppendPipelineSteps(const std::string &pipelineName) {

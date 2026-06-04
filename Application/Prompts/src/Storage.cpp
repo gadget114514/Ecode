@@ -114,6 +114,8 @@ static JsonValue NodeToJson(const Node &node) {
     for (auto &c : node.children)
         children.push_back(NodeToJson(c));
     obj["children"] = JsonValue::fromArray(children);
+    if (!node.pipelineMeta.empty())
+        obj["pipelineMeta"] = JsonValue::fromString(node.pipelineMeta);
     return JsonValue::fromObject(obj);
 }
 
@@ -138,6 +140,7 @@ static Node JsonToNode(const JsonValue &val) {
         for (auto &c : val["children"].array())
             node.children.push_back(JsonToNode(c));
     }
+    if (val.has("pipelineMeta")) node.pipelineMeta = val["pipelineMeta"].string();
     return node;
 }
 
