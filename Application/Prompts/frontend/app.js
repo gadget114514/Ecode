@@ -784,7 +784,11 @@ const app = {
                      <div class="wizard-concept-arrow">=</div>
                      <div class="wizard-concept-item">✨ <b>成果物</b><br><small>AI処理結果</small></div>
                    </div>
-                   <p>成果物には<b>「どのAIで・どんな指示で作ったか」</b>が埋め込まれ、後から再現できます。</p>`
+                   <p>成果物には<b>「どのAIで・どんな指示で作ったか」</b>が埋め込まれ、後から再現できます。</p>`,
+            tips: [
+                { icon: '🔁', text: '同じパイプラインを別の素材に繰り返し適用できます。一度作ったレシピはずっと使えます。' },
+                { icon: '📂', text: 'データはローカルの JSON ファイルに保存。git で管理でき、バックアップはフォルダをコピーするだけです。' }
+            ]
         },
         {
             icon: '⚙',
@@ -797,18 +801,27 @@ const app = {
                      <li>⚫ <b>Ollama</b> — ローカルLLM（無料）</li>
                    </ul>
                    <p>右上の <b>⚙ Config</b> ボタンから設定できます。</p>
-                   <button class="wizard-action-btn" onclick="app.closeWizard(); app.showConfig();">⚙ 今すぐ設定する</button>`
+                   <button class="wizard-action-btn" onclick="app.closeWizard(); app.showConfig();">⚙ 今すぐ設定する</button>`,
+            tips: [
+                { icon: '🆓', text: 'Ollama はローカルで動くためAPIキー不要。まず無料で試したい場合は Ollama から始めましょう。' },
+                { icon: '🌐', text: 'Grok・Groq・LM Studio など OpenAI 互換の API は「カスタム」プロバイダとして Base URL を変えるだけで使えます。' }
+            ]
         },
         {
             icon: '📄',
             title: '素材ノードを作る',
             body: `<p>ツリーにノードを追加して、処理したいテキストや画像を入れます。</p>
                    <ul class="wizard-list">
-                     <li>📄 <b>New</b> — 新しいタブを作成</li>
+                     <li>🚀 <b>セットアップウィザード</b> — テンプレートから一発作成</li>
                      <li>右クリック → <b>子ノードを追加</b></li>
                      <li>タイトルと内容を入力 → <b>💾 更新</b></li>
                    </ul>
-                   <p>ノードはツリー構造で管理されます。素材の下に成果物が子ノードとして蓄積されます。</p>`
+                   <p>ノードはツリー構造で管理されます。素材の下に成果物が子ノードとして蓄積されます。</p>`,
+            tips: [
+                { icon: '🖼', text: 'テキスト以外にも画像・PDF・RTFを格納できます。ファイルをエディタにドロップして添付しましょう。' },
+                { icon: '↩', text: 'Alt+← / Alt+→ で訪れたノードの履歴を前後に移動できます。深いツリーを探索するときに便利です。' },
+                { icon: '🔍', text: 'Ctrl+F で全タブ・全ノードを横断検索できます。ノードが増えてきたらぜひ活用してください。' }
+            ]
         },
         {
             icon: '▶',
@@ -820,13 +833,17 @@ const app = {
                      <li>複数AIの結果を<b>比較して選択</b>できます</li>
                      <li>結果は子ノードとして自動保存されます</li>
                    </ul>
-                   <p>パイプラインは <b>⚡ レシピ</b>（近日実装）から作成・管理できます。</p>
                    <div class="wizard-shortcut-box">
                      <span>Alt+← / Alt+→</span> ノード履歴を移動<br>
                      <span>Ctrl+F</span> 全文検索<br>
                      <span>F5</span> パイプライン実行<br>
                      <span>F1</span> このガイドを表示
-                   </div>`
+                   </div>`,
+            tips: [
+                { icon: '⚖', text: '同じ素材を Claude・GPT-4・Grok に同時投げて結果を比較選択できます（parallel + compare ステップ）。' },
+                { icon: '💾', text: '成果物ノードには「どのパイプラインで作ったか」が自動記録されます。同じ処理を別の素材に再適用するには ▶ 再実行 をクリック。' },
+                { icon: '⌨', text: 'command ステップで ffmpeg・whisper・Codex CLI など任意の外部ツールをパイプラインに組み込めます。' }
+            ]
         }
     ],
 
@@ -854,10 +871,20 @@ const app = {
             steps.map((_, i) => `<span class="wizard-dot${i === cur ? ' active' : ''}"></span>`).join('');
 
         // Body
+        const tipsHtml = s.tips && s.tips.length ? `
+            <div class="wizard-tips">
+                <div class="wizard-tips-label">💡 Tips</div>
+                ${s.tips.map(t => `
+                    <div class="wizard-tip">
+                        <span class="wizard-tip-icon">${t.icon}</span>
+                        <span class="wizard-tip-text">${t.text}</span>
+                    </div>`).join('')}
+            </div>` : '';
         document.getElementById('wizard-body').innerHTML = `
             <div class="wizard-icon">${s.icon}</div>
             <h2 class="wizard-title">${this.escapeHtml(s.title)}</h2>
-            <div class="wizard-text">${s.body}</div>`;
+            <div class="wizard-text">${s.body}</div>
+            ${tipsHtml}`;
 
         // Footer buttons
         document.getElementById('wizard-prev').style.visibility = cur === 0 ? 'hidden' : '';
