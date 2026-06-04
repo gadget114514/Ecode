@@ -119,6 +119,10 @@ static JsonValue NodeToJson(const Node &node) {
     return JsonValue::fromObject(obj);
 }
 
+/*static*/ std::string Storage::SerializeNode(const Node &node) {
+    return NodeToJson(node).serialize();
+}
+
 static Node JsonToNode(const JsonValue &val) {
     Node node;
     if (val.has("title")) node.title = val["title"].string();

@@ -173,10 +173,18 @@ void App::InitWebView2() {
                                     auto val = JsonValue::parse(s);
                                     std::string type = val["type"].string();
                                     if (type == "init_complete") {
-                                        app->bridge_.SendInit(val["language"].string());
+                                        app->SendFullInit();
                                     } else {
-                                        std::string payload = val["payload"].string();
-                                        app->HandleBridgeMessage(type, payload.empty() ? "" : payload);
+                                        // payload may be an object or string — serialize to JSON string
+                                        std::string payload;
+                                        if (val.has("payload")) {
+                                            auto &pv = val["payload"];
+                                            payload = pv.serialize();
+                                            // unwrap outer quotes if it was a plain string
+                                            if (payload.size() >= 2 && payload.front() == '"' && payload.back() == '"')
+                                                payload = JsonValue::parse(payload).string();
+                                        }
+                                        app->HandleBridgeMessage(type, payload);
                                     }
                                 }
                                 return S_OK;
@@ -236,6 +244,61 @@ void App::ShowFallbackUI() {
     if (hEdit) {
         SendMessage(hEdit, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), TRUE);
     }
+}
+
+void App::SendFullInit() {
+    // Load session
+    auto session = storage_.LoadSession();
+
+    // If no tabs, create default
+    if (session.tabs.empty()) {
+        TabData tab;
+        tab.name = "General";
+        tab.file = "general.json";
+        storage_.EnsureDirectory(storage_.DataPath(L""));
+        Node emptyRoot;
+        emptyRoot.mimetype = "text/plain";
+        storage_.SaveTabData(storage_.DataPath(L"general.json"), emptyRoot);
+        session.tabs.push_back(tab);
+        storage_.SaveSession(session);
+    }
+
+    // Build tabs JSON and nodes map
+    std::string tabsJson = "[";
+    std::string nodesJson = "{";
+    bool firstTab = true;
+    for (auto &tab : session.tabs) {
+        if (!firstTab) { tabsJson += ","; nodesJson += ","; }
+        firstTab = false;
+        tabsJson += "{\"name\":\"" + PipelineRunner::JsonEscape(tab.name) + "\""
+                  + ",\"file\":\"" + PipelineRunner::JsonEscape(tab.file) + "\"}";
+        std::wstring wfile(tab.file.begin(), tab.file.end());
+        Node root = storage_.LoadTabData(storage_.DataPath(wfile));
+        nodesJson += "\"" + PipelineRunner::JsonEscape(tab.file) + "\":"
+                   + Storage::SerializeNode(root);
+    }
+    tabsJson += "]";
+    nodesJson += "}";
+
+    // Load pipelines
+    auto pipelines = storage_.LoadPipelines();
+    std::string pipelinesJson = "[";
+    bool firstPipe = true;
+    for (auto &p : pipelines) {
+        if (!firstPipe) pipelinesJson += ",";
+        firstPipe = false;
+        pipelinesJson += "{\"name\":\"" + PipelineRunner::JsonEscape(p.name) + "\""
+                       + ",\"outputMode\":\"" + p.outputMode + "\""
+                       + ",\"mode\":\"" + p.mode + "\"}";
+    }
+    pipelinesJson += "]";
+
+    bridge_.PostToJS("init",
+        "{\"language\":\"" + localization_.GetCurrentLanguage() + "\""
+        ",\"embedded\":"  + (embedded_ ? "true" : "false") +
+        ",\"tabs\":"      + tabsJson +
+        ",\"nodes\":"     + nodesJson +
+        ",\"pipelines\":" + pipelinesJson + "}");
 }
 
 Node App::NodeFromJson(const JsonValue &val) {
