@@ -18,6 +18,7 @@ const app = {
     init() {
         this.setupBridge();
         this.loadLanguage(this.state.language);
+        this.setupHints();
     },
 
     setupBridge() {
@@ -52,6 +53,10 @@ const app = {
                     if (hb) hb.style.display = '';
                 }
                 this.addLog('✅ App ready');
+                // Show wizard on first run
+                if (!localStorage.getItem('prompts_wizard_done')) {
+                    setTimeout(() => this.showWizard(), 400);
+                }
                 break;
             case 'node_updated':
                 this.updateNodeUI(msg.payload);
@@ -766,12 +771,171 @@ const app = {
 
     log(msg) { this.addLog(msg); },
 
+    // ── Wizard ────────────────────────────────────────────────────
+    WIZARD_STEPS: [
+        {
+            icon: '🤖',
+            title: 'Prompts へようこそ',
+            body: `<p><b>Prompts</b> は AI プロンプトとパイプラインを管理・実行するツールです。</p>
+                   <div class="wizard-concept">
+                     <div class="wizard-concept-item">📄 <b>素材</b><br><small>あなたのテキスト・画像</small></div>
+                     <div class="wizard-concept-arrow">×</div>
+                     <div class="wizard-concept-item">🔧 <b>レシピ</b><br><small>AIへの指示の連鎖</small></div>
+                     <div class="wizard-concept-arrow">=</div>
+                     <div class="wizard-concept-item">✨ <b>成果物</b><br><small>AI処理結果</small></div>
+                   </div>
+                   <p>成果物には<b>「どのAIで・どんな指示で作ったか」</b>が埋め込まれ、後から再現できます。</p>`
+        },
+        {
+            icon: '⚙',
+            title: 'APIキーを設定する',
+            body: `<p>AIパイプラインを実行するには、使用するプロバイダのAPIキーが必要です。</p>
+                   <ul class="wizard-list">
+                     <li>🟢 <b>OpenAI</b> — GPT-4.1, o1 など</li>
+                     <li>🟣 <b>Anthropic</b> — Claude シリーズ</li>
+                     <li>🔵 <b>Gemini</b> — Google AI</li>
+                     <li>⚫ <b>Ollama</b> — ローカルLLM（無料）</li>
+                   </ul>
+                   <p>右上の <b>⚙ Config</b> ボタンから設定できます。</p>
+                   <button class="wizard-action-btn" onclick="app.closeWizard(); app.showConfig();">⚙ 今すぐ設定する</button>`
+        },
+        {
+            icon: '📄',
+            title: '素材ノードを作る',
+            body: `<p>ツリーにノードを追加して、処理したいテキストや画像を入れます。</p>
+                   <ul class="wizard-list">
+                     <li>📄 <b>New</b> — 新しいタブを作成</li>
+                     <li>右クリック → <b>子ノードを追加</b></li>
+                     <li>タイトルと内容を入力 → <b>💾 更新</b></li>
+                   </ul>
+                   <p>ノードはツリー構造で管理されます。素材の下に成果物が子ノードとして蓄積されます。</p>`
+        },
+        {
+            icon: '▶',
+            title: 'パイプラインを実行する',
+            body: `<p>ノードを選択して <b>▶ Run</b> ボタンを押すと、パイプラインが実行されます。</p>
+                   <ul class="wizard-list">
+                     <li>複数のAIを順番に適用できます</li>
+                     <li><b>人間の確認ステップ</b>を挟めます</li>
+                     <li>複数AIの結果を<b>比較して選択</b>できます</li>
+                     <li>結果は子ノードとして自動保存されます</li>
+                   </ul>
+                   <p>パイプラインは <b>⚡ レシピ</b>（近日実装）から作成・管理できます。</p>
+                   <div class="wizard-shortcut-box">
+                     <span>Alt+← / Alt+→</span> ノード履歴を移動<br>
+                     <span>Ctrl+F</span> 全文検索<br>
+                     <span>F5</span> パイプライン実行<br>
+                     <span>F1</span> このガイドを表示
+                   </div>`
+        }
+    ],
+
+    wizardStep_: 0,
+
+    showWizard(forceStep) {
+        this.wizardStep_ = forceStep || 0;
+        document.getElementById('wizard-modal').classList.add('visible');
+        this.renderWizardStep();
+    },
+
+    closeWizard() {
+        document.getElementById('wizard-modal').classList.remove('visible');
+        localStorage.setItem('prompts_wizard_done', '1');
+    },
+
+    renderWizardStep() {
+        const steps = this.WIZARD_STEPS;
+        const s = steps[this.wizardStep_];
+        const total = steps.length;
+        const cur = this.wizardStep_;
+
+        // Progress dots
+        document.getElementById('wizard-progress').innerHTML =
+            steps.map((_, i) => `<span class="wizard-dot${i === cur ? ' active' : ''}"></span>`).join('');
+
+        // Body
+        document.getElementById('wizard-body').innerHTML = `
+            <div class="wizard-icon">${s.icon}</div>
+            <h2 class="wizard-title">${this.escapeHtml(s.title)}</h2>
+            <div class="wizard-text">${s.body}</div>`;
+
+        // Footer buttons
+        document.getElementById('wizard-prev').style.visibility = cur === 0 ? 'hidden' : '';
+        const nextBtn = document.getElementById('wizard-next');
+        if (cur === total - 1) {
+            nextBtn.textContent = '✓ 完了';
+            nextBtn.onclick = () => this.closeWizard();
+        } else {
+            nextBtn.textContent = '次へ →';
+            nextBtn.onclick = () => this.wizardNext();
+        }
+        document.getElementById('wizard-skip').style.display = cur === total - 1 ? 'none' : '';
+    },
+
+    wizardNext() {
+        if (this.wizardStep_ < this.WIZARD_STEPS.length - 1) {
+            this.wizardStep_++;
+            this.renderWizardStep();
+        }
+    },
+
+    wizardPrev() {
+        if (this.wizardStep_ > 0) {
+            this.wizardStep_--;
+            this.renderWizardStep();
+        }
+    },
+
+    // ── Hint tooltips ──────────────────────────────────────────────
+    setupHints() {
+        const tooltip = document.getElementById('hint-tooltip');
+        if (!tooltip) return;
+        let hintTimer = null;
+
+        document.addEventListener('mouseover', (e) => {
+            const el = e.target.closest('[data-hint]');
+            if (!el) return;
+            clearTimeout(hintTimer);
+            hintTimer = setTimeout(() => {
+                const hint = el.getAttribute('data-hint');
+                if (!hint) return;
+                tooltip.textContent = hint;
+                tooltip.style.display = 'block';
+                const r = el.getBoundingClientRect();
+                let left = r.left;
+                let top = r.bottom + 6;
+                // Keep within viewport
+                tooltip.style.left = '0';
+                tooltip.style.top = '0';
+                tooltip.style.display = 'block';
+                const tw = tooltip.offsetWidth;
+                if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+                if (left < 4) left = 4;
+                tooltip.style.left = left + 'px';
+                tooltip.style.top = top + 'px';
+            }, 500);
+        });
+
+        document.addEventListener('mouseout', (e) => {
+            const el = e.target.closest('[data-hint]');
+            if (!el) return;
+            clearTimeout(hintTimer);
+            tooltip.style.display = 'none';
+        });
+
+        document.addEventListener('click', () => {
+            clearTimeout(hintTimer);
+            tooltip.style.display = 'none';
+        });
+    },
+
     // Keyboard shortcuts
     handleKey(e) {
         if (e.ctrlKey && e.key === 's') { e.preventDefault(); this.saveFile(); }
         if (e.ctrlKey && e.key === 'f') { e.preventDefault(); document.getElementById('search-box')?.focus(); }
         if (e.altKey && e.key === 'ArrowLeft')  { e.preventDefault(); this.navBack(); }
         if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); this.navForward(); }
+        if (e.key === 'F1') { e.preventDefault(); this.showWizard(); }
     }
 };
 
