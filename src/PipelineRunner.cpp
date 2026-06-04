@@ -15,6 +15,7 @@ PipelineRunner::~PipelineRunner() { Cancel(); }
         else if (c == '\\') out += "\\\\";
         else if (c == '\n') out += "\\n";
         else if (c == '\r') out += "\\r";
+        else if (c == '\t') out += "\\t";
         else                out += c;
     }
     return out;
@@ -107,7 +108,7 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
         // Execute AI step
         auto providerIt = providers_.find(step.params.count("provider") ? step.params.at("provider") : "openai");
         if (providerIt == providers_.end()) {
-            HandleError("Provider not configured: " + step.params.count("provider") ? step.params.at("provider") : "unknown");
+            HandleError("Provider not configured: " + (step.params.count("provider") ? step.params.at("provider") : "unknown"));
             return;
         }
         
