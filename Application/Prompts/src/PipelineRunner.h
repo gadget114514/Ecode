@@ -77,6 +77,7 @@ public:
     void CancelManual();
 
     void RegisterProvider(const std::string &type, const std::string &apiKey, const std::string &baseUrl);
+    static std::string JsonEscape(const std::string &s);
 
 private:
     std::atomic<bool> running_{false};
@@ -105,7 +106,6 @@ private:
     void HandleError(const std::string &message);
     void PostBridge(const std::string &type, const std::string &json);
     std::string BuildMetaJson();
-    static std::string JsonEscape(const std::string &s);
 
     std::vector<PipelineStep> executedStepParams_;
 
