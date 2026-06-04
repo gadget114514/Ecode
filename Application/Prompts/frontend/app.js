@@ -48,10 +48,9 @@ const app = {
                 if (msg.payload.pipelines) {
                     this.state.pipelines = msg.payload.pipelines;
                 }
-                if (this.state.embedded) {
-                    const hb = document.getElementById('btn-hamburger');
-                    if (hb) hb.style.display = '';
-                }
+                // Always show hamburger (embedded: replaces menubar; standalone: supplement)
+                const hb = document.getElementById('btn-hamburger');
+                if (hb) hb.style.display = '';
                 this.addLog('✅ App ready');
                 // Show wizard on first run
                 if (!localStorage.getItem('prompts_wizard_done')) {
@@ -911,6 +910,149 @@ const app = {
             this.wizardStep_--;
             this.renderWizardStep();
         }
+    },
+
+    // ── Hamburger menu ────────────────────────────────────────────
+    showHamburger(event) {
+        event.stopPropagation();
+        const existing = document.getElementById('hamburger-dropdown');
+        if (existing) { existing.remove(); return; }
+
+        const t = key => this.t(key);
+        const sep = '<div class="hmenu-sep"></div>';
+        const item = (label, action, shortcut='') =>
+            `<div class="hmenu-item" onclick="app.hmenuAction('${action}')">${label}${shortcut ? `<span class="hmenu-shortcut">${shortcut}</span>` : ''}</div>`;
+        const section = (title, items) =>
+            `<div class="hmenu-section">${title}</div>${items}`;
+
+        const html = `
+            ${section(t('MenuFile'),
+                item(t('MenuNewTab'),      'new_tab',       'Ctrl+T') +
+                item(t('MenuOpen'),        'open',          'Ctrl+O') +
+                item(t('MenuSave'),        'save',          'Ctrl+S') +
+                item(t('MenuSaveAs'),      'save_as',       'Ctrl+Shift+S') +
+                sep +
+                item('📦 ' + t('MenuImportZip'),  'import_zip') +
+                item('📤 ' + t('MenuExportNode'), 'export_node') +
+                sep +
+                item('🤖 ' + t('MenuWelcomeWizard'), 'welcome_wizard', 'F1') +
+                item('🚀 ' + t('MenuSetupWizard'),   'setup_wizard')
+            )}
+            ${sep}
+            ${section(t('MenuEdit'),
+                item(t('MenuUndo'),        'undo',          'Ctrl+Z') +
+                item(t('MenuRedo'),        'redo',          'Ctrl+Y') +
+                sep +
+                item(t('MenuCut'),         'cut',           'Ctrl+X') +
+                item(t('MenuCopyText'),    'copy',          'Ctrl+C') +
+                item(t('MenuPaste'),       'paste',         'Ctrl+V') +
+                item(t('MenuSelectAll'),   'select_all',    'Ctrl+A')
+            )}
+            ${sep}
+            ${section(t('MenuSettings'),
+                item('⚙ ' + t('MenuSettingsItem'),  'settings') +
+                item('🔑 ' + t('Config'),             'config')
+            )}
+            ${sep}
+            ${section(t('MenuHelp'),
+                item(t('MenuKeyboardShortcuts'), 'shortcuts', 'F1') +
+                item(t('MenuAbout'),             'about') +
+                item(t('MenuCopyright'),         'copyright')
+            )}`;
+
+        const dropdown = document.createElement('div');
+        dropdown.id = 'hamburger-dropdown';
+        dropdown.className = 'hamburger-dropdown';
+        dropdown.innerHTML = html;
+
+        const btn = document.getElementById('btn-hamburger');
+        const r = btn.getBoundingClientRect();
+        dropdown.style.top = (r.bottom + 4) + 'px';
+        dropdown.style.left = r.left + 'px';
+        document.body.appendChild(dropdown);
+
+        setTimeout(() => document.addEventListener('click', function close() {
+            dropdown.remove();
+            document.removeEventListener('click', close);
+        }), 0);
+    },
+
+    hmenuAction(action) {
+        document.getElementById('hamburger-dropdown')?.remove();
+        const map = {
+            new_tab:        () => this.newTab(),
+            open:           () => this.openFile(),
+            save:           () => this.saveFile(),
+            save_as:        () => this.saveFileAs(),
+            import_zip:     () => this.addLog('📦 Import ZIP — coming soon'),
+            export_node:    () => this.addLog('📤 Export Node — coming soon'),
+            welcome_wizard: () => this.showWizard(),
+            setup_wizard:   () => this.showSetupWizard(),
+            undo:           () => document.execCommand('undo'),
+            redo:           () => document.execCommand('redo'),
+            cut:            () => document.execCommand('cut'),
+            copy:           () => document.execCommand('copy'),
+            paste:          () => document.execCommand('paste'),
+            select_all:     () => document.execCommand('selectAll'),
+            settings:       () => this.showSettings(),
+            config:         () => this.showConfig(),
+            shortcuts:      () => this.showWizard(3),
+            about:          () => this.showAbout(),
+            copyright:      () => this.showCopyright(),
+        };
+        if (map[action]) map[action]();
+    },
+
+    // ── Settings dialog ────────────────────────────────────────────
+    showSettings() {
+        const modal = document.getElementById('settings-modal');
+        const sel = document.getElementById('settings-lang');
+        if (sel) sel.value = this.state.language;
+        modal.classList.add('visible');
+    },
+
+    closeSettings() {
+        document.getElementById('settings-modal').classList.remove('visible');
+    },
+
+    saveSettings() {
+        const sel = document.getElementById('settings-lang');
+        if (!sel) return;
+        const lang = sel.value;
+        this.loadLanguage(lang);
+        this.postMessage({ type: 'set_language', payload: { language: lang } });
+        this.closeSettings();
+        this.addLog(`🌐 Language set to: ${sel.options[sel.selectedIndex].text}`);
+    },
+
+    // ── About / Copyright ──────────────────────────────────────────
+    showAbout() {
+        const modal = document.getElementById('about-modal');
+        modal.classList.add('visible');
+        this.applyTranslations();
+    },
+
+    closeAbout() {
+        document.getElementById('about-modal').classList.remove('visible');
+    },
+
+    showCopyright() {
+        const modal = document.getElementById('copyright-modal');
+        const body = document.getElementById('copyright-body');
+        if (body) body.textContent = this.t('CopyrightBody') ||
+            'Prompts — Part of the Ecode project.\n\nThird-party libraries:\n' +
+            '• marked.js — MIT License\n• mark.js — MIT License\n' +
+            '• mermaid.js — MIT License\n• cytoscape.js — MIT License\n' +
+            '• Microsoft WebView2 SDK — BSD 3-Clause\n• Mbed TLS — Apache 2.0 / GPL 2.0+';
+        modal.classList.add('visible');
+    },
+
+    closeCopyright() {
+        document.getElementById('copyright-modal').classList.remove('visible');
+    },
+
+    t(key) {
+        return (this.state.translations && this.state.translations[key]) || key;
     },
 
     // ── Setup Wizard ──────────────────────────────────────────────
