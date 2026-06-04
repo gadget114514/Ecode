@@ -389,11 +389,11 @@ const app = {
                 <div class="provider-name">${p.label}</div>
                 <label>API Key</label>
                 <div class="api-key-row">
-                    <input type="password" id="key-${p.id}" value="${cfg.apiKey||''}" placeholder="sk-...">
+                    <input type="password" id="key-${p.id}" value="${this.escapeHtml(cfg.apiKey||'')}" placeholder="sk-...">
                     <button type="button" onclick="app.toggleKeyVisible('key-${p.id}',this)">👁</button>
                 </div>
                 <label>Base URL</label>
-                <input type="text" id="url-${p.id}" value="${cfg.baseUrl||p.defaultUrl}" placeholder="${p.defaultUrl}">
+                <input type="text" id="url-${p.id}" value="${this.escapeHtml(cfg.baseUrl||p.defaultUrl)}" placeholder="${this.escapeHtml(p.defaultUrl)}">
             </div>`;
         }).join('');
     },
@@ -433,11 +433,12 @@ const app = {
 
     buildTreeHTML(node, path) {
         let html = '';
-        const display = node.title ? atob(node.title) : this.getTitleFallback(node);
+        const display = this.escapeHtml(node.title ? atob(node.title) : this.getTitleFallback(node));
+        const safePath = this.escapeHtml(path);
         const hasChildren = node.children && node.children.length > 0;
-        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') + 
+        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') +
                     (this.state.currentNodePath === path ? ' selected' : '');
-        html += `<div class="${cls}" onclick="app.selectNode('${path}')">${display}</div>`;
+        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')">${display}</div>`;
         if (hasChildren) {
             html += '<div style="padding-left:16px">';
             node.children.forEach((child, i) => {
@@ -524,7 +525,7 @@ const app = {
         const node = this.getNodeByPath(this.state.currentNodePath);
         if (!node || !node.children) { el.innerHTML = '<div class="empty">Select a node</div>'; return; }
         el.innerHTML = node.children.map((child, i) => {
-            const display = child.title ? atob(child.title) : this.getTitleFallback(child);
+            const display = this.escapeHtml(child.title ? atob(child.title) : this.getTitleFallback(child));
             return `<div class="list-item" ondblclick="app.copyItemText(${i})">
                 <span>${display}</span>
                 <button class="copy-btn" onclick="app.copyItemText(${i})">📋</button>

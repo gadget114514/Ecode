@@ -333,8 +333,14 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         if (val.has("tabFile") && val.has("root")) {
             std::string tabFile = val["tabFile"].string();
             std::wstring wTabFile(tabFile.begin(), tabFile.end());
+            // Validate path stays within data directory (prevent path traversal)
+            std::wstring resolved = storage_.DataPath(wTabFile);
+            wchar_t fullPath[32768] = {};
+            if (!GetFullPathNameW(resolved.c_str(), 32768, fullPath, nullptr)) return;
+            std::wstring expected = storage_.GetBasePath() + L"\\data\\";
+            if (std::wstring(fullPath).substr(0, expected.size()) != expected) return;
             Node root = NodeFromJson(val["root"]);
-            storage_.SaveTabData(storage_.DataPath(wTabFile), root);
+            storage_.SaveTabData(fullPath, root);
         }
     } else if (type == "run_pipeline") {
         auto val = JsonValue::parse(payload);
