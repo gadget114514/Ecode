@@ -886,6 +886,209 @@ const app = {
         }
     },
 
+    // ── Setup Wizard ──────────────────────────────────────────────
+    SW_TEMPLATES: [
+        {
+            id: 'translate',
+            label: '🌐 翻訳プロジェクト',
+            desc: 'テキストを複数言語に翻訳・比較',
+            sample: '翻訳したいテキストをここに入力してください。\n\nHello, world! This is a sample text.',
+            pipeline: '翻訳→比較選択'
+        },
+        {
+            id: 'summarize',
+            label: '📝 文章要約',
+            desc: '長文を要約・ポイント抽出',
+            sample: '要約したい文章をここに貼り付けてください。\n\n長い記事や文書のテキストを入力すると、AIが重要なポイントを抽出します。',
+            pipeline: '要約'
+        },
+        {
+            id: 'review',
+            label: '✏️ 文章レビュー',
+            desc: '文章を校正・改善提案',
+            sample: 'レビューしたい文章をここに入力してください。\n\nAIが文法・表現・構成の改善点を提案します。',
+            pipeline: 'レビュー'
+        },
+        {
+            id: 'free',
+            label: '🆓 自由形式',
+            desc: 'テンプレートなしで自由に開始',
+            sample: '',
+            pipeline: ''
+        }
+    ],
+
+    sw_: { step: 0, tabName: '', templateId: 'free', content: '', pipelineName: '' },
+
+    showSetupWizard() {
+        this.sw_ = { step: 0, tabName: 'プロジェクト ' + new Date().toLocaleDateString('ja'), templateId: 'free', content: '', pipelineName: '' };
+        document.getElementById('setup-wizard-modal').classList.add('visible');
+        this.swRender();
+    },
+
+    closeSetupWizard() {
+        document.getElementById('setup-wizard-modal').classList.remove('visible');
+    },
+
+    swRender() {
+        const s = this.sw_;
+        const total = 4;
+        const cur = s.step;
+
+        // Progress dots
+        document.getElementById('sw-progress').innerHTML =
+            Array.from({length: total}, (_, i) =>
+                `<span class="wizard-dot${i === cur ? ' active' : i < cur ? ' done' : ''}"></span>`
+            ).join('');
+
+        const body = document.getElementById('sw-body');
+        const nextBtn = document.getElementById('sw-next');
+
+        if (cur === 0) {
+            // Step 1: テンプレート選択 + プロジェクト名
+            body.innerHTML = `
+                <div class="wizard-icon">🚀</div>
+                <h2 class="wizard-title">何を始めますか？</h2>
+                <div class="sw-field">
+                    <label class="sw-label">プロジェクト名</label>
+                    <input type="text" id="sw-tab-name" class="sw-input" value="${this.escapeHtml(s.tabName)}" placeholder="例: 翻訳プロジェクト">
+                </div>
+                <div class="sw-label" style="margin:14px 0 8px">テンプレートを選択</div>
+                <div class="sw-templates">${
+                    this.SW_TEMPLATES.map(t => `
+                        <div class="sw-template${s.templateId === t.id ? ' selected' : ''}" onclick="app.swSelectTemplate('${t.id}')">
+                            <div class="sw-template-label">${t.label}</div>
+                            <div class="sw-template-desc">${t.desc}</div>
+                        </div>`).join('')
+                }</div>`;
+            nextBtn.textContent = '次へ →';
+            nextBtn.onclick = () => {
+                const nameEl = document.getElementById('sw-tab-name');
+                this.sw_.tabName = nameEl ? nameEl.value.trim() || 'プロジェクト' : 'プロジェクト';
+                const tmpl = this.SW_TEMPLATES.find(t => t.id === this.sw_.templateId) || this.SW_TEMPLATES[3];
+                if (!this.sw_.content) this.sw_.content = tmpl.sample;
+                this.sw_.pipelineName = tmpl.pipeline;
+                this.swNext();
+            };
+
+        } else if (cur === 1) {
+            // Step 2: コンテンツ入力
+            body.innerHTML = `
+                <div class="wizard-icon">📄</div>
+                <h2 class="wizard-title">最初のコンテンツを入力</h2>
+                <p class="wizard-text" style="margin-bottom:10px">処理したいテキストを入力・貼り付けてください。後から変更できます。</p>
+                <textarea id="sw-content" class="sw-textarea" placeholder="テキストをここに入力...">${this.escapeHtml(s.content)}</textarea>
+                <div class="sw-hint">💡 画像・PDFなどは後からノードにドロップして追加できます</div>`;
+            nextBtn.textContent = '次へ →';
+            nextBtn.onclick = () => {
+                const el = document.getElementById('sw-content');
+                this.sw_.content = el ? el.value : '';
+                this.swNext();
+            };
+
+        } else if (cur === 2) {
+            // Step 3: パイプライン選択
+            const pipelines = (this.state.pipelines || []).map(p => p.name);
+            const hasPipelines = pipelines.length > 0;
+            body.innerHTML = `
+                <div class="wizard-icon">🔧</div>
+                <h2 class="wizard-title">パイプラインを選択（任意）</h2>
+                <p class="wizard-text" style="margin-bottom:12px">作成後にすぐ実行するパイプラインを選べます。</p>
+                <div class="sw-pipeline-list">
+                    <div class="sw-pipeline-item${!s.pipelineName ? ' selected' : ''}" onclick="app.swSelectPipeline('')">
+                        <span>⏭ スキップ（後で実行）</span>
+                    </div>
+                    ${hasPipelines ? pipelines.map(name => `
+                        <div class="sw-pipeline-item${s.pipelineName === name ? ' selected' : ''}" onclick="app.swSelectPipeline('${this.escapeHtml(name)}')">
+                            <span>🔧 ${this.escapeHtml(name)}</span>
+                        </div>`).join('') : `<div class="sw-hint" style="margin-top:8px">⚠ パイプラインがまだありません。<br>スキップしてノード作成後に設定できます。</div>`}
+                </div>`;
+            nextBtn.textContent = '確認 →';
+            nextBtn.onclick = () => this.swNext();
+
+        } else if (cur === 3) {
+            // Step 4: 確認
+            const tmpl = this.SW_TEMPLATES.find(t => t.id === s.templateId);
+            const preview = s.content ? s.content.slice(0, 80) + (s.content.length > 80 ? '…' : '') : '（空）';
+            body.innerHTML = `
+                <div class="wizard-icon">✅</div>
+                <h2 class="wizard-title">準備完了！</h2>
+                <div class="sw-summary">
+                    <div class="sw-summary-row"><span class="sw-summary-label">プロジェクト名</span><span>${this.escapeHtml(s.tabName)}</span></div>
+                    <div class="sw-summary-row"><span class="sw-summary-label">テンプレート</span><span>${tmpl ? tmpl.label : '自由形式'}</span></div>
+                    <div class="sw-summary-row"><span class="sw-summary-label">コンテンツ</span><span class="sw-summary-preview">${this.escapeHtml(preview)}</span></div>
+                    <div class="sw-summary-row"><span class="sw-summary-label">パイプライン</span><span>${s.pipelineName ? '🔧 ' + this.escapeHtml(s.pipelineName) : 'スキップ'}</span></div>
+                </div>`;
+            nextBtn.textContent = '🚀 作成する';
+            nextBtn.onclick = () => this.swCreate();
+        }
+
+        document.getElementById('sw-prev').style.visibility = cur === 0 ? 'hidden' : '';
+        document.getElementById('sw-cancel').style.display = cur === 3 ? 'none' : '';
+    },
+
+    swSelectTemplate(id) {
+        this.sw_.templateId = id;
+        const tmpl = this.SW_TEMPLATES.find(t => t.id === id) || this.SW_TEMPLATES[3];
+        this.sw_.content = tmpl.sample;
+        this.sw_.pipelineName = tmpl.pipeline;
+        this.swRender();
+    },
+
+    swSelectPipeline(name) {
+        this.sw_.pipelineName = name;
+        this.swRender();
+    },
+
+    swNext() {
+        if (this.sw_.step < 3) { this.sw_.step++; this.swRender(); }
+    },
+
+    swPrev() {
+        if (this.sw_.step > 0) { this.sw_.step--; this.swRender(); }
+    },
+
+    swCreate() {
+        const s = this.sw_;
+        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str || ''); } };
+
+        // Build root node with content
+        const rootNode = {
+            title: safeB64(s.tabName),
+            content: safeB64(s.content),
+            mimetype: 'text/plain',
+            attachments: [],
+            children: []
+        };
+
+        // Create new tab in state
+        const fileName = 'setup_' + Date.now() + '.json';
+        const tab = { name: s.tabName, file: fileName, root: rootNode };
+        this.state.tabs.push(tab);
+        this.state.activeTab = this.state.tabs.length - 1;
+        this.state.currentNodePath = '';
+
+        // Save via bridge
+        this.postMessage({ type: 'save_node', payload: { tabFile: fileName, root: rootNode } });
+
+        // Also save session
+        this.postMessage({ type: 'save_session', payload: {
+            tabs: this.state.tabs.map(t => ({ name: t.name, file: t.file }))
+        }});
+
+        this.renderTabs();
+        this.renderTree();
+        this.renderList();
+        this.loadEditor('');
+        this.closeSetupWizard();
+        this.addLog(`🚀 プロジェクト "${s.tabName}" を作成しました`);
+
+        // Run pipeline if selected
+        if (s.pipelineName) {
+            setTimeout(() => this.runPipeline(s.pipelineName), 300);
+        }
+    },
+
     // ── Hint tooltips ──────────────────────────────────────────────
     setupHints() {
         const tooltip = document.getElementById('hint-tooltip');

@@ -25,6 +25,7 @@
         <span class="spacer"></span>
         <input type="text" id="search-box" placeholder="Search..." oninput="app.search(this.value)">
         <button onclick="app.toggleTestMode()" id="btn-test-mode">🧪 <span data-i18n="Test">Test</span></button>
+        <button id="btn-setup" onclick="app.showSetupWizard()" data-hint="セットアップウィザード — 新しいプロジェクトをすぐに開始">🚀</button>
         <button id="btn-help" onclick="app.showWizard()" data-hint="使い方ガイドを表示 (F1)">❓</button>
     </div>
     <div id="tab-bar"></div>
@@ -79,6 +80,21 @@
 </div>
 <!-- Hint Tooltip -->
 <div id="hint-tooltip" class="hint-tooltip" style="display:none"></div>
+
+<!-- Setup Wizard Modal -->
+<div id="setup-wizard-modal" class="modal">
+    <div class="modal-content wizard-content setup-wizard-content">
+        <div class="wizard-progress" id="sw-progress"></div>
+        <div class="wizard-body" id="sw-body"></div>
+        <div class="wizard-footer">
+            <button id="sw-cancel" onclick="app.closeSetupWizard()">キャンセル</button>
+            <div class="wizard-nav">
+                <button id="sw-prev" onclick="app.swPrev()">← 前へ</button>
+                <button id="sw-next" class="btn-primary">次へ →</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Wizard Modal -->
 <div id="wizard-modal" class="modal">
