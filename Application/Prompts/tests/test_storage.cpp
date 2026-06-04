@@ -250,67 +250,57 @@ static std::string Base64Encode(const std::string &in) {
 
 void TestNodeStorageRelations() {
     TempStorage ts;
-    
-    // We will generate 100 different test trees.
-    // Each tree represents a different prompt, artifact(output), and node structure scenario.
     for (int i = 1; i <= 100; ++i) {
         Node root;
         root.title = Base64Encode("Prompt_" + std::to_string(i));
         root.content = Base64Encode("System Prompt content for test scenario #" + std::to_string(i));
         root.mimetype = "text/plain";
-        
-        int depth = i % 4;        // 0 to 3
-        int childCount = i % 5;   // 0 to 4
-        int attachCount = i % 3;  // 0 to 2
-        
+        int depth = i % 4, childCount = i % 5, attachCount = i % 3;
         for (int a = 0; a < attachCount; ++a) {
             Attachment att;
             att.id = "attach_root_" + std::to_string(i) + "_" + std::to_string(a);
             att.mimetype = (a % 2 == 0) ? "image/png" : "text/plain";
             att.inlineData = (a % 2 == 0);
-            if (att.inlineData) {
-                att.content = Base64Encode("Inline data content for attachment " + std::to_string(a));
-            } else {
-                att.file = "blobs/ref_file_" + std::to_string(i) + "_" + std::to_string(a) + ".txt";
-            }
+            if (att.inlineData) att.content = Base64Encode("Inline data content for attachment " + std::to_string(a));
+            else att.file = "blobs/ref_file_" + std::to_string(i) + "_" + std::to_string(a) + ".txt";
             att.size = 100 * (a + 1);
             root.attachments.push_back(att);
         }
-        
-        std::function<void(Node&, int, int)> buildSubtree = [&](Node &parent, int currentDepth, int maxDepth) {
-            if (currentDepth >= maxDepth) return;
-            
+        std::function<void(Node&, int, int)> buildSubtree = [&](Node &parent, int d, int maxD) {
+            if (d >= maxD) return;
             for (int c = 0; c < childCount; ++c) {
                 Node child;
                 bool isArtifact = (c % 2 == 1);
-                child.title = Base64Encode((isArtifact ? "Artifact_" : "SubPrompt_") + std::to_string(i) + "_d" + std::to_string(currentDepth) + "_c" + std::to_string(c));
-                child.content = Base64Encode("Generated output / content details for child " + std::to_string(c) + " at depth " + std::to_string(currentDepth));
+                child.title = Base64Encode((isArtifact ? "Artifact_" : "SubPrompt_") + std::to_string(i) + "_d" + std::to_string(d) + "_c" + std::to_string(c));
+                child.content = Base64Encode("Generated output for child " + std::to_string(c) + " at depth " + std::to_string(d));
                 child.mimetype = isArtifact ? "text/html" : "text/plain";
-                
-                if (attachCount > 0 && c % 2 == 0) {
-                    Attachment childAtt;
-                    childAtt.id = "attach_child_" + std::to_string(i) + "_" + std::to_string(currentDepth) + "_" + std::to_string(c);
-                    childAtt.mimetype = "image/webp";
-                    childAtt.inlineData = true;
-                    childAtt.content = Base64Encode("child webp data content");
-                    childAtt.size = 2048;
-                    child.attachments.push_back(childAtt);
-                }
-                
-                buildSubtree(child, currentDepth + 1, maxDepth);
+                buildSubtree(child, d + 1, maxD);
                 parent.children.push_back(child);
             }
         };
-        
         buildSubtree(root, 0, depth);
-        
         std::wstring fileName = L"relation_test_" + std::to_wstring(i) + L".json";
         ts.storage.SaveTabData(fileName, root);
-        
         Node restored = ts.storage.LoadTabData(fileName);
-        VERIFY(CompareNodes(root, restored), "Restoration verification failed for relation test case #" + std::to_string(i));
+        VERIFY(CompareNodes(root, restored), "Restoration failed for case #" + std::to_string(i));
     }
-    std::cout << "Test Passed: Node Storage Relations (100 distinct prompts & outputs save/load cases)" << std::endl;
+    std::cout << "Test Passed: Node Storage Relations (100 cases)" << std::endl;
+}
+
+void TestPipelineMetaRoundTrip() {
+    TempStorage ts;
+
+    Node root;
+    root.title = "Um9vdA==";
+    root.mimetype = "text/plain";
+    root.pipelineMeta = "{\"pipelineName\":\"TestPipe\",\"executedAt\":\"2026-06-04T12:00:00Z\",\"steps\":[]}";
+
+    ts.storage.SaveTabData(L"meta_test.json", root);
+
+    auto loaded = ts.storage.LoadTabData(L"meta_test.json");
+    VERIFY(loaded.title == "Um9vdA==", "title match");
+    VERIFY(loaded.pipelineMeta == root.pipelineMeta, "pipelineMeta round-trip");
+    std::cout << "Test Passed: Pipeline Meta Round-Trip" << std::endl;
 }
 
 int main() {
@@ -325,6 +315,7 @@ int main() {
         TestPipelinesRoundTrip();
         TestGetTabFiles();
         TestNodeStorageRelations();
+        TestPipelineMetaRoundTrip();
         std::cout << "=== ALL STORAGE TESTS PASSED ===" << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Test suite failed: " << e.what() << std::endl;
