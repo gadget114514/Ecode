@@ -10,7 +10,9 @@ const app = {
         pipelineRunning: false,
         testMode: false,
         translations: {},
-        searchTimeout: null
+        searchTimeout: null,
+        navHistory: [],   // [{tabIndex, path}]
+        navFuture: []     // [{tabIndex, path}]
     },
 
     init() {
@@ -29,7 +31,27 @@ const app = {
         switch (msg.type) {
             case 'init':
                 this.state.language = msg.payload.language || 'en';
+                this.state.embedded = msg.payload.embedded || false;
                 this.loadLanguage(this.state.language);
+                if (msg.payload.tabs && msg.payload.tabs.length > 0) {
+                    this.state.tabs = msg.payload.tabs.map(t => ({
+                        name: t.name,
+                        file: t.file,
+                        root: (msg.payload.nodes && msg.payload.nodes[t.file])
+                              || { title:'', content:'', mimetype:'text/plain', attachments:[], children:[] }
+                    }));
+                    this.renderTabs();
+                    this.renderTree();
+                    this.renderList();
+                }
+                if (msg.payload.pipelines) {
+                    this.state.pipelines = msg.payload.pipelines;
+                }
+                if (this.state.embedded) {
+                    const hb = document.getElementById('btn-hamburger');
+                    if (hb) hb.style.display = '';
+                }
+                this.addLog('✅ App ready');
                 break;
             case 'node_updated':
                 this.updateNodeUI(msg.payload);
@@ -58,6 +80,22 @@ const app = {
             case 'open_file_dialog_result':
                 this.onFileSelected(msg.payload);
                 break;
+            case 'pipeline_completed':
+                this.onPipelineCompleted(msg.payload);
+                break;
+            case 'manual_step_pause':
+                this.showManualStep(msg.payload);
+                break;
+            case 'providers_result':
+                this.state.providers = msg.payload || {};
+                this.onProvidersResult(this.state.providers);
+                break;
+        }
+    },
+
+    postMessage(obj) {
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.postMessage(obj);
         }
     },
 
@@ -157,7 +195,232 @@ const app = {
 
     saveFile() { this.addLog('💾 Save requested'); },
     saveFileAs() { this.addLog('💾 Save As requested'); },
-    showConfig() { this.showModal('config-modal'); },
+    onPipelineCompleted(meta) {
+        this.state.pipelineRunning = false;
+        this.addLog(`✅ Pipeline "${meta.pipelineName}" completed`);
+
+        const safeB64 = str => {
+            try { return btoa(unescape(encodeURIComponent(str))); }
+            catch { return btoa(str); }
+        };
+
+        const outputNode = {
+            title: safeB64(meta.pipelineName + ' — ' + (meta.executedAt || '').replace('T',' ').replace('Z','')),
+            content: safeB64(meta.outputContent || ''),
+            mimetype: 'text/plain',
+            attachments: [],
+            children: [],
+            pipelineMeta: JSON.stringify(meta)
+        };
+
+        const tab = this.state.tabs[this.state.activeTab];
+        const currentNode = this.getNodeByPath(this.state.currentNodePath);
+        if (tab && currentNode) {
+            if (!currentNode.children) currentNode.children = [];
+            currentNode.children.push(outputNode);
+            this.renderTree();
+            this.renderList();
+            if (tab.file && tab.root) {
+                this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+            }
+            this.addLog(`📦 Child node saved: "${meta.pipelineName}"`);
+        }
+    },
+
+    renderPipelineMeta(node) {
+        const el = document.getElementById('pipeline-meta-panel');
+        if (!el) return;
+        if (!node || !node.pipelineMeta) { el.style.display = 'none'; return; }
+
+        let meta;
+        try { meta = JSON.parse(node.pipelineMeta); } catch { el.style.display = 'none'; return; }
+
+        el.style.display = '';
+        const stepsHtml = (meta.steps || []).map((s, i) => `
+            <div class="meta-step">
+                <span class="meta-step-num">${i + 1}</span>
+                <span class="meta-step-name">${this.escapeHtml(s.name)}</span>
+                <span class="meta-step-type">${this.escapeHtml(s.type)}</span>
+                ${s.provider ? `<span class="meta-step-provider">${this.escapeHtml(s.provider)}</span>` : ''}
+                ${s.model    ? `<span class="meta-step-model">${this.escapeHtml(s.model)}</span>` : ''}
+                ${s.tokens   ? `<span class="meta-step-tokens">${s.tokens} tok</span>` : ''}
+            </div>`).join('');
+
+        el.innerHTML = `
+            <div class="meta-header">
+                <span class="meta-pipeline-name">📋 ${this.escapeHtml(meta.pipelineName)}</span>
+                <span class="meta-date">${(meta.executedAt||'').replace('T',' ').replace('Z','')}</span>
+                <button class="meta-reproduce-btn" onclick="app.reproducePipeline(${this.escapeHtml(JSON.stringify(meta.pipelineName))})">▶ 再実行</button>
+            </div>
+            <div class="meta-steps">${stepsHtml}</div>`;
+    },
+
+    reproducePipeline(pipelineName) {
+        if (!this.state.currentNode) { this.addLog('⚠ ノードを選択してください'); return; }
+        const content = this.state.currentNode.content
+            ? decodeURIComponent(escape(atob(this.state.currentNode.content))) : '';
+        const tab = this.state.tabs[this.state.activeTab];
+        this.postMessage({
+            type: 'run_pipeline',
+            payload: {
+                pipelineName,
+                nodeId: this.state.currentNodeId || '',
+                tabFile: tab ? tab.file : '',
+                content
+            }
+        });
+        this.state.pipelineRunning = true;
+        this.addLog(`▶ Reproducing pipeline "${pipelineName}"...`);
+    },
+
+    showManualStep(payload) {
+        const { index, mode, prompt, content, choices } = payload;
+        const modal = document.getElementById('manual-modal');
+        document.getElementById('manual-step-badge').textContent = `Step ${index + 1}`;
+        document.getElementById('manual-prompt').textContent = prompt || '';
+        document.getElementById('manual-prompt').style.display = prompt ? '' : 'none';
+
+        const body = document.getElementById('manual-body');
+        const actions = document.getElementById('manual-actions');
+
+        if (mode === 'view') {
+            document.getElementById('manual-title').textContent = '確認';
+            body.innerHTML = `<div class="manual-view-content">${this.escapeHtml(content)}</div>`;
+            actions.innerHTML = `
+                <button class="btn-primary" onclick="app.resumeManual(null)">Continue</button>
+                <button onclick="app.cancelManual()">Cancel</button>`;
+
+        } else if (mode === 'edit') {
+            document.getElementById('manual-title').textContent = '編集';
+            body.innerHTML = `<textarea id="manual-edit-area" class="manual-textarea">${this.escapeHtml(content)}</textarea>`;
+            actions.innerHTML = `
+                <button class="btn-primary" onclick="app.resumeManual(document.getElementById('manual-edit-area').value)">Continue</button>
+                <button onclick="app.cancelManual()">Cancel</button>`;
+
+        } else if (mode === 'compare') {
+            document.getElementById('manual-title').textContent = '比較選択';
+            const branches = payload.branches || [];
+            body.innerHTML = `<div class="compare-grid">${
+                branches.map(b => `
+                    <div class="compare-card">
+                        <div class="compare-card-name">${this.escapeHtml(b.name)}</div>
+                        <div class="compare-card-content">${this.escapeHtml(b.content)}</div>
+                        <button class="btn-primary compare-select-btn"
+                            onclick="app.resumeManual(${JSON.stringify(b.content)})">✓ これを選ぶ</button>
+                    </div>`).join('')
+            }</div>`;
+            actions.innerHTML = `<button onclick="app.cancelManual()">Cancel</button>`;
+
+        } else if (mode === 'select') {
+            document.getElementById('manual-title').textContent = '選択';
+            // Show content preview if any
+            body.innerHTML = content
+                ? `<div class="manual-view-content">${this.escapeHtml(content)}</div>`
+                : '';
+            // Build choice buttons
+            const list = (choices && choices.length) ? choices : [
+                { label: 'Continue', action: 'next_step' },
+                { label: 'Cancel',   action: 'cancel' }
+            ];
+            actions.innerHTML = list.map(c =>
+                `<button class="${c.action === 'cancel' ? '' : 'btn-primary'}"
+                    onclick="app.resumeManualChoice(${JSON.stringify(c)})"
+                >${this.escapeHtml(c.label)}</button>`
+            ).join('');
+        }
+
+        modal.classList.add('visible');
+        this.addLog(`⏸ Manual step ${index + 1} — waiting for user (${mode})`);
+    },
+
+    resumeManual(content) {
+        document.getElementById('manual-modal').classList.remove('visible');
+        this.postMessage({ type: 'manual_step_resume', payload: { content: content ?? '' } });
+    },
+
+    resumeManualChoice(choice) {
+        document.getElementById('manual-modal').classList.remove('visible');
+        if (choice.action === 'cancel') {
+            this.postMessage({ type: 'manual_step_cancel' });
+        } else {
+            this.postMessage({ type: 'manual_step_resume', payload: { content: choice.label, action: choice.action, gotoStep: choice.index } });
+        }
+    },
+
+    cancelManual() {
+        document.getElementById('manual-modal').classList.remove('visible');
+        this.postMessage({ type: 'manual_step_cancel' });
+    },
+
+    escapeHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    },
+
+    showConfig() {
+        const modal = document.getElementById('config-modal');
+        modal.classList.add('visible');
+        this.onProvidersResult(this.state.providers || {});
+        this.postMessage({ type: 'get_providers' });
+    },
+
+    closeConfig() {
+        document.getElementById('config-modal').classList.remove('visible');
+    },
+
+    switchConfigTab(name, btn) {
+        document.querySelectorAll('.config-tab-panel').forEach(p => p.style.display = 'none');
+        document.querySelectorAll('.config-tab').forEach(b => b.classList.remove('active'));
+        document.getElementById('config-tab-' + name).style.display = '';
+        btn.classList.add('active');
+    },
+
+    onProvidersResult(providers) {
+        const PROVIDERS = [
+            { id: 'openai',    label: 'OpenAI',    defaultUrl: 'https://api.openai.com/v1' },
+            { id: 'anthropic', label: 'Anthropic',  defaultUrl: 'https://api.anthropic.com' },
+            { id: 'gemini',    label: 'Gemini',     defaultUrl: 'https://generativelanguage.googleapis.com' },
+            { id: 'ollama',    label: 'Ollama',     defaultUrl: 'http://localhost:11434' },
+        ];
+        const list = document.getElementById('provider-list');
+        if (!list) return;
+        list.innerHTML = PROVIDERS.map(p => {
+            const cfg = providers[p.id] || {};
+            return `<div class="provider-item">
+                <div class="provider-name">${p.label}</div>
+                <label>API Key</label>
+                <div class="api-key-row">
+                    <input type="password" id="key-${p.id}" value="${this.escapeHtml(cfg.apiKey||'')}" placeholder="sk-...">
+                    <button type="button" onclick="app.toggleKeyVisible('key-${p.id}',this)">👁</button>
+                </div>
+                <label>Base URL</label>
+                <input type="text" id="url-${p.id}" value="${this.escapeHtml(cfg.baseUrl||p.defaultUrl)}" placeholder="${this.escapeHtml(p.defaultUrl)}">
+            </div>`;
+        }).join('');
+    },
+
+    toggleKeyVisible(id, btn) {
+        const inp = document.getElementById(id);
+        if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+        else { inp.type = 'password'; btn.textContent = '👁'; }
+    },
+
+    saveProviders() {
+        const ids = ['openai','anthropic','gemini','ollama'];
+        const providers = {};
+        ids.forEach(id => {
+            providers[id] = {
+                apiKey:  document.getElementById('key-' + id)?.value || '',
+                baseUrl: document.getElementById('url-' + id)?.value || '',
+            };
+        });
+        this.postMessage({ type: 'save_providers', payload: providers });
+        this.closeConfig();
+        this.addLog('✅ Provider settings saved.');
+    },
+
+    testConnection() {
+        this.addLog('🔌 Test connection not yet implemented.');
+    },
 
     // Tree rendering
     renderTree() {
@@ -170,11 +433,12 @@ const app = {
 
     buildTreeHTML(node, path) {
         let html = '';
-        const display = node.title ? atob(node.title) : this.getTitleFallback(node);
+        const display = this.escapeHtml(node.title ? atob(node.title) : this.getTitleFallback(node));
+        const safePath = this.escapeHtml(path);
         const hasChildren = node.children && node.children.length > 0;
-        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') + 
+        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') +
                     (this.state.currentNodePath === path ? ' selected' : '');
-        html += `<div class="${cls}" onclick="app.selectNode('${path}')">${display}</div>`;
+        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')">${display}</div>`;
         if (hasChildren) {
             html += '<div style="padding-left:16px">';
             node.children.forEach((child, i) => {
@@ -198,7 +462,56 @@ const app = {
         return '(empty)';
     },
 
+    // --- Navigation history ---
+    pushNav() {
+        const cur = { tabIndex: this.state.activeTab, path: this.state.currentNodePath };
+        // Don't push duplicate of last entry
+        const last = this.state.navHistory[this.state.navHistory.length - 1];
+        if (last && last.tabIndex === cur.tabIndex && last.path === cur.path) return;
+        this.state.navHistory.push(cur);
+        if (this.state.navHistory.length > 100) this.state.navHistory.shift();
+        this.state.navFuture = [];
+        this.updateNavButtons();
+    },
+
+    navBack() {
+        if (this.state.navHistory.length === 0) return;
+        this.state.navFuture.push({ tabIndex: this.state.activeTab, path: this.state.currentNodePath });
+        const entry = this.state.navHistory.pop();
+        this.updateNavButtons();
+        this.gotoNavEntry(entry);
+    },
+
+    navForward() {
+        if (this.state.navFuture.length === 0) return;
+        this.state.navHistory.push({ tabIndex: this.state.activeTab, path: this.state.currentNodePath });
+        const entry = this.state.navFuture.pop();
+        this.updateNavButtons();
+        this.gotoNavEntry(entry);
+    },
+
+    gotoNavEntry(entry) {
+        if (entry.tabIndex !== this.state.activeTab) {
+            this.state.activeTab = entry.tabIndex;
+            this.renderTabs();
+            this.renderTree();
+        }
+        this.state.currentNodePath = entry.path;
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(entry.path);
+    },
+
+    updateNavButtons() {
+        const back = document.getElementById('btn-nav-back');
+        const fwd  = document.getElementById('btn-nav-fwd');
+        if (back) back.disabled = this.state.navHistory.length === 0;
+        if (fwd)  fwd.disabled  = this.state.navFuture.length  === 0;
+    },
+    // --- end navigation history ---
+
     selectNode(path) {
+        this.pushNav();
         this.state.currentNodePath = path;
         this.renderTree();
         this.renderList();
@@ -212,7 +525,7 @@ const app = {
         const node = this.getNodeByPath(this.state.currentNodePath);
         if (!node || !node.children) { el.innerHTML = '<div class="empty">Select a node</div>'; return; }
         el.innerHTML = node.children.map((child, i) => {
-            const display = child.title ? atob(child.title) : this.getTitleFallback(child);
+            const display = this.escapeHtml(child.title ? atob(child.title) : this.getTitleFallback(child));
             return `<div class="list-item" ondblclick="app.copyItemText(${i})">
                 <span>${display}</span>
                 <button class="copy-btn" onclick="app.copyItemText(${i})">📋</button>
@@ -260,6 +573,7 @@ const app = {
             contentEl.value = node.content ? atob(node.content) : '';
         }
         this.renderAttachments(node);
+        this.renderPipelineMeta(node);
     },
 
     renderAttachments(node) {
@@ -283,12 +597,15 @@ const app = {
         if (!node) return;
         const title = document.getElementById('node-title');
         const content = document.getElementById('node-content');
-        if (title) node.title = btoa(title.value);
-        if (content && node.mimetype === 'text/plain') {
-            node.content = btoa(content.value);
-        }
+        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
+        if (title) node.title = safeB64(title.value);
+        if (content && node.mimetype === 'text/plain') node.content = safeB64(content.value);
         this.renderTree();
         this.renderList();
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && tab.file && tab.root) {
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+        }
         this.addLog('💾 Node updated');
     },
 
@@ -347,11 +664,24 @@ const app = {
     },
 
     // Pipeline
-    runPipeline() {
-        if (this.state.pipelineRunning) return;
-        window.chrome.webview.postMessage({ type: 'run_pipeline', pipelineName: '', nodeId: '' });
+    runPipeline(pipelineName) {
+        if (this.state.pipelineRunning) { this.addLog('⚠ Pipeline already running'); return; }
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) { this.addLog('⚠ ノードを選択してください'); return; }
+        if (!pipelineName && this.state.pipelines && this.state.pipelines.length > 0) {
+            pipelineName = this.state.pipelines[0].name;
+        }
+        if (!pipelineName) { this.addLog('⚠ パイプラインが未定義です'); return; }
+        const content = node.content ? (() => { try { return decodeURIComponent(escape(atob(node.content))); } catch { return atob(node.content); } })() : '';
+        const tab = this.state.tabs[this.state.activeTab];
+        this.postMessage({ type: 'run_pipeline', payload: {
+            pipelineName,
+            nodeId:   this.state.currentNodePath || '',
+            tabFile:  tab ? tab.file : '',
+            content
+        }});
         this.state.pipelineRunning = true;
-        this.addLog('▶ Pipeline started');
+        this.addLog(`▶ Pipeline "${pipelineName}" started`);
     },
 
     cancelPipeline() {
@@ -440,6 +770,8 @@ const app = {
     handleKey(e) {
         if (e.ctrlKey && e.key === 's') { e.preventDefault(); this.saveFile(); }
         if (e.ctrlKey && e.key === 'f') { e.preventDefault(); document.getElementById('search-box')?.focus(); }
+        if (e.altKey && e.key === 'ArrowLeft')  { e.preventDefault(); this.navBack(); }
+        if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); this.navForward(); }
     }
 };
 
