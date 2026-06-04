@@ -4,6 +4,7 @@
 #include <sstream>
 #include <algorithm>
 #include <ctime>
+#include <thread>
 
 PipelineRunner::PipelineRunner() {}
 PipelineRunner::~PipelineRunner() { Cancel(); }
@@ -189,6 +190,109 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
                 ",\"choices\":" + choicesJson + "}");
         }
         return; // wait for ResumeManual()
+
+    } else if (type == "command") {
+        std::string cmd       = step.params.count("command")    ? step.params.at("command")    : "";
+        std::string argsStr   = step.params.count("args")       ? step.params.at("args")       : "[]";
+        std::string workDir   = step.params.count("workingDir") ? step.params.at("workingDir") : "";
+        std::string resultAs  = step.params.count("resultAs")   ? step.params.at("resultAs")   : "text";
+        int timeoutSec        = step.params.count("timeout")    ? std::stoi(step.params.at("timeout")) : 60;
+
+        // Resolve current content
+        std::string content = currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()
+                              ? historySteps_[currentStepIndex_ - 1].output : inputContent_;
+
+        // Build argument list from JSON array string
+        std::vector<std::string> args;
+        auto argsVal = JsonValue::parse(argsStr);
+        for (auto &a : argsVal.array()) args.push_back(a.string());
+
+        int stepIdx = currentStepIndex_;
+
+        std::thread([this, cmd, args, workDir, content, resultAs, timeoutSec, stepIdx]() {
+            // Write content to temp file for {content_file} placeholder
+            wchar_t tempDir[MAX_PATH], tempFile[MAX_PATH] = {};
+            GetTempPathW(MAX_PATH, tempDir);
+            GetTempFileNameW(tempDir, L"pro", 0, tempFile);
+            {
+                HANDLE hf = CreateFileW(tempFile, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+                if (hf != INVALID_HANDLE_VALUE) {
+                    DWORD written;
+                    WriteFile(hf, content.c_str(), (DWORD)content.size(), &written, nullptr);
+                    CloseHandle(hf);
+                }
+            }
+            std::string tempFileA;
+            { int n = WideCharToMultiByte(CP_UTF8,0,tempFile,-1,nullptr,0,nullptr,nullptr);
+              tempFileA.resize(n); WideCharToMultiByte(CP_UTF8,0,tempFile,-1,&tempFileA[0],n,nullptr,nullptr); }
+            if (!tempFileA.empty() && tempFileA.back() == '\0') tempFileA.pop_back();
+
+            // Build command line
+            auto replaceAll = [](std::string &s, const std::string &from, const std::string &to) {
+                size_t pos = 0;
+                while ((pos = s.find(from, pos)) != std::string::npos) { s.replace(pos, from.size(), to); pos += to.size(); }
+            };
+            std::string cmdLine = "\"" + cmd + "\"";
+            for (auto arg : args) {
+                replaceAll(arg, "{content_file}", tempFileA);
+                replaceAll(arg, "{content}", content);
+                replaceAll(arg, "{result}", content);
+                cmdLine += " \"" + arg + "\"";
+            }
+
+            // Create stdout pipe
+            HANDLE hRead, hWrite;
+            SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
+            CreatePipe(&hRead, &hWrite, &sa, 0);
+            SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+
+            STARTUPINFOA si = {};
+            si.cb = sizeof(si);
+            si.hStdOutput = hWrite;
+            si.hStdError  = hWrite;
+            si.dwFlags    = STARTF_USESTDHANDLES;
+
+            // Working directory
+            std::string wd = workDir;
+            replaceAll(wd, "%APPDATA%", getenv("APPDATA") ? getenv("APPDATA") : "");
+
+            PROCESS_INFORMATION pi = {};
+            bool launched = CreateProcessA(nullptr, &cmdLine[0], nullptr, nullptr, TRUE,
+                                            CREATE_NO_WINDOW, nullptr,
+                                            wd.empty() ? nullptr : wd.c_str(), &si, &pi) != 0;
+            CloseHandle(hWrite);
+
+            std::string output;
+            if (launched) {
+                char buf[4096]; DWORD read;
+                while (ReadFile(hRead, buf, sizeof(buf), &read, nullptr) && read > 0) {
+                    std::string chunk(buf, read);
+                    output += chunk;
+                    PostBridge("stream_chunk",
+                        "{\"stepIndex\":" + std::to_string(stepIdx) +
+                        ",\"text\":\"" + JsonEscape(chunk) + "\"}");
+                }
+                WaitForSingleObject(pi.hProcess, (DWORD)(timeoutSec * 1000));
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            } else {
+                output = "[command launch failed: " + cmd + "]";
+                PostBridge("stream_chunk",
+                    "{\"stepIndex\":" + std::to_string(stepIdx) +
+                    ",\"text\":\"" + JsonEscape(output) + "\"}");
+            }
+            CloseHandle(hRead);
+            DeleteFileW(tempFile);
+
+            // Store result
+            if (stepIdx < (int)historySteps_.size()) {
+                historySteps_[stepIdx].output = (resultAs == "text") ? output : "";
+                historySteps_[stepIdx].status = "completed";
+            }
+            PostBridge("step_done", "{\"index\":" + std::to_string(stepIdx) + "}");
+            RunNextStep();
+        }).detach();
+        return;
 
     } else if (type == "parallel") {
         auto branchesJsonStr = step.params.count("branches") ? step.params.at("branches") : "[]";

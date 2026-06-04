@@ -31,7 +31,27 @@ const app = {
         switch (msg.type) {
             case 'init':
                 this.state.language = msg.payload.language || 'en';
+                this.state.embedded = msg.payload.embedded || false;
                 this.loadLanguage(this.state.language);
+                if (msg.payload.tabs && msg.payload.tabs.length > 0) {
+                    this.state.tabs = msg.payload.tabs.map(t => ({
+                        name: t.name,
+                        file: t.file,
+                        root: (msg.payload.nodes && msg.payload.nodes[t.file])
+                              || { title:'', content:'', mimetype:'text/plain', attachments:[], children:[] }
+                    }));
+                    this.renderTabs();
+                    this.renderTree();
+                    this.renderList();
+                }
+                if (msg.payload.pipelines) {
+                    this.state.pipelines = msg.payload.pipelines;
+                }
+                if (this.state.embedded) {
+                    const hb = document.getElementById('btn-hamburger');
+                    if (hb) hb.style.display = '';
+                }
+                this.addLog('✅ App ready');
                 break;
             case 'node_updated':
                 this.updateNodeUI(msg.payload);
@@ -179,30 +199,31 @@ const app = {
         this.state.pipelineRunning = false;
         this.addLog(`✅ Pipeline "${meta.pipelineName}" completed`);
 
-        // Build output node with pipelineMeta embedded
+        const safeB64 = str => {
+            try { return btoa(unescape(encodeURIComponent(str))); }
+            catch { return btoa(str); }
+        };
+
         const outputNode = {
-            title: btoa(unescape(encodeURIComponent(
-                meta.pipelineName + ' — ' + (meta.executedAt || '').replace('T',' ').replace('Z','')
-            ))),
-            content: btoa(unescape(encodeURIComponent(meta.outputContent || ''))),
+            title: safeB64(meta.pipelineName + ' — ' + (meta.executedAt || '').replace('T',' ').replace('Z','')),
+            content: safeB64(meta.outputContent || ''),
             mimetype: 'text/plain',
             attachments: [],
             children: [],
             pipelineMeta: JSON.stringify(meta)
         };
 
-        // Insert as child of current node in state
         const tab = this.state.tabs[this.state.activeTab];
-        if (tab && this.state.currentNode) {
-            if (!this.state.currentNode.children) this.state.currentNode.children = [];
-            this.state.currentNode.children.push(outputNode);
+        const currentNode = this.getNodeByPath(this.state.currentNodePath);
+        if (tab && currentNode) {
+            if (!currentNode.children) currentNode.children = [];
+            currentNode.children.push(outputNode);
             this.renderTree();
             this.renderList();
-            // Save the tab
-            if (tab.file) {
+            if (tab.file && tab.root) {
                 this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
             }
-            this.addLog(`📦 Saved as child node of current selection`);
+            this.addLog(`📦 Child node saved: "${meta.pipelineName}"`);
         }
     },
 
@@ -575,12 +596,15 @@ const app = {
         if (!node) return;
         const title = document.getElementById('node-title');
         const content = document.getElementById('node-content');
-        if (title) node.title = btoa(title.value);
-        if (content && node.mimetype === 'text/plain') {
-            node.content = btoa(content.value);
-        }
+        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
+        if (title) node.title = safeB64(title.value);
+        if (content && node.mimetype === 'text/plain') node.content = safeB64(content.value);
         this.renderTree();
         this.renderList();
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && tab.file && tab.root) {
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+        }
         this.addLog('💾 Node updated');
     },
 
@@ -639,11 +663,24 @@ const app = {
     },
 
     // Pipeline
-    runPipeline() {
-        if (this.state.pipelineRunning) return;
-        window.chrome.webview.postMessage({ type: 'run_pipeline', pipelineName: '', nodeId: '' });
+    runPipeline(pipelineName) {
+        if (this.state.pipelineRunning) { this.addLog('⚠ Pipeline already running'); return; }
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) { this.addLog('⚠ ノードを選択してください'); return; }
+        if (!pipelineName && this.state.pipelines && this.state.pipelines.length > 0) {
+            pipelineName = this.state.pipelines[0].name;
+        }
+        if (!pipelineName) { this.addLog('⚠ パイプラインが未定義です'); return; }
+        const content = node.content ? (() => { try { return decodeURIComponent(escape(atob(node.content))); } catch { return atob(node.content); } })() : '';
+        const tab = this.state.tabs[this.state.activeTab];
+        this.postMessage({ type: 'run_pipeline', payload: {
+            pipelineName,
+            nodeId:   this.state.currentNodePath || '',
+            tabFile:  tab ? tab.file : '',
+            content
+        }});
         this.state.pipelineRunning = true;
-        this.addLog('▶ Pipeline started');
+        this.addLog(`▶ Pipeline "${pipelineName}" started`);
     },
 
     cancelPipeline() {
