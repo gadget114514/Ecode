@@ -478,16 +478,14 @@ void App::SendFullInit() {
 
     // Load pipelines
     auto pipelines = storage_.LoadPipelines();
-    std::string pipelinesJson = "[";
-    bool firstPipe = true;
-    for (auto &p : pipelines) {
-        if (!firstPipe) pipelinesJson += ",";
-        firstPipe = false;
-        pipelinesJson += "{\"name\":\"" + PipelineRunner::JsonEscape(p.name) + "\""
-                       + ",\"outputMode\":\"" + p.outputMode + "\""
-                       + ",\"mode\":\"" + p.mode + "\"}";
+    std::string pipelinesJson = Storage::SerializePipelines(pipelines);
+    // Strip outer {"pipelines":} wrapper, keep array only
+    auto pv = JsonValue::parse(pipelinesJson);
+    if (pv.has("pipelines")) {
+        pipelinesJson = pv["pipelines"].serialize();
+    } else {
+        pipelinesJson = "[]";
     }
-    pipelinesJson += "]";
 
     // Recent files
     recentFiles_ = storage_.LoadRecentFiles();
