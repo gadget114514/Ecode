@@ -18,6 +18,7 @@ struct Node {
     std::string mimetype;   // "text/plain" | "text/html" | "application/rtf" | "image/png" | "image/jpeg" | "image/webp"
     std::vector<Attachment> attachments;
     std::vector<Node> children;
+    std::string pipelineMeta; // JSON: how this node was created (empty if not pipeline-generated)
 };
 
 struct TabData {
