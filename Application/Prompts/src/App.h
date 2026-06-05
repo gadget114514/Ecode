@@ -8,6 +8,8 @@
 #include "Storage.h"
 #include "PipelineRunner.h"
 #include "PromptsLocalization.h"
+#include "NodeData.h"
+#include "JsonParser.h"
 
 #include <WebView2.h>
 // ICoreWebView2 and ICoreWebView2Controller are defined in WebView2.h
@@ -61,6 +63,12 @@ private:
     
     // Helpers
     std::wstring GetAppDataPath();
+    static Node NodeFromJson(const JsonValue &val);
+    void SendFullInit();
+
+    // Pipeline run context
+    std::string inputNodeId_;
+    std::string inputTabFile_;
     
     // Window class
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
