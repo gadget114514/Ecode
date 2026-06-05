@@ -4,6 +4,9 @@
 #include "Base64.h"
 #include <shlobj.h>
 #include <commctrl.h>
+#include <commdlg.h>
+#include <shellapi.h>
+#include <algorithm>
 #include <richedit.h>
 #include <ole2.h>
 #include <wrl/client.h>
@@ -20,6 +23,9 @@ using namespace Microsoft::WRL;
 
 App::App() {
     runner_.SetBridgeCallback([this](const std::string &type, const std::string &json) {
+        if (type == "pipeline_completed") {
+            storage_.SaveHistory(json);
+        }
         bridge_.PostToJS(type, json);
     });
     bridge_.SetHandler([this](const std::string &type, const std::string &payload) {
@@ -94,6 +100,9 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_CLOSE:
         DestroyWindow(hwnd_);
         return 0;
+    case WM_COMMAND:
+        OnCommand(LOWORD(wParam));
+        return 0;
     case WM_APP_WEBVIEW2_READY:
         if (wParam == 0) ShowFallbackUI();
         return 0;
@@ -103,7 +112,191 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 void App::OnCreate() {
-    // InitWebView2 is called from App::Run() after ShowWindow
+    if (!embedded_) CreateMenuBar();
+}
+
+void App::CreateMenuBar() {
+    HMENU hMenu = LoadMenuW(hInst_, MAKEINTRESOURCEW(IDR_MENU_MAIN));
+    if (hMenu) SetMenu(hwnd_, hMenu);
+}
+
+void App::OnCommand(int id) {
+    switch (id) {
+    case ID_FILE_NEW:
+        bridge_.PostToJS("menu_command", "{\"action\":\"new_tab\"}");
+        break;
+    case ID_FILE_OPEN:
+        OpenFileDialog();
+        break;
+    case ID_FILE_SAVE:
+        bridge_.PostToJS("menu_command", "{\"action\":\"save\"}");
+        break;
+    case ID_FILE_SAVE_AS:
+        bridge_.PostToJS("menu_command", "{\"action\":\"save_as\"}");
+        break;
+    case ID_FILE_IMPORT_ZIP:
+        bridge_.PostToJS("menu_command", "{\"action\":\"import_zip\"}");
+        break;
+    case ID_FILE_EXPORT_NODE:
+        bridge_.PostToJS("menu_command", "{\"action\":\"export_node\"}");
+        break;
+    case ID_FILE_EXIT:
+        DestroyWindow(hwnd_);
+        break;
+    case ID_PIPELINE_RUN:
+        bridge_.PostToJS("menu_command", "{\"action\":\"run_pipeline\"}");
+        break;
+    case ID_PIPELINE_MANAGER:
+        bridge_.PostToJS("menu_command", "{\"action\":\"pipeline_manager\"}");
+        break;
+    case ID_PIPELINE_HISTORY:
+        bridge_.PostToJS("menu_command", "{\"action\":\"pipeline_history\"}");
+        break;
+    case ID_PIPELINE_CANCEL:
+        runner_.Cancel();
+        break;
+    case ID_PROVIDERS_CONFIGURE:
+        bridge_.PostToJS("menu_command", "{\"action\":\"config\"}");
+        break;
+    case ID_PROVIDERS_TEST:
+        bridge_.PostToJS("menu_command", "{\"action\":\"test_connection\"}");
+        break;
+    case ID_VIEW_TREE:
+    case ID_VIEW_LIST:
+    case ID_VIEW_EDITOR:
+    case ID_VIEW_MESSAGES: {
+        std::string pane = id == ID_VIEW_TREE ? "tree" :
+                           id == ID_VIEW_LIST ? "list" :
+                           id == ID_VIEW_EDITOR ? "editor" : "messages";
+        bridge_.PostToJS("menu_command", "{\"action\":\"toggle_pane\",\"pane\":\"" + pane + "\"}");
+        break;
+    }
+    case ID_VIEW_FULLSCREEN:
+        if (IsZoomed(hwnd_))
+            ShowWindow(hwnd_, SW_RESTORE);
+        else
+            ShowWindow(hwnd_, SW_MAXIMIZE);
+        break;
+    case ID_HELP_DOCS:
+        ShellExecuteW(hwnd_, L"open", L"https://github.com/gadget114514/Ecode", nullptr, nullptr, SW_SHOW);
+        break;
+    case ID_HELP_ABOUT:
+        bridge_.PostToJS("menu_command", "{\"action\":\"about\"}");
+        break;
+    default:
+        // Recent files (ID_FILE_RECENT_BASE + index)
+        if (id >= ID_FILE_RECENT_BASE && id < ID_FILE_RECENT_BASE + MAX_RECENT_FILES) {
+            OpenRecentFile(id - ID_FILE_RECENT_BASE);
+        }
+        break;
+    }
+}
+
+void App::OpenFileDialog() {
+    wchar_t path[32768] = {};
+    OPENFILENAMEW ofn = {sizeof(ofn)};
+    ofn.hwndOwner = hwnd_;
+    ofn.lpstrFilter = L"JSON Files\0*.json\0All Files\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = 32768;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    if (GetOpenFileNameW(&ofn)) {
+        std::wstring wpath(path);
+        AddRecentFile(wpath);
+        std::string pathA;
+        int n = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr);
+        pathA.resize(n);
+        WideCharToMultiByte(CP_UTF8, 0, path, -1, &pathA[0], n, nullptr, nullptr);
+        if (!pathA.empty() && pathA.back() == '\0') pathA.pop_back();
+        bridge_.PostToJS("open_file_result", "{\"path\":\"" + PipelineRunner::JsonEscape(pathA) + "\"}");
+    }
+}
+
+void App::SaveFileDialog() {
+    wchar_t path[32768] = {};
+    OPENFILENAMEW ofn = {sizeof(ofn)};
+    ofn.hwndOwner = hwnd_;
+    ofn.lpstrFilter = L"JSON Files\0*.json\0All Files\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = 32768;
+    ofn.lpstrDefExt = L"json";
+    ofn.Flags = OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
+    if (GetSaveFileNameW(&ofn)) {
+        std::wstring wpath(path);
+        AddRecentFile(wpath);
+        std::string pathA;
+        int n = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr);
+        pathA.resize(n);
+        WideCharToMultiByte(CP_UTF8, 0, path, -1, &pathA[0], n, nullptr, nullptr);
+        if (!pathA.empty() && pathA.back() == '\0') pathA.pop_back();
+        bridge_.PostToJS("save_as_result", "{\"path\":\"" + PipelineRunner::JsonEscape(pathA) + "\"}");
+    }
+}
+
+void App::OpenRecentFile(int index) {
+    if (index < 0 || index >= (int)recentFiles_.size()) return;
+    std::wstring path = recentFiles_[index];
+    // Move to front
+    recentFiles_.erase(recentFiles_.begin() + index);
+    recentFiles_.insert(recentFiles_.begin(), path);
+    std::string pathA;
+    int n = WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    pathA.resize(n);
+    WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, &pathA[0], n, nullptr, nullptr);
+    if (!pathA.empty() && pathA.back() == '\0') pathA.pop_back();
+    bridge_.PostToJS("open_file_result", "{\"path\":\"" + PipelineRunner::JsonEscape(pathA) + "\"}");
+    UpdateRecentFilesMenu();
+}
+
+void App::AddRecentFile(const std::wstring &path) {
+    for (auto it = recentFiles_.begin(); it != recentFiles_.end(); ++it) {
+        if (*it == path) { recentFiles_.erase(it); break; }
+    }
+    recentFiles_.insert(recentFiles_.begin(), path);
+    if ((int)recentFiles_.size() > MAX_RECENT_FILES)
+        recentFiles_.resize(MAX_RECENT_FILES);
+    UpdateRecentFilesMenu();
+    storage_.SaveRecentFiles(recentFiles_);
+}
+
+void App::UpdateRecentFilesMenu() {
+    if (embedded_) return;
+    HMENU hMenu = GetMenu(hwnd_);
+    if (!hMenu) return;
+    HMENU hFileMenu = GetSubMenu(hMenu, 0);
+    if (!hFileMenu) return;
+    // Remove old recent items (search for separator before recent files)
+    int menuCount = GetMenuItemCount(hFileMenu);
+    int sepPos = -1;
+    for (int i = 0; i < menuCount; i++) {
+        wchar_t buf[256] = {};
+        MENUITEMINFOW mii = {sizeof(mii), MIIM_STRING};
+        mii.dwTypeData = buf;
+        mii.cch = 256;
+        if (GetMenuItemInfoW(hFileMenu, i, TRUE, &mii)) {
+            if (buf[0] == 0 && i > 0) sepPos = i; // already has separator
+        }
+    }
+    // Remove old recent items
+    if (sepPos > 0) {
+        while (GetMenuItemCount(hFileMenu) > sepPos + 1)
+            RemoveMenu(hFileMenu, GetMenuItemCount(hFileMenu) - 1, MF_BYPOSITION);
+    }
+    if (recentFiles_.empty()) return;
+    // Add separator if needed
+    if (sepPos <= 0) {
+        AppendMenuW(hFileMenu, MF_SEPARATOR, 0, nullptr);
+        sepPos = GetMenuItemCount(hFileMenu) - 1;
+    }
+    // Add recent files
+    int count = 0;
+    for (auto &f : recentFiles_) {
+        if (count >= 5) break; // Show max 5 in menu
+        std::wstring label = L"&" + std::to_wstring(count + 1) + L" " + f;
+        AppendMenuW(hFileMenu, MF_STRING, ID_FILE_RECENT_BASE + count, label.c_str());
+        count++;
+    }
+    DrawMenuBar(hwnd_);
 }
 
 void App::OnDestroy() {
@@ -293,12 +486,47 @@ void App::SendFullInit() {
     }
     pipelinesJson += "]";
 
+    // Recent files
+    recentFiles_ = storage_.LoadRecentFiles();
+    UpdateRecentFilesMenu();
+    std::string recentJson = "[";
+    bool firstRF = true;
+    for (auto &rf : recentFiles_) {
+        if (!firstRF) recentJson += ",";
+        firstRF = false;
+        std::string rfA;
+        int n = WideCharToMultiByte(CP_UTF8, 0, rf.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        rfA.resize(n);
+        WideCharToMultiByte(CP_UTF8, 0, rf.c_str(), -1, &rfA[0], n, nullptr, nullptr);
+        if (!rfA.empty() && rfA.back() == '\0') rfA.pop_back();
+        recentJson += "\"" + PipelineRunner::JsonEscape(rfA) + "\"";
+    }
+    recentJson += "]";
+
+    // Run blob GC at startup — collect all referenced blob paths from data files
+    std::vector<std::wstring> referencedBlobs;
+    auto collectRefs = [&](const Node &n, auto &self) -> void {
+        for (auto &a : n.attachments) {
+            if (!a.file.empty()) {
+                referencedBlobs.push_back(std::wstring(a.file.begin(), a.file.end()));
+            }
+        }
+        for (auto &c : n.children) self(c, self);
+    };
+    for (auto &tab : session.tabs) {
+        std::wstring wfile(tab.file.begin(), tab.file.end());
+        Node root = storage_.LoadTabData(storage_.DataPath(wfile));
+        collectRefs(root, collectRefs);
+    }
+    storage_.GarbageCollectBlobs(referencedBlobs);
+
     bridge_.PostToJS("init",
         "{\"language\":\"" + localization_.GetCurrentLanguage() + "\""
         ",\"embedded\":"  + (embedded_ ? "true" : "false") +
         ",\"tabs\":"      + tabsJson +
         ",\"nodes\":"     + nodesJson +
-        ",\"pipelines\":" + pipelinesJson + "}");
+        ",\"pipelines\":" + pipelinesJson +
+        ",\"recentFiles\":" + recentJson + "}");
 }
 
 Node App::NodeFromJson(const JsonValue &val) {
@@ -381,6 +609,14 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         runner_.ResumeManual(content);
     } else if (type == "manual_step_cancel") {
         runner_.CancelManual();
+    } else if (type == "save_pipeline") {
+        HandleSavePipeline(payload);
+    } else if (type == "delete_pipeline") {
+        HandleDeletePipeline(payload);
+    } else if (type == "open_file") {
+        OpenFileDialog();
+    } else if (type == "save_file_as") {
+        SaveFileDialog();
     } else if (type == "get_providers") {
         auto providers = storage_.LoadProviders();
         std::string json = "{";
@@ -392,6 +628,10 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         }
         json += "}";
         bridge_.PostToJS("providers_result", json);
+    } else if (type == "history_list") {
+        HandleHistoryList();
+    } else if (type == "history_detail") {
+        HandleHistoryDetail(payload);
     } else if (type == "save_providers") {
         auto val = JsonValue::parse(payload);
         std::map<std::string, ProviderConfig> providers;
@@ -404,6 +644,123 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         }
         storage_.SaveProviders(providers);
     }
+}
+
+void App::HandleSavePipeline(const std::string &payload) {
+    auto val = JsonValue::parse(payload);
+    auto pipelines = storage_.LoadPipelines();
+    
+    std::string name = val.has("name") ? val["name"].string() : "";
+    if (name.empty()) return;
+    
+    // Find and update, or add new
+    bool found = false;
+    for (auto &p : pipelines) {
+        if (p.name == name) {
+            found = true;
+            if (val.has("mode"))       p.mode       = val["mode"].string();
+            if (val.has("outputMode")) p.outputMode = val["outputMode"].string();
+            if (val.has("outputNaming")) p.outputNaming = val["outputNaming"].string();
+            if (val.has("multiMedia")) p.multiMedia = val["multiMedia"].string();
+            if (val.has("retryCount")) p.retryCount = (int)val["retryCount"].number();
+            if (val.has("retryDelayMs")) p.retryDelayMs = (int)val["retryDelayMs"].number();
+            if (val.has("steps")) {
+                p.steps.clear();
+                for (auto &s : val["steps"].array()) {
+                    PipelineStep step;
+                    if (s.has("name")) step.name = s["name"].string();
+                    if (s.has("type")) step.type = s["type"].string();
+                    for (auto &kv : s.object()) {
+                        auto &v = kv.second;
+                        if (v.type() == JsonValue::String)
+                            step.params[kv.first] = v.string();
+                        else
+                            step.params[kv.first] = v.serialize();
+                    }
+                    p.steps.push_back(step);
+                }
+            }
+            break;
+        }
+    }
+    if (!found) {
+        Pipeline p;
+        p.name = name;
+        p.mode = val.has("mode") ? val["mode"].string() : "basic";
+        p.outputMode = val.has("outputMode") ? val["outputMode"].string() : "child";
+        p.outputNaming = val.has("outputNaming") ? val["outputNaming"].string() : "{pipeline_name}_{timestamp}";
+        if (val.has("retryCount")) p.retryCount = (int)val["retryCount"].number();
+        if (val.has("retryDelayMs")) p.retryDelayMs = (int)val["retryDelayMs"].number();
+        if (val.has("multiMedia")) p.multiMedia = val["multiMedia"].string();
+        if (val.has("steps")) {
+            for (auto &s : val["steps"].array()) {
+                PipelineStep step;
+                if (s.has("name")) step.name = s["name"].string();
+                if (s.has("type")) step.type = s["type"].string();
+                for (auto &kv : s.object()) {
+                    auto &v = kv.second;
+                    if (v.type() == JsonValue::String) step.params[kv.first] = v.string();
+                    else step.params[kv.first] = v.serialize();
+                }
+                p.steps.push_back(step);
+            }
+        }
+        pipelines.push_back(p);
+    }
+    storage_.SavePipelines(pipelines);
+    bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
+}
+
+void App::HandleDeletePipeline(const std::string &payload) {
+    auto val = JsonValue::parse(payload);
+    std::string name = val.has("name") ? val["name"].string() : "";
+    if (name.empty()) return;
+    auto pipelines = storage_.LoadPipelines();
+    auto it = std::remove_if(pipelines.begin(), pipelines.end(),
+        [&](const Pipeline &p) { return p.name == name; });
+    if (it != pipelines.end()) {
+        pipelines.erase(it, pipelines.end());
+        storage_.SavePipelines(pipelines);
+        bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
+    }
+}
+
+void App::HandleHistoryList() {
+    auto files = storage_.ListHistory();
+    std::string json = "[";
+    bool first = true;
+    int limit = 100;
+    for (auto &file : files) {
+        if (limit-- <= 0) break;
+        auto record = storage_.LoadHistoryRecord(file);
+        if (record.empty()) continue;
+        auto val = JsonValue::parse(record);
+        if (!val.has("pipelineName")) continue;
+        if (!first) json += ",";
+        first = false;
+        std::string id       = val.has("id")          ? val["id"].string()          : "";
+        std::string name     = val.has("pipelineName") ? val["pipelineName"].string() : "";
+        std::string at       = val.has("executedAt")   ? val["executedAt"].string()   : "";
+        std::string status   = val.has("status")       ? val["status"].string()       : "completed";
+        int stepCount = val.has("steps") ? (int)val["steps"].array().size() : 0;
+        json += "{\"id\":\"" + PipelineRunner::JsonEscape(id) + "\""
+              + ",\"pipelineName\":\"" + PipelineRunner::JsonEscape(name) + "\""
+              + ",\"executedAt\":\"" + PipelineRunner::JsonEscape(at) + "\""
+              + ",\"status\":\"" + PipelineRunner::JsonEscape(status) + "\""
+              + ",\"stepCount\":" + std::to_string(stepCount) + "}";
+    }
+    json += "]";
+    bridge_.PostToJS("history_list_result", "{\"items\":" + json + "}");
+}
+
+void App::HandleHistoryDetail(const std::string &payload) {
+    auto val = JsonValue::parse(payload);
+    std::string id = val.has("id") ? val["id"].string() : "";
+    if (id.empty()) { bridge_.PostToJS("history_detail_result", "{}"); return; }
+    std::wstring wid(id.begin(), id.end());
+    auto record = storage_.LoadHistoryRecord(L"run_" + wid + L".json");
+    if (record.empty()) { bridge_.PostToJS("history_detail_result", "{}"); return; }
+    bridge_.PostToJS("history_detail_result", record);
 }
 
 int App::Run() {

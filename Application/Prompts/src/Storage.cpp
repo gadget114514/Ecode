@@ -239,9 +239,68 @@ std::vector<std::wstring> Storage::GetTabFiles() {
     return files;
 }
 
-// --- History stubs ---
-void Storage::SaveHistory(const std::string &recordJson) { (void)recordJson; }
-std::vector<std::wstring> Storage::ListHistory() { return {}; }
+// --- Recent Files ---
+std::vector<std::wstring> Storage::LoadRecentFiles() {
+    std::vector<std::wstring> files;
+    auto json = ReadFileUtf8(basePath_ + L"\\recent_files.json");
+    if (json.empty()) return files;
+    auto val = JsonValue::parse(json);
+    if (val.has("files")) {
+        for (auto &f : val["files"].array())
+            files.push_back(L"data/" + std::wstring(f.string().begin(), f.string().end()));
+    }
+    return files;
+}
+
+void Storage::SaveRecentFiles(const std::vector<std::wstring> &files) {
+    std::vector<JsonValue> arr;
+    for (auto &f : files) {
+        std::string fa;
+        int n = WideCharToMultiByte(CP_UTF8, 0, f.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        fa.resize(n);
+        WideCharToMultiByte(CP_UTF8, 0, f.c_str(), -1, &fa[0], n, nullptr, nullptr);
+        if (!fa.empty() && fa.back() == '\0') fa.pop_back();
+        arr.push_back(JsonValue::fromString(fa));
+    }
+    std::map<std::string, JsonValue> root;
+    root["files"] = JsonValue::fromArray(arr);
+    WriteFileUtf8(basePath_ + L"\\recent_files.json", JsonValue::fromObject(root).serialize(true));
+}
+
+// --- History ---
+void Storage::SaveHistory(const std::string &recordJson) {
+    std::wstring filename;
+    auto val = JsonValue::parse(recordJson);
+    if (val.has("id") && !val["id"].string().empty()) {
+        std::string id = val["id"].string();
+        // id contains only ASCII chars, safe narrow→wide
+        std::wstring wid(id.begin(), id.end());
+        filename = L"run_" + wid + L".json";
+    } else {
+        filename = L"run_" + GetTimestamp() + L".json";
+    }
+    WriteFileUtf8(basePath_ + L"\\history\\" + filename, recordJson);
+}
+
+std::vector<std::wstring> Storage::ListHistory() {
+    std::vector<std::wstring> result;
+    std::wstring histDir = basePath_ + L"\\history\\";
+    std::wstring pattern = histDir + L"run_*.json";
+    WIN32_FIND_DATAW ffd;
+    HANDLE hFind = FindFirstFileW(pattern.c_str(), &ffd);
+    if (hFind == INVALID_HANDLE_VALUE) return result;
+    do {
+        std::wstring name = ffd.cFileName;
+        if (name != L"." && name != L"..") result.push_back(name);
+    } while (FindNextFileW(hFind, &ffd) != 0);
+    FindClose(hFind);
+    std::sort(result.rbegin(), result.rend()); // newest first
+    return result;
+}
+
+std::string Storage::LoadHistoryRecord(const std::wstring &filename) {
+    return ReadFileUtf8(basePath_ + L"\\history\\" + filename);
+}
 
 // --- Providers ---
 std::map<std::string, ProviderConfig> Storage::LoadProviders() {
@@ -309,7 +368,7 @@ std::vector<Pipeline> Storage::LoadPipelines() {
     return pipelines;
 }
 
-void Storage::SavePipelines(const std::vector<Pipeline> &pipelines) {
+/*static*/ std::string Storage::SerializePipelines(const std::vector<Pipeline> &pipelines) {
     std::vector<JsonValue> arr;
     for (auto &p : pipelines) {
         std::map<std::string, JsonValue> obj;
@@ -318,11 +377,22 @@ void Storage::SavePipelines(const std::vector<Pipeline> &pipelines) {
         obj["outputMode"] = JsonValue::fromString(p.outputMode);
         obj["outputNaming"] = JsonValue::fromString(p.outputNaming);
         obj["multiMedia"] = JsonValue::fromString(p.multiMedia);
+        obj["retryCount"] = JsonValue::fromDouble((double)p.retryCount);
+        obj["retryDelayMs"] = JsonValue::fromDouble((double)p.retryDelayMs);
         std::vector<JsonValue> steps;
         for (auto &s : p.steps) {
             std::map<std::string, JsonValue> step;
             step["name"] = JsonValue::fromString(s.name);
             step["type"] = JsonValue::fromString(s.type);
+            for (auto &kv : s.params) {
+                // Try to parse as JSON, fall back to string
+                auto parsed = JsonValue::parse(kv.second);
+                if (parsed.type() == JsonValue::Null) {
+                    step[kv.first] = JsonValue::fromString(kv.second);
+                } else {
+                    step[kv.first] = parsed;
+                }
+            }
             steps.push_back(JsonValue::fromObject(step));
         }
         obj["steps"] = JsonValue::fromArray(steps);
@@ -330,5 +400,9 @@ void Storage::SavePipelines(const std::vector<Pipeline> &pipelines) {
     }
     std::map<std::string, JsonValue> root;
     root["pipelines"] = JsonValue::fromArray(arr);
-    WriteFileUtf8(basePath_ + L"\\pipeline.json", JsonValue::fromObject(root).serialize(true));
+    return JsonValue::fromObject(root).serialize(true);
+}
+
+void Storage::SavePipelines(const std::vector<Pipeline> &pipelines) {
+    WriteFileUtf8(basePath_ + L"\\pipeline.json", SerializePipelines(pipelines));
 }

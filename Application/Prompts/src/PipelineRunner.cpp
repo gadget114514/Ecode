@@ -49,6 +49,20 @@ void PipelineRunner::Run(const std::string &pipelineName,
     outputMode_ = outputMode;
     cancelled_ = false;
     running_ = true;
+
+    // Generate run ID and timestamps
+    {
+        time_t now = time(nullptr);
+        struct tm tmi;
+        localtime_s(&tmi, &now);
+        char timebuf[32], isobuf[32];
+        strftime(timebuf, sizeof(timebuf), "%Y%m%d_%H%M%S", &tmi);
+        strftime(isobuf,  sizeof(isobuf),  "%Y-%m-%dT%H:%M:%SZ", &tmi);
+        static int runCounter = 0;
+        runId_ = std::string(timebuf) + "_" + std::to_string(runCounter++);
+        startedAt_ = isobuf;
+    }
+
     historySteps_.clear();
     currentStepIndex_ = -1;
     
@@ -95,7 +109,15 @@ void PipelineRunner::RunNextStep() {
     currentStepIndex_++;
     auto step = pendingSteps_.front();
     pendingSteps_.pop_front();
-    
+
+    // Propagate previous step output as input for this step
+    if (currentStepIndex_ > 0 && currentStepIndex_ < (int)historySteps_.size()) {
+        historySteps_[currentStepIndex_].input =
+            (currentStepIndex_ - 1 < (int)historySteps_.size())
+            ? historySteps_[currentStepIndex_ - 1].output
+            : inputContent_;
+    }
+
     PostBridge("step_started", "{\"index\":" + std::to_string(currentStepIndex_) +
                ",\"name\":\"" + step.name + "\"}");
     
@@ -509,18 +531,21 @@ void PipelineRunner::ExecuteNextParallelBranch() {
 }
 
 std::string PipelineRunner::BuildMetaJson() {
-    // Timestamp
     time_t now = time(nullptr);
     char timebuf[32];
-    struct tm *tm_info = localtime(&now);
-    strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", tm_info);
+    struct tm tmi;
+    localtime_s(&tmi, &now);
+    strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", &tmi);
 
     std::string lastOutput = historySteps_.empty() ? "" : historySteps_.back().output;
 
     std::string json = "{";
-    json += "\"outputContent\":\"" + JsonEscape(lastOutput) + "\"";
-    json += ",\"pipelineName\":\"" + JsonEscape(pipelineName_) + "\"";
+    json += "\"id\":\"" + JsonEscape(runId_) + "\"";
+    json += ",\"startedAt\":\"" + JsonEscape(startedAt_) + "\"";
     json += ",\"executedAt\":\"" + std::string(timebuf) + "\"";
+    json += ",\"status\":\"completed\"";
+    json += ",\"pipelineName\":\"" + JsonEscape(pipelineName_) + "\"";
+    json += ",\"outputContent\":\"" + JsonEscape(lastOutput) + "\"";
     json += ",\"steps\":[";
     for (int i = 0; i < (int)executedStepParams_.size(); i++) {
         auto &step = executedStepParams_[i];
@@ -532,6 +557,7 @@ std::string PipelineRunner::BuildMetaJson() {
             json += ",\"" + JsonEscape(kv.first) + "\":\"" + JsonEscape(kv.second) + "\"";
         }
         if (i < (int)historySteps_.size()) {
+            json += ",\"input\":\"" + JsonEscape(historySteps_[i].input) + "\"";
             json += ",\"output\":\"" + JsonEscape(historySteps_[i].output) + "\"";
             json += ",\"tokens\":" + std::to_string(historySteps_[i].completionTokens);
         }
