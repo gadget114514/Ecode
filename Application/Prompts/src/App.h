@@ -73,10 +73,33 @@ private:
     // Window class
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     
+    // Menu
+    void CreateMenuBar();
+    void OnCommand(int id);
+    void OpenRecentFile(int index);
+    void OpenFileDialog();
+    void SaveFileDialog();
+    
+    // Bridge: pipeline management
+    void HandleSavePipeline(const std::string &payload);
+    void HandleDeletePipeline(const std::string &payload);
+
+    // Bridge: execution history
+    void HandleHistoryList();
+    void HandleHistoryDetail(const std::string &payload);
+    
+    // Recent files
+    void AddRecentFile(const std::wstring &path);
+    void UpdateRecentFilesMenu();
+    
     // RichEdit
     void ShowRichEdit(bool show, const std::string &rtfContent = "");
     std::string GetRichEditContent();
     void PositionRichEdit(int x, int y, int w, int h);
     void InitRichEditToolbar(HWND parent);
     HWND hFormatToolbar_{nullptr};
+    
+    // Recent files
+    std::vector<std::wstring> recentFiles_;
+    static const int MAX_RECENT_FILES = 10;
 };
