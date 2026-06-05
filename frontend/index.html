@@ -268,6 +268,102 @@
         <div id="history-detail-view" style="display:none"></div>
     </div>
 </div>
+<!-- Pipeline Manager Modal -->
+<div id="pipeline-manager-modal" class="modal">
+    <div class="modal-content pm-content">
+        <span class="modal-close" onclick="app.closePipelineManager()">&times;</span>
+        <h2 data-i18n="PipelineManager">Pipeline Manager</h2>
+        <div class="pm-layout">
+            <div class="pm-sidebar">
+                <div class="pm-sidebar-header">
+                    <span data-i18n="Pipelines">Pipelines</span>
+                    <button onclick="app.pmNewPipeline()" class="pm-new-btn" title="New Pipeline">+</button>
+                </div>
+                <div id="pm-pipeline-list" class="pm-pipeline-list"></div>
+            </div>
+            <div class="pm-main">
+                <div id="pm-editor" style="display:none">
+                    <div class="pm-toolbar">
+                        <input type="text" id="pm-name" class="pm-name-input" placeholder="Pipeline name" oninput="app.pmDirty()">
+                        <div class="pm-mode-tabs">
+                            <button class="pm-mode-tab active" onclick="app.pmSwitchMode('basic',this)" data-i18n="Basic">Basic</button>
+                            <button class="pm-mode-tab" onclick="app.pmSwitchMode('expert',this)" data-i18n="Expert">Expert</button>
+                        </div>
+                    </div>
+                    <div class="pm-body" id="pm-body-basic">
+                        <div class="pm-steps-col">
+                            <div class="pm-section-title" data-i18n="Steps">Steps</div>
+                            <div id="pm-step-list" class="pm-step-list"></div>
+                            <div class="pm-step-add-row">
+                                <select id="pm-step-type-select" class="pm-step-type-select">
+                                    <option value="ai">🤖 AI Call</option>
+                                    <option value="manual">📝 Manual Review</option>
+                                    <option value="command">⚙️ CLI Command</option>
+                                    <option value="tool">🔧 External Tool</option>
+                                    <option value="fetch">🌐 HTTP Fetch</option>
+                                    <option value="condition">🔀 Condition</option>
+                                    <option value="transform">🔄 Transform</option>
+                                    <option value="call_pipeline">📦 Call Pipeline</option>
+                                    <option value="foreach">🔁 Foreach</option>
+                                    <option value="parallel">⚡ Parallel</option>
+                                    <option value="wait">⏱️ Wait</option>
+                                    <option value="history">📜 History</option>
+                                </select>
+                                <button onclick="app.pmAddStep()" data-i18n="Add">Add</button>
+                            </div>
+                        </div>
+                        <div class="pm-flow-col">
+                            <div class="pm-section-title" data-i18n="FlowPreview">Flow Preview</div>
+                            <div id="pm-mermaid" class="pm-mermaid"></div>
+                        </div>
+                    </div>
+                    <div class="pm-body" id="pm-body-expert" style="display:none">
+                        <p style="color:#888;text-align:center;padding:40px" data-i18n="ExpertModeComingSoon">Expert mode (Cytoscape.js) coming soon.</p>
+                    </div>
+                    <div class="pm-footer">
+                        <div class="pm-settings-row">
+                            <label data-i18n="Output">Output:</label>
+                            <select id="pm-output-mode" onchange="app.pmDirty()">
+                                <option value="child">child</option>
+                                <option value="sibling">sibling</option>
+                                <option value="replace">replace</option>
+                            </select>
+                            <label data-i18n="OutputNaming">Naming:</label>
+                            <input type="text" id="pm-output-naming" value="{pipeline_name}_{timestamp}" oninput="app.pmDirty()">
+                            <label data-i18n="Retry">Retry:</label>
+                            <input type="number" id="pm-retry-count" value="3" min="0" style="width:50px" oninput="app.pmDirty()">
+                            <span data-i18n="Times">×</span>
+                            <input type="number" id="pm-retry-delay" value="2000" min="0" style="width:70px" oninput="app.pmDirty()">
+                            <span>ms</span>
+                        </div>
+                        <div class="pm-actions">
+                            <button onclick="app.pmRunNow()" class="btn-primary" data-i18n="RunNow">▶ Run Now</button>
+                            <button onclick="app.pmSave()" data-i18n="Save">💾 Save</button>
+                            <button onclick="app.pmDelete()" class="btn-danger" data-i18n="Delete">🗑 Delete</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="pm-empty" class="pm-empty">
+                    <p data-i18n="SelectPipeline">Select a pipeline or create a new one</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step Edit Modal -->
+<div id="pm-step-edit-modal" class="modal">
+    <div class="modal-content pm-step-edit-content">
+        <span class="modal-close" onclick="app.pmCloseStepEdit()">&times;</span>
+        <h3 id="pm-step-edit-title" data-i18n="EditStep">Edit Step</h3>
+        <div id="pm-step-edit-form" class="pm-step-edit-form"></div>
+        <div class="pm-step-edit-actions">
+            <button onclick="app.pmSaveStepEdit()" class="btn-primary" data-i18n="Save">Save</button>
+            <button onclick="app.pmCloseStepEdit()" data-i18n="Cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
