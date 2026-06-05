@@ -1,6 +1,7 @@
 #include "Bridge.h"
 #include <unknwn.h>
 #include <string>
+#include <windows.h>
 
 // Minimal ICoreWebView2 vtable layout for PostWebMessageAsJson
 // IUnknown: QueryInterface, AddRef, Release (indices 0-2)
@@ -48,7 +49,10 @@ void Bridge::PostToJS(const std::string &typeAndPayload) {
     auto postFn = (PostMsgFn)vtbl[7];
     if (!postFn) return;
     
-    std::wstring json(typeAndPayload.begin(), typeAndPayload.end());
+    // UTF-8 → UTF-16 (handles Japanese and all non-ASCII characters)
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, typeAndPayload.c_str(), -1, nullptr, 0);
+    std::wstring json(wlen, 0);
+    MultiByteToWideChar(CP_UTF8, 0, typeAndPayload.c_str(), -1, &json[0], wlen);
     postFn(webview_, json.c_str());
 }
 
