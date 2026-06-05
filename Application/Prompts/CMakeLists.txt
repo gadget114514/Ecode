@@ -80,3 +80,6 @@ add_prompts_test(test_prompts_nodedata tests/test_nodedata.cpp src/NodeData.cpp)
 
 add_prompts_test(test_prompts_storage tests/test_storage.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
 target_link_libraries(test_prompts_storage PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
+
+add_prompts_test(test_prompts_pipelinerunner tests/test_pipelinerunner.cpp src/PipelineRunner.cpp src/Base64.cpp src/NodeData.cpp src/JsonParser.cpp src/AIProvider.cpp)
+target_link_libraries(test_prompts_pipelinerunner PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)

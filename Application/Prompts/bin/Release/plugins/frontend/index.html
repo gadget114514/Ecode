@@ -12,6 +12,9 @@
 <body>
 <div id="app">
     <div id="toolbar">
+        <button id="btn-nav-back" onclick="app.navBack()" title="Back (Alt+←)" disabled>←</button>
+        <button id="btn-nav-fwd"  onclick="app.navForward()" title="Forward (Alt+→)" disabled>→</button>
+        <span class="separator">|</span>
         <button id="btn-new" onclick="app.newTab()">📄 <span data-i18n="New">New</span></button>
         <button id="btn-open" onclick="app.openFile()">📂 <span data-i18n="Open">Open</span></button>
         <button id="btn-save" onclick="app.saveFile()">💾 <span data-i18n="Save">Save</span></button>
@@ -63,6 +66,7 @@
                         </select>
                     </div>
                     <div id="attachments-area"></div>
+                    <div id="pipeline-meta-panel" style="display:none"></div>
                 </div>
             </div>
         </div>
@@ -70,6 +74,40 @@
     <div id="messages-pane" class="pane">
         <div class="pane-header" onclick="app.togglePane('messages-pane')">📝 <span data-i18n="Messages">Messages</span></div>
         <div id="messages-content"></div>
+    </div>
+</div>
+<!-- Manual Step Modal -->
+<div id="manual-modal" class="modal">
+    <div class="modal-content manual-modal-content">
+        <div class="manual-header">
+            <span id="manual-title">Review</span>
+            <span class="manual-step-badge" id="manual-step-badge"></span>
+        </div>
+        <p id="manual-prompt" class="manual-prompt"></p>
+        <div id="manual-body"></div>
+        <div class="manual-actions" id="manual-actions"></div>
+    </div>
+</div>
+
+<!-- Config Modal -->
+<div id="config-modal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="app.closeConfig()">&times;</span>
+        <h2 data-i18n="Config">Config</h2>
+        <div class="config-tabs">
+            <button class="config-tab active" onclick="app.switchConfigTab('providers', this)" data-i18n="Providers">Providers</button>
+            <button class="config-tab" onclick="app.switchConfigTab('general', this)" data-i18n="General">General</button>
+        </div>
+        <div id="config-tab-providers" class="config-tab-panel">
+            <div class="provider-list" id="provider-list"></div>
+            <div class="config-actions">
+                <button onclick="app.testConnection()" data-i18n="TestConnection">Test Connection</button>
+                <button onclick="app.saveProviders()" class="btn-primary" data-i18n="Save">Save</button>
+            </div>
+        </div>
+        <div id="config-tab-general" class="config-tab-panel" style="display:none">
+            <p style="color:#888" data-i18n="GeneralSettingsPlaceholder">General settings coming soon.</p>
+        </div>
     </div>
 </div>
 <script src="app.js"></script>

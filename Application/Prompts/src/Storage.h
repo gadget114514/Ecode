@@ -46,9 +46,12 @@ public:
     
     std::wstring GetBasePath() const { return basePath_; }
 
+    // Serialize a Node tree to JSON string (for Bridge transmission)
+    static std::string SerializeNode(const Node &node);
+
+    bool EnsureDirectory(const std::wstring &path);
+
 private:
     std::wstring basePath_;
-    
-    bool EnsureDirectory(const std::wstring &path);
     std::wstring GetUserDataPath() const;
 };

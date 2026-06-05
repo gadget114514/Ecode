@@ -209,6 +209,100 @@ void TestGetTabFiles() {
     std::cout << "Test Passed: Get Tab Files" << std::endl;
 }
 
+static bool CompareNodes(const Node &a, const Node &b) {
+    if (a.title != b.title) return false;
+    if (a.content != b.content) return false;
+    if (a.mimetype != b.mimetype) return false;
+    if (a.attachments.size() != b.attachments.size()) return false;
+    for (size_t i = 0; i < a.attachments.size(); ++i) {
+        const auto &attA = a.attachments[i];
+        const auto &attB = b.attachments[i];
+        if (attA.id != attB.id) return false;
+        if (attA.mimetype != attB.mimetype) return false;
+        if (attA.inlineData != attB.inlineData) return false;
+        if (attA.content != attB.content) return false;
+        if (attA.file != attB.file) return false;
+        if (attA.size != attB.size) return false;
+    }
+    if (a.children.size() != b.children.size()) return false;
+    for (size_t i = 0; i < a.children.size(); ++i) {
+        if (!CompareNodes(a.children[i], b.children[i])) return false;
+    }
+    return true;
+}
+
+static std::string Base64Encode(const std::string &in) {
+    static const char lookup[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    int val = 0, valb = -6;
+    for (unsigned char c : in) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            out.push_back(lookup[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) out.push_back(lookup[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (out.size() % 4) out.push_back('=');
+    return out;
+}
+
+void TestNodeStorageRelations() {
+    TempStorage ts;
+    for (int i = 1; i <= 100; ++i) {
+        Node root;
+        root.title = Base64Encode("Prompt_" + std::to_string(i));
+        root.content = Base64Encode("System Prompt content for test scenario #" + std::to_string(i));
+        root.mimetype = "text/plain";
+        int depth = i % 4, childCount = i % 5, attachCount = i % 3;
+        for (int a = 0; a < attachCount; ++a) {
+            Attachment att;
+            att.id = "attach_root_" + std::to_string(i) + "_" + std::to_string(a);
+            att.mimetype = (a % 2 == 0) ? "image/png" : "text/plain";
+            att.inlineData = (a % 2 == 0);
+            if (att.inlineData) att.content = Base64Encode("Inline data content for attachment " + std::to_string(a));
+            else att.file = "blobs/ref_file_" + std::to_string(i) + "_" + std::to_string(a) + ".txt";
+            att.size = 100 * (a + 1);
+            root.attachments.push_back(att);
+        }
+        std::function<void(Node&, int, int)> buildSubtree = [&](Node &parent, int d, int maxD) {
+            if (d >= maxD) return;
+            for (int c = 0; c < childCount; ++c) {
+                Node child;
+                bool isArtifact = (c % 2 == 1);
+                child.title = Base64Encode((isArtifact ? "Artifact_" : "SubPrompt_") + std::to_string(i) + "_d" + std::to_string(d) + "_c" + std::to_string(c));
+                child.content = Base64Encode("Generated output for child " + std::to_string(c) + " at depth " + std::to_string(d));
+                child.mimetype = isArtifact ? "text/html" : "text/plain";
+                buildSubtree(child, d + 1, maxD);
+                parent.children.push_back(child);
+            }
+        };
+        buildSubtree(root, 0, depth);
+        std::wstring fileName = L"relation_test_" + std::to_wstring(i) + L".json";
+        ts.storage.SaveTabData(fileName, root);
+        Node restored = ts.storage.LoadTabData(fileName);
+        VERIFY(CompareNodes(root, restored), "Restoration failed for case #" + std::to_string(i));
+    }
+    std::cout << "Test Passed: Node Storage Relations (100 cases)" << std::endl;
+}
+
+void TestPipelineMetaRoundTrip() {
+    TempStorage ts;
+
+    Node root;
+    root.title = "Um9vdA==";
+    root.mimetype = "text/plain";
+    root.pipelineMeta = "{\"pipelineName\":\"TestPipe\",\"executedAt\":\"2026-06-04T12:00:00Z\",\"steps\":[]}";
+
+    ts.storage.SaveTabData(L"meta_test.json", root);
+
+    auto loaded = ts.storage.LoadTabData(L"meta_test.json");
+    VERIFY(loaded.title == "Um9vdA==", "title match");
+    VERIFY(loaded.pipelineMeta == root.pipelineMeta, "pipelineMeta round-trip");
+    std::cout << "Test Passed: Pipeline Meta Round-Trip" << std::endl;
+}
+
 int main() {
     try {
         TestInit();
@@ -220,6 +314,8 @@ int main() {
         TestProvidersRoundTrip();
         TestPipelinesRoundTrip();
         TestGetTabFiles();
+        TestNodeStorageRelations();
+        TestPipelineMetaRoundTrip();
         std::cout << "=== ALL STORAGE TESTS PASSED ===" << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Test suite failed: " << e.what() << std::endl;
