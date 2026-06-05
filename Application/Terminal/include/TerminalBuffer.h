@@ -208,7 +208,7 @@ private:
     int savedCursorRowAlt_    = 0;
     int savedCursorColumnAlt_ = 0;
     bool savedCursorVisibleAlt_ = true;
-    bool savedPendingWrapAlt_   = false;
+    bool savedPendingWrapAlt_ = false;
     int scrollTop_    = 0;
     int scrollBottom_ = 29;
     int maxHistoryLines_ = 10000;
