@@ -260,6 +260,7 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .history-step-label { font-size: 11px; font-weight: bold; color: #666; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 5px; }
 .history-step-content { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 8px 10px; font-family: 'Consolas', monospace; font-size: 11px; color: #ccc; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; margin: 0; }
 
+<<<<<<< Updated upstream
 /* ── Evaluation badges & buttons ─────────────────────────── */
 .eval-badge { font-size: 12px; margin-right: 4px; }
 .eval-badge-ok       { color: #68d391; }
@@ -360,3 +361,66 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 /* Toolbar undo/redo optimize buttons */
 #btn-undo-opt, #btn-redo-opt { font-size: 15px; padding: 4px 8px; min-width: 28px; }
 #btn-undo-opt:disabled, #btn-redo-opt:disabled { opacity: 0.35; cursor: default; }
+=======
+/* Pipeline Manager Modal */
+.pm-content { min-width: 760px; max-width: 960px; min-height: 520px; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.pm-content h2 { padding: 14px 20px 0; margin: 0 0 8px; }
+.pm-layout { display: flex; flex: 1; overflow: hidden; }
+.pm-sidebar { width: 200px; min-width: 160px; border-right: 1px solid #444; display: flex; flex-direction: column; }
+.pm-sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; font-size: 12px; font-weight: bold; color: #888; letter-spacing: 0.05em; border-bottom: 1px solid #444; }
+.pm-new-btn { background: #4a9eff; border: none; border-radius: 3px; color: #fff; font-size: 16px; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
+.pm-new-btn:hover { filter: brightness(1.15); }
+.pm-pipeline-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.pm-pipeline-item { padding: 8px 14px; cursor: pointer; font-size: 13px; color: #ccc; border-left: 3px solid transparent; }
+.pm-pipeline-item:hover { background: #2d2d2d; }
+.pm-pipeline-item.active { background: #1a2a3a; border-left-color: #4a9eff; color: #eee; }
+.pm-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.pm-editor { display: flex; flex-direction: column; flex: 1; }
+.pm-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #444; flex-shrink: 0; }
+.pm-name-input { flex: 1; background: #1a1a1a; border: 1px solid #555; border-radius: 4px; color: #eee; padding: 6px 10px; font-size: 14px; }
+.pm-name-input:focus { outline: none; border-color: #4a9eff; }
+.pm-mode-tabs { display: flex; gap: 2px; flex-shrink: 0; }
+.pm-mode-tab { background: #2d2d2d; border: 1px solid #555; border-radius: 4px; color: #aaa; padding: 4px 12px; cursor: pointer; font-size: 12px; }
+.pm-mode-tab.active { background: #4a9eff; border-color: #4a9eff; color: #fff; }
+.pm-body { display: flex; flex: 1; overflow: hidden; }
+.pm-steps-col { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #444; overflow: hidden; }
+.pm-flow-col { width: 300px; min-width: 200px; display: flex; flex-direction: column; }
+.pm-section-title { font-size: 11px; font-weight: bold; color: #666; letter-spacing: 0.05em; padding: 8px 14px; border-bottom: 1px solid #333; flex-shrink: 0; }
+.pm-step-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.pm-step-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid #2d2d2d; font-size: 13px; }
+.pm-step-item:hover { background: #252525; }
+.pm-step-drag { color: #555; cursor: grab; font-size: 12px; user-select: none; }
+.pm-step-icon { font-size: 14px; }
+.pm-step-name { flex: 1; color: #ccc; cursor: pointer; }
+.pm-step-name:hover { color: #4a9eff; }
+.pm-step-type-badge { font-size: 10px; color: #888; background: #222; border-radius: 3px; padding: 1px 6px; }
+.pm-step-edit-btn { background: none; border: none; color: #4a9eff; cursor: pointer; font-size: 13px; padding: 2px 4px; }
+.pm-step-del-btn { background: none; border: none; color: #fc8181; cursor: pointer; font-size: 13px; padding: 2px 4px; }
+.pm-step-edit-btn:hover { color: #7ab0ff; }
+.pm-step-del-btn:hover { color: #ff6b6b; }
+.pm-step-add-row { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid #333; flex-shrink: 0; }
+.pm-step-type-select { flex: 1; background: #1a1a1a; border: 1px solid #555; border-radius: 4px; color: #ccc; padding: 4px 8px; font-size: 12px; }
+.pm-step-add-row button { background: #4a9eff; border: none; border-radius: 4px; color: #fff; padding: 4px 14px; cursor: pointer; font-size: 12px; }
+.pm-step-add-row button:hover { filter: brightness(1.15); }
+.pm-mermaid { flex: 1; padding: 12px; overflow: auto; display: flex; align-items: center; justify-content: center; }
+.pm-mermaid svg { max-width: 100%; }
+.pm-footer { padding: 10px 16px; border-top: 1px solid #444; flex-shrink: 0; }
+.pm-settings-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #aaa; margin-bottom: 8px; flex-wrap: wrap; }
+.pm-settings-row label { color: #888; }
+.pm-settings-row input, .pm-settings-row select { background: #1a1a1a; border: 1px solid #555; border-radius: 3px; color: #ccc; padding: 3px 6px; font-size: 12px; }
+.pm-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.pm-actions .btn-primary { background: #4a9eff; border: none; border-radius: 4px; color: #fff; padding: 5px 16px; cursor: pointer; font-size: 12px; }
+.pm-actions .btn-danger { background: #6b2a2a; border: 1px solid #fc8181; border-radius: 4px; color: #fc8181; padding: 5px 16px; cursor: pointer; font-size: 12px; }
+.pm-actions button:hover { filter: brightness(1.15); }
+.pm-empty { display: flex; align-items: center; justify-content: center; flex: 1; color: #666; font-size: 14px; }
+
+/* Step Edit Modal */
+.pm-step-edit-content { min-width: 500px; max-width: 640px; }
+.pm-step-edit-form { margin: 14px 0; }
+.pm-step-edit-form .field-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.pm-step-edit-form .field-row label { min-width: 90px; font-size: 12px; color: #aaa; padding-top: 5px; flex-shrink: 0; }
+.pm-step-edit-form .field-row input, .pm-step-edit-form .field-row select, .pm-step-edit-form .field-row textarea { flex: 1; background: #1a1a1a; border: 1px solid #555; border-radius: 3px; color: #ccc; padding: 5px 8px; font-size: 12px; }
+.pm-step-edit-form .field-row textarea { min-height: 80px; font-family: 'Consolas', monospace; resize: vertical; }
+.pm-step-edit-form .field-row input:focus, .pm-step-edit-form .field-row select:focus, .pm-step-edit-form .field-row textarea:focus { outline: none; border-color: #4a9eff; }
+.pm-step-edit-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+>>>>>>> Stashed changes
