@@ -1,2 +1,45 @@
 #include "resource.h"
 IDI_APP_ICON ICON "app.ico"
+
+IDR_MENU_MAIN MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New Tab\tCtrl+T",      ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",      ID_FILE_OPEN
+        MENUITEM "&Save\tCtrl+S",         ID_FILE_SAVE
+        MENUITEM "Save &As...\tCtrl+Shift+S", ID_FILE_SAVE_AS
+        MENUITEM SEPARATOR
+        MENUITEM "&Import ZIP...",         ID_FILE_IMPORT_ZIP
+        MENUITEM "&Export Node...",        ID_FILE_EXPORT_NODE
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit\tAlt+F4",          ID_FILE_EXIT
+    END
+    POPUP "&Pipeline"
+    BEGIN
+        MENUITEM "&Run Pipeline...\tF5",   ID_PIPELINE_RUN
+        MENUITEM "Pipeline &Manager\tCtrl+P", ID_PIPELINE_MANAGER
+        MENUITEM "Execution &History\tCtrl+H", ID_PIPELINE_HISTORY
+        MENUITEM SEPARATOR
+        MENUITEM "&Cancel\tEsc",           ID_PIPELINE_CANCEL
+    END
+    POPUP "&Providers"
+    BEGIN
+        MENUITEM "&Configure...",          ID_PROVIDERS_CONFIGURE
+        MENUITEM "&Test Connection",       ID_PROVIDERS_TEST
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "Toggle &Tree\tCtrl+1",   ID_VIEW_TREE
+        MENUITEM "Toggle &List\tCtrl+2",   ID_VIEW_LIST
+        MENUITEM "Toggle &Editor\tCtrl+3", ID_VIEW_EDITOR
+        MENUITEM "Toggle &Messages\tCtrl+4", ID_VIEW_MESSAGES
+        MENUITEM SEPARATOR
+        MENUITEM "&Full Screen\tF11",      ID_VIEW_FULLSCREEN
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Documentation",         ID_HELP_DOCS
+        MENUITEM "&About Prompts",         ID_HELP_ABOUT
+    END
+END
