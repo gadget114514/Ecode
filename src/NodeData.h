@@ -19,6 +19,11 @@ struct Node {
     std::vector<Attachment> attachments;
     std::vector<Node> children;
     std::string pipelineMeta; // JSON: how this node was created (empty if not pipeline-generated)
+
+    // Evaluation (SkillOpt-style feedback signals)
+    std::string evaluation;      // "" | "ok" | "rejected" | "pinned"
+    std::string evaluatedAt;     // ISO 8601 timestamp
+    std::string evaluationNote;  // optional user comment
 };
 
 struct TabData {
