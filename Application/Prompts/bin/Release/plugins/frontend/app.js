@@ -18,6 +18,7 @@ const app = {
     init() {
         this.setupBridge();
         this.loadLanguage(this.state.language);
+        this.setupHints();
     },
 
     setupBridge() {
@@ -47,11 +48,14 @@ const app = {
                 if (msg.payload.pipelines) {
                     this.state.pipelines = msg.payload.pipelines;
                 }
-                if (this.state.embedded) {
-                    const hb = document.getElementById('btn-hamburger');
-                    if (hb) hb.style.display = '';
-                }
+                // Always show hamburger (embedded: replaces menubar; standalone: supplement)
+                const hb = document.getElementById('btn-hamburger');
+                if (hb) hb.style.display = '';
                 this.addLog('✅ App ready');
+                // Show wizard on first run
+                if (!localStorage.getItem('prompts_wizard_done')) {
+                    setTimeout(() => this.showWizard(), 400);
+                }
                 break;
             case 'node_updated':
                 this.updateNodeUI(msg.payload);
@@ -89,6 +93,25 @@ const app = {
             case 'providers_result':
                 this.state.providers = msg.payload || {};
                 this.onProvidersResult(this.state.providers);
+                break;
+            case 'menu_command':
+                this.handleMenuCommand(msg.payload);
+                break;
+            case 'open_file_result':
+                this.onFileSelected(msg.payload.path);
+                break;
+            case 'save_as_result':
+                this.onSaveAsResult(msg.payload.path);
+                break;
+            case 'pipeline_list':
+                this.state.pipelines = msg.payload.pipelines || [];
+                this.addLog('📋 Pipelines updated');
+                break;
+            case 'history_list_result':
+                this.onHistoryListResult(msg.payload);
+                break;
+            case 'history_detail_result':
+                this.onHistoryDetailResult(msg.payload);
                 break;
         }
     },
@@ -250,10 +273,47 @@ const app = {
             <div class="meta-header">
                 <span class="meta-pipeline-name">📋 ${this.escapeHtml(meta.pipelineName)}</span>
                 <span class="meta-date">${(meta.executedAt||'').replace('T',' ').replace('Z','')}</span>
-                <button class="meta-reproduce-btn" onclick="app.reproducePipeline(${this.escapeHtml(JSON.stringify(meta.pipelineName))})">▶ 再実行</button>
+                <button class="meta-reproduce-btn" data-pipeline="${this.escapeHtml(meta.pipelineName)}">▶ 再実行</button>
+                <button class="meta-save-btn">💾 パイプラインとして保存</button>
             </div>
             <div class="meta-steps">${stepsHtml}</div>`;
+        // Attach click handlers
+        const reproduceBtn = el.querySelector('.meta-reproduce-btn');
+        if (reproduceBtn) {
+            reproduceBtn.onclick = () => {
+                const name = reproduceBtn.dataset.pipeline;
+                if (name) this.reproducePipeline(name);
+            };
+        }
+        const saveBtn = el.querySelector('.meta-save-btn');
+        if (saveBtn) {
+            saveBtn.onclick = () => {
+                try {
+                    const pipeline = {
+                        name: meta.pipelineName || 'pipeline',
+                        mode: 'basic',
+                        outputMode: 'child',
+                        outputNaming: '{pipeline_name}_{timestamp}',
+                        steps: (meta.steps || []).map(s => {
+                            const step = { name: s.name, type: s.type };
+                            if (s.provider) step.provider = s.provider;
+                            if (s.model) step.model = s.model;
+                            if (s.systemPrompt) step.systemPrompt = s.systemPrompt;
+                            if (s.userPrompt) step.userPrompt = s.userPrompt;
+                            if (s.temperature) step.temperature = s.temperature;
+                            return step;
+                        })
+                    };
+                    this.postMessage({ type: 'save_pipeline', payload: pipeline });
+                    this.addLog(`💾 Pipeline "${pipeline.name}" saved from metadata`);
+                } catch (e) {
+                    this.addLog('⚠ Failed to save pipeline: ' + e.message);
+                }
+            };
+        }
     },
+
+
 
     reproducePipeline(pipelineName) {
         if (!this.state.currentNode) { this.addLog('⚠ ノードを選択してください'); return; }
@@ -389,11 +449,11 @@ const app = {
                 <div class="provider-name">${p.label}</div>
                 <label>API Key</label>
                 <div class="api-key-row">
-                    <input type="password" id="key-${p.id}" value="${cfg.apiKey||''}" placeholder="sk-...">
+                    <input type="password" id="key-${p.id}" value="${this.escapeHtml(cfg.apiKey||'')}" placeholder="sk-...">
                     <button type="button" onclick="app.toggleKeyVisible('key-${p.id}',this)">👁</button>
                 </div>
                 <label>Base URL</label>
-                <input type="text" id="url-${p.id}" value="${cfg.baseUrl||p.defaultUrl}" placeholder="${p.defaultUrl}">
+                <input type="text" id="url-${p.id}" value="${this.escapeHtml(cfg.baseUrl||p.defaultUrl)}" placeholder="${this.escapeHtml(p.defaultUrl)}">
             </div>`;
         }).join('');
     },
@@ -422,6 +482,32 @@ const app = {
         this.addLog('🔌 Test connection not yet implemented.');
     },
 
+    handleMenuCommand(cmd) {
+        switch (cmd.action) {
+            case 'new_tab':         this.newTab(); break;
+            case 'save':            this.saveFile(); break;
+            case 'save_as':         this.saveFileAs(); break;
+            case 'import_zip':      this.addLog('📦 Import ZIP — coming soon'); break;
+            case 'export_node':     this.addLog('📤 Export Node — coming soon'); break;
+            case 'run_pipeline':    this.runPipeline(); break;
+            case 'pipeline_manager': this.addLog('⚡ Pipeline Manager — coming soon'); break;
+            case 'pipeline_history': this.showHistory(); break;
+            case 'config':          this.showConfig(); break;
+            case 'test_connection': this.testConnection(); break;
+            case 'toggle_pane':     this.togglePane(cmd.pane + '-pane'); break;
+            case 'about':           this.showAbout(); break;
+            default: this.addLog('⚠ Unknown menu command: ' + cmd.action);
+        }
+    },
+
+    onSaveAsResult(path) {
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && path) {
+            tab.file = path.split('/').pop().split('\\').pop();
+            this.addLog('💾 Saved as: ' + path);
+        }
+    },
+
     // Tree rendering
     renderTree() {
         const el = document.getElementById('tree-content');
@@ -433,11 +519,12 @@ const app = {
 
     buildTreeHTML(node, path) {
         let html = '';
-        const display = node.title ? atob(node.title) : this.getTitleFallback(node);
+        const display = this.escapeHtml(node.title ? atob(node.title) : this.getTitleFallback(node));
+        const safePath = this.escapeHtml(path);
         const hasChildren = node.children && node.children.length > 0;
-        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') + 
+        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') +
                     (this.state.currentNodePath === path ? ' selected' : '');
-        html += `<div class="${cls}" onclick="app.selectNode('${path}')">${display}</div>`;
+        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')">${display}</div>`;
         if (hasChildren) {
             html += '<div style="padding-left:16px">';
             node.children.forEach((child, i) => {
@@ -524,7 +611,7 @@ const app = {
         const node = this.getNodeByPath(this.state.currentNodePath);
         if (!node || !node.children) { el.innerHTML = '<div class="empty">Select a node</div>'; return; }
         el.innerHTML = node.children.map((child, i) => {
-            const display = child.title ? atob(child.title) : this.getTitleFallback(child);
+            const display = this.escapeHtml(child.title ? atob(child.title) : this.getTitleFallback(child));
             return `<div class="list-item" ondblclick="app.copyItemText(${i})">
                 <span>${display}</span>
                 <button class="copy-btn" onclick="app.copyItemText(${i})">📋</button>
@@ -765,12 +852,646 @@ const app = {
 
     log(msg) { this.addLog(msg); },
 
+    togglePane(id) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.toggle('collapsed');
+            // Save pane states
+            const states = JSON.parse(localStorage.getItem('prompts_panes') || '{}');
+            states[id] = el.classList.contains('collapsed');
+            localStorage.setItem('prompts_panes', JSON.stringify(states));
+        }
+    },
+
+    // ── Wizard ────────────────────────────────────────────────────
+    WIZARD_STEPS: [
+        {
+            icon: '🤖',
+            title: 'Prompts へようこそ',
+            body: `<p><b>Prompts</b> は AI プロンプトとパイプラインを管理・実行するツールです。</p>
+                   <div class="wizard-concept">
+                     <div class="wizard-concept-item">📄 <b>素材</b><br><small>あなたのテキスト・画像</small></div>
+                     <div class="wizard-concept-arrow">×</div>
+                     <div class="wizard-concept-item">🔧 <b>レシピ</b><br><small>AIへの指示の連鎖</small></div>
+                     <div class="wizard-concept-arrow">=</div>
+                     <div class="wizard-concept-item">✨ <b>成果物</b><br><small>AI処理結果</small></div>
+                   </div>
+                   <p>成果物には<b>「どのAIで・どんな指示で作ったか」</b>が埋め込まれ、後から再現できます。</p>`,
+            tips: [
+                { icon: '🔁', text: '同じパイプラインを別の素材に繰り返し適用できます。一度作ったレシピはずっと使えます。' },
+                { icon: '📂', text: 'データはローカルの JSON ファイルに保存。git で管理でき、バックアップはフォルダをコピーするだけです。' }
+            ]
+        },
+        {
+            icon: '⚙',
+            title: 'APIキーを設定する',
+            body: `<p>AIパイプラインを実行するには、使用するプロバイダのAPIキーが必要です。</p>
+                   <ul class="wizard-list">
+                     <li>🟢 <b>OpenAI</b> — GPT-4.1, o1 など</li>
+                     <li>🟣 <b>Anthropic</b> — Claude シリーズ</li>
+                     <li>🔵 <b>Gemini</b> — Google AI</li>
+                     <li>⚫ <b>Ollama</b> — ローカルLLM（無料）</li>
+                   </ul>
+                   <p>右上の <b>⚙ Config</b> ボタンから設定できます。</p>
+                   <button class="wizard-action-btn" onclick="app.closeWizard(); app.showConfig();">⚙ 今すぐ設定する</button>`,
+            tips: [
+                { icon: '🆓', text: 'Ollama はローカルで動くためAPIキー不要。まず無料で試したい場合は Ollama から始めましょう。' },
+                { icon: '🌐', text: 'Grok・Groq・LM Studio など OpenAI 互換の API は「カスタム」プロバイダとして Base URL を変えるだけで使えます。' }
+            ]
+        },
+        {
+            icon: '📄',
+            title: '素材ノードを作る',
+            body: `<p>ツリーにノードを追加して、処理したいテキストや画像を入れます。</p>
+                   <ul class="wizard-list">
+                     <li>🚀 <b>セットアップウィザード</b> — テンプレートから一発作成</li>
+                     <li>右クリック → <b>子ノードを追加</b></li>
+                     <li>タイトルと内容を入力 → <b>💾 更新</b></li>
+                   </ul>
+                   <p>ノードはツリー構造で管理されます。素材の下に成果物が子ノードとして蓄積されます。</p>`,
+            tips: [
+                { icon: '🖼', text: 'テキスト以外にも画像・PDF・RTFを格納できます。ファイルをエディタにドロップして添付しましょう。' },
+                { icon: '↩', text: 'Alt+← / Alt+→ で訪れたノードの履歴を前後に移動できます。深いツリーを探索するときに便利です。' },
+                { icon: '🔍', text: 'Ctrl+F で全タブ・全ノードを横断検索できます。ノードが増えてきたらぜひ活用してください。' }
+            ]
+        },
+        {
+            icon: '▶',
+            title: 'パイプラインを実行する',
+            body: `<p>ノードを選択して <b>▶ Run</b> ボタンを押すと、パイプラインが実行されます。</p>
+                   <ul class="wizard-list">
+                     <li>複数のAIを順番に適用できます</li>
+                     <li><b>人間の確認ステップ</b>を挟めます</li>
+                     <li>複数AIの結果を<b>比較して選択</b>できます</li>
+                     <li>結果は子ノードとして自動保存されます</li>
+                   </ul>
+                   <div class="wizard-shortcut-box">
+                     <span>Alt+← / Alt+→</span> ノード履歴を移動<br>
+                     <span>Ctrl+F</span> 全文検索<br>
+                     <span>F5</span> パイプライン実行<br>
+                     <span>F1</span> このガイドを表示
+                   </div>`,
+            tips: [
+                { icon: '⚖', text: '同じ素材を Claude・GPT-4・Grok に同時投げて結果を比較選択できます（parallel + compare ステップ）。' },
+                { icon: '💾', text: '成果物ノードには「どのパイプラインで作ったか」が自動記録されます。同じ処理を別の素材に再適用するには ▶ 再実行 をクリック。' },
+                { icon: '⌨', text: 'command ステップで ffmpeg・whisper・Codex CLI など任意の外部ツールをパイプラインに組み込めます。' }
+            ]
+        }
+    ],
+
+    wizardStep_: 0,
+
+    showWizard(forceStep) {
+        this.wizardStep_ = forceStep || 0;
+        document.getElementById('wizard-modal').classList.add('visible');
+        this.renderWizardStep();
+    },
+
+    closeWizard() {
+        document.getElementById('wizard-modal').classList.remove('visible');
+        localStorage.setItem('prompts_wizard_done', '1');
+    },
+
+    renderWizardStep() {
+        const steps = this.WIZARD_STEPS;
+        const s = steps[this.wizardStep_];
+        const total = steps.length;
+        const cur = this.wizardStep_;
+
+        // Progress dots
+        document.getElementById('wizard-progress').innerHTML =
+            steps.map((_, i) => `<span class="wizard-dot${i === cur ? ' active' : ''}"></span>`).join('');
+
+        // Body
+        const tipsHtml = s.tips && s.tips.length ? `
+            <div class="wizard-tips">
+                <div class="wizard-tips-label">💡 Tips</div>
+                ${s.tips.map(t => `
+                    <div class="wizard-tip">
+                        <span class="wizard-tip-icon">${t.icon}</span>
+                        <span class="wizard-tip-text">${t.text}</span>
+                    </div>`).join('')}
+            </div>` : '';
+        document.getElementById('wizard-body').innerHTML = `
+            <div class="wizard-icon">${s.icon}</div>
+            <h2 class="wizard-title">${this.escapeHtml(s.title)}</h2>
+            <div class="wizard-text">${s.body}</div>
+            ${tipsHtml}`;
+
+        // Footer buttons
+        document.getElementById('wizard-prev').style.visibility = cur === 0 ? 'hidden' : '';
+        const nextBtn = document.getElementById('wizard-next');
+        if (cur === total - 1) {
+            nextBtn.textContent = '✓ 完了';
+            nextBtn.onclick = () => this.closeWizard();
+        } else {
+            nextBtn.textContent = '次へ →';
+            nextBtn.onclick = () => this.wizardNext();
+        }
+        document.getElementById('wizard-skip').style.display = cur === total - 1 ? 'none' : '';
+    },
+
+    wizardNext() {
+        if (this.wizardStep_ < this.WIZARD_STEPS.length - 1) {
+            this.wizardStep_++;
+            this.renderWizardStep();
+        }
+    },
+
+    wizardPrev() {
+        if (this.wizardStep_ > 0) {
+            this.wizardStep_--;
+            this.renderWizardStep();
+        }
+    },
+
+    // ── Hamburger menu ────────────────────────────────────────────
+    showHamburger(event) {
+        event.stopPropagation();
+        const existing = document.getElementById('hamburger-dropdown');
+        if (existing) { existing.remove(); return; }
+
+        const t = key => this.t(key);
+        const sep = '<div class="hmenu-sep"></div>';
+        const item = (label, action, shortcut='') =>
+            `<div class="hmenu-item" onclick="app.hmenuAction('${action}')">${label}${shortcut ? `<span class="hmenu-shortcut">${shortcut}</span>` : ''}</div>`;
+        const section = (title, items) =>
+            `<div class="hmenu-section">${title}</div>${items}`;
+
+        const html = `
+            ${section(t('MenuFile'),
+                item(t('MenuNewTab'),      'new_tab',       'Ctrl+T') +
+                item(t('MenuOpen'),        'open',          'Ctrl+O') +
+                item(t('MenuSave'),        'save',          'Ctrl+S') +
+                item(t('MenuSaveAs'),      'save_as',       'Ctrl+Shift+S') +
+                sep +
+                item('📦 ' + t('MenuImportZip'),  'import_zip') +
+                item('📤 ' + t('MenuExportNode'), 'export_node') +
+                sep +
+                item('🤖 ' + t('MenuWelcomeWizard'), 'welcome_wizard', 'F1') +
+                item('🚀 ' + t('MenuSetupWizard'),   'setup_wizard')
+            )}
+            ${sep}
+            ${section(t('MenuEdit'),
+                item(t('MenuUndo'),        'undo',          'Ctrl+Z') +
+                item(t('MenuRedo'),        'redo',          'Ctrl+Y') +
+                sep +
+                item(t('MenuCut'),         'cut',           'Ctrl+X') +
+                item(t('MenuCopyText'),    'copy',          'Ctrl+C') +
+                item(t('MenuPaste'),       'paste',         'Ctrl+V') +
+                item(t('MenuSelectAll'),   'select_all',    'Ctrl+A')
+            )}
+            ${sep}
+            ${section(t('MenuSettings'),
+                item('⚙ ' + t('MenuSettingsItem'),  'settings') +
+                item('🔑 ' + t('Config'),             'config')
+            )}
+            ${sep}
+            ${section(t('MenuHelp'),
+                item(t('MenuKeyboardShortcuts'), 'shortcuts', 'F1') +
+                item(t('MenuAbout'),             'about') +
+                item(t('MenuCopyright'),         'copyright')
+            )}`;
+
+        const dropdown = document.createElement('div');
+        dropdown.id = 'hamburger-dropdown';
+        dropdown.className = 'hamburger-dropdown';
+        dropdown.innerHTML = html;
+
+        const btn = document.getElementById('btn-hamburger');
+        const r = btn.getBoundingClientRect();
+        dropdown.style.top = (r.bottom + 4) + 'px';
+        dropdown.style.left = r.left + 'px';
+        document.body.appendChild(dropdown);
+
+        setTimeout(() => document.addEventListener('click', function close() {
+            dropdown.remove();
+            document.removeEventListener('click', close);
+        }), 0);
+    },
+
+    hmenuAction(action) {
+        document.getElementById('hamburger-dropdown')?.remove();
+        const map = {
+            new_tab:        () => this.newTab(),
+            open:           () => this.openFile(),
+            save:           () => this.saveFile(),
+            save_as:        () => this.saveFileAs(),
+            import_zip:     () => this.addLog('📦 Import ZIP — coming soon'),
+            export_node:    () => this.addLog('📤 Export Node — coming soon'),
+            welcome_wizard: () => this.showWizard(),
+            setup_wizard:   () => this.showSetupWizard(),
+            undo:           () => document.execCommand('undo'),
+            redo:           () => document.execCommand('redo'),
+            cut:            () => document.execCommand('cut'),
+            copy:           () => document.execCommand('copy'),
+            paste:          () => document.execCommand('paste'),
+            select_all:     () => document.execCommand('selectAll'),
+            settings:       () => this.showSettings(),
+            config:         () => this.showConfig(),
+            shortcuts:      () => this.showWizard(3),
+            about:          () => this.showAbout(),
+            copyright:      () => this.showCopyright(),
+        };
+        if (map[action]) map[action]();
+    },
+
+    // ── Settings dialog ────────────────────────────────────────────
+    showSettings() {
+        const modal = document.getElementById('settings-modal');
+        const sel = document.getElementById('settings-lang');
+        if (sel) sel.value = this.state.language;
+        modal.classList.add('visible');
+    },
+
+    closeSettings() {
+        document.getElementById('settings-modal').classList.remove('visible');
+    },
+
+    saveSettings() {
+        const sel = document.getElementById('settings-lang');
+        if (!sel) return;
+        const lang = sel.value;
+        this.loadLanguage(lang);
+        this.postMessage({ type: 'set_language', payload: { language: lang } });
+        this.closeSettings();
+        this.addLog(`🌐 Language set to: ${sel.options[sel.selectedIndex].text}`);
+    },
+
+    // ── Execution History ─────────────────────────────────────────
+    showHistory() {
+        const modal = document.getElementById('history-modal');
+        if (!modal) return;
+        document.getElementById('history-list-view').innerHTML =
+            '<div class="history-loading">読み込み中...</div>';
+        document.getElementById('history-list-view').style.display = '';
+        document.getElementById('history-detail-view').style.display = 'none';
+        modal.classList.add('visible');
+        this.postMessage({ type: 'history_list' });
+    },
+
+    closeHistory() {
+        document.getElementById('history-modal').classList.remove('visible');
+    },
+
+    onHistoryListResult(payload) {
+        const items = (payload && payload.items) ? payload.items : [];
+        const listView = document.getElementById('history-list-view');
+        if (!listView) return;
+        if (items.length === 0) {
+            listView.innerHTML = '<div class="history-empty">実行履歴がありません</div>';
+            return;
+        }
+        listView.innerHTML = items.map(item => `
+            <div class="history-item" onclick="app.showHistoryDetail(${JSON.stringify(item.id)})">
+                <div class="history-item-name">${this.escapeHtml(item.pipelineName || '')}</div>
+                <div class="history-item-meta">
+                    <span class="history-item-date">${this.escapeHtml((item.executedAt || '').replace('T',' ').replace('Z',''))}</span>
+                    <span class="history-item-steps">${item.stepCount} step${item.stepCount !== 1 ? 's' : ''}</span>
+                    <span class="history-item-status ${this.escapeHtml(item.status || 'completed')}">${this.escapeHtml(item.status || 'completed')}</span>
+                </div>
+            </div>`).join('');
+    },
+
+    showHistoryDetail(id) {
+        document.getElementById('history-list-view').style.display = 'none';
+        const detailView = document.getElementById('history-detail-view');
+        detailView.style.display = '';
+        detailView.innerHTML = '<div class="history-loading">読み込み中...</div>';
+        this.postMessage({ type: 'history_detail', payload: { id } });
+    },
+
+    onHistoryDetailResult(record) {
+        const detailView = document.getElementById('history-detail-view');
+        if (!detailView) return;
+        if (!record || !record.pipelineName) {
+            detailView.innerHTML = '<div class="history-empty">データが見つかりません</div>';
+            return;
+        }
+        const stepsHtml = (record.steps || []).map((step, i) => `
+            <div class="history-step">
+                <div class="history-step-header" onclick="this.parentElement.classList.toggle('expanded')">
+                    <span class="history-step-num">${i + 1}</span>
+                    <span class="history-step-name">${this.escapeHtml(step.name || '')}</span>
+                    <span class="history-step-type">${this.escapeHtml(step.type || '')}</span>
+                    ${step.tokens ? `<span class="history-step-tokens">${step.tokens} tok</span>` : ''}
+                    <span class="history-step-toggle">▶</span>
+                </div>
+                <div class="history-step-body">
+                    <div class="history-step-section">
+                        <div class="history-step-label">Input</div>
+                        <pre class="history-step-content">${this.escapeHtml(step.input || '')}</pre>
+                    </div>
+                    <div class="history-step-section">
+                        <div class="history-step-label">Output</div>
+                        <pre class="history-step-content">${this.escapeHtml(step.output || '')}</pre>
+                    </div>
+                </div>
+            </div>`).join('');
+        detailView.innerHTML = `
+            <div class="history-detail-nav">
+                <button class="btn-back" onclick="app.backToHistoryList()">← 一覧に戻る</button>
+            </div>
+            <div class="history-detail-header">
+                <div class="history-detail-name">${this.escapeHtml(record.pipelineName || '')}</div>
+                <div class="history-detail-date">${this.escapeHtml((record.executedAt || '').replace('T',' ').replace('Z',''))}</div>
+            </div>
+            ${record.outputContent ? `<div class="history-detail-output">
+                <div class="history-step-label">最終出力</div>
+                <pre class="history-step-content">${this.escapeHtml(record.outputContent)}</pre>
+            </div>` : ''}
+            <div class="history-steps">${stepsHtml}</div>`;
+    },
+
+    backToHistoryList() {
+        document.getElementById('history-detail-view').style.display = 'none';
+        document.getElementById('history-list-view').style.display = '';
+        this.postMessage({ type: 'history_list' });
+    },
+
+    // ── About / Copyright ──────────────────────────────────────────
+    showAbout() {
+        const modal = document.getElementById('about-modal');
+        modal.classList.add('visible');
+        this.applyTranslations();
+    },
+
+    closeAbout() {
+        document.getElementById('about-modal').classList.remove('visible');
+    },
+
+    showCopyright() {
+        const modal = document.getElementById('copyright-modal');
+        const body = document.getElementById('copyright-body');
+        if (body) body.textContent = this.t('CopyrightBody') ||
+            'Prompts — Part of the Ecode project.\n\nThird-party libraries:\n' +
+            '• marked.js — MIT License\n• mark.js — MIT License\n' +
+            '• mermaid.js — MIT License\n• cytoscape.js — MIT License\n' +
+            '• Microsoft WebView2 SDK — BSD 3-Clause\n• Mbed TLS — Apache 2.0 / GPL 2.0+';
+        modal.classList.add('visible');
+    },
+
+    closeCopyright() {
+        document.getElementById('copyright-modal').classList.remove('visible');
+    },
+
+    t(key) {
+        return (this.state.translations && this.state.translations[key]) || key;
+    },
+
+    // ── Setup Wizard ──────────────────────────────────────────────
+    SW_TEMPLATES: [
+        {
+            id: 'translate',
+            label: '🌐 翻訳プロジェクト',
+            desc: 'テキストを複数言語に翻訳・比較',
+            sample: '翻訳したいテキストをここに入力してください。\n\nHello, world! This is a sample text.',
+            pipeline: '翻訳→比較選択'
+        },
+        {
+            id: 'summarize',
+            label: '📝 文章要約',
+            desc: '長文を要約・ポイント抽出',
+            sample: '要約したい文章をここに貼り付けてください。\n\n長い記事や文書のテキストを入力すると、AIが重要なポイントを抽出します。',
+            pipeline: '要約'
+        },
+        {
+            id: 'review',
+            label: '✏️ 文章レビュー',
+            desc: '文章を校正・改善提案',
+            sample: 'レビューしたい文章をここに入力してください。\n\nAIが文法・表現・構成の改善点を提案します。',
+            pipeline: 'レビュー'
+        },
+        {
+            id: 'free',
+            label: '🆓 自由形式',
+            desc: 'テンプレートなしで自由に開始',
+            sample: '',
+            pipeline: ''
+        }
+    ],
+
+    sw_: { step: 0, tabName: '', templateId: 'free', content: '', pipelineName: '' },
+
+    showSetupWizard() {
+        this.sw_ = { step: 0, tabName: 'プロジェクト ' + new Date().toLocaleDateString('ja'), templateId: 'free', content: '', pipelineName: '' };
+        document.getElementById('setup-wizard-modal').classList.add('visible');
+        this.swRender();
+    },
+
+    closeSetupWizard() {
+        document.getElementById('setup-wizard-modal').classList.remove('visible');
+    },
+
+    swRender() {
+        const s = this.sw_;
+        const total = 4;
+        const cur = s.step;
+
+        // Progress dots
+        document.getElementById('sw-progress').innerHTML =
+            Array.from({length: total}, (_, i) =>
+                `<span class="wizard-dot${i === cur ? ' active' : i < cur ? ' done' : ''}"></span>`
+            ).join('');
+
+        const body = document.getElementById('sw-body');
+        const nextBtn = document.getElementById('sw-next');
+
+        if (cur === 0) {
+            // Step 1: テンプレート選択 + プロジェクト名
+            body.innerHTML = `
+                <div class="wizard-icon">🚀</div>
+                <h2 class="wizard-title">何を始めますか？</h2>
+                <div class="sw-field">
+                    <label class="sw-label">プロジェクト名</label>
+                    <input type="text" id="sw-tab-name" class="sw-input" value="${this.escapeHtml(s.tabName)}" placeholder="例: 翻訳プロジェクト">
+                </div>
+                <div class="sw-label" style="margin:14px 0 8px">テンプレートを選択</div>
+                <div class="sw-templates">${
+                    this.SW_TEMPLATES.map(t => `
+                        <div class="sw-template${s.templateId === t.id ? ' selected' : ''}" onclick="app.swSelectTemplate('${t.id}')">
+                            <div class="sw-template-label">${t.label}</div>
+                            <div class="sw-template-desc">${t.desc}</div>
+                        </div>`).join('')
+                }</div>`;
+            nextBtn.textContent = '次へ →';
+            nextBtn.onclick = () => {
+                const nameEl = document.getElementById('sw-tab-name');
+                this.sw_.tabName = nameEl ? nameEl.value.trim() || 'プロジェクト' : 'プロジェクト';
+                const tmpl = this.SW_TEMPLATES.find(t => t.id === this.sw_.templateId) || this.SW_TEMPLATES[3];
+                if (!this.sw_.content) this.sw_.content = tmpl.sample;
+                this.sw_.pipelineName = tmpl.pipeline;
+                this.swNext();
+            };
+
+        } else if (cur === 1) {
+            // Step 2: コンテンツ入力
+            body.innerHTML = `
+                <div class="wizard-icon">📄</div>
+                <h2 class="wizard-title">最初のコンテンツを入力</h2>
+                <p class="wizard-text" style="margin-bottom:10px">処理したいテキストを入力・貼り付けてください。後から変更できます。</p>
+                <textarea id="sw-content" class="sw-textarea" placeholder="テキストをここに入力...">${this.escapeHtml(s.content)}</textarea>
+                <div class="sw-hint">💡 画像・PDFなどは後からノードにドロップして追加できます</div>`;
+            nextBtn.textContent = '次へ →';
+            nextBtn.onclick = () => {
+                const el = document.getElementById('sw-content');
+                this.sw_.content = el ? el.value : '';
+                this.swNext();
+            };
+
+        } else if (cur === 2) {
+            // Step 3: パイプライン選択
+            const pipelines = (this.state.pipelines || []).map(p => p.name);
+            const hasPipelines = pipelines.length > 0;
+            body.innerHTML = `
+                <div class="wizard-icon">🔧</div>
+                <h2 class="wizard-title">パイプラインを選択（任意）</h2>
+                <p class="wizard-text" style="margin-bottom:12px">作成後にすぐ実行するパイプラインを選べます。</p>
+                <div class="sw-pipeline-list">
+                    <div class="sw-pipeline-item${!s.pipelineName ? ' selected' : ''}" onclick="app.swSelectPipeline('')">
+                        <span>⏭ スキップ（後で実行）</span>
+                    </div>
+                    ${hasPipelines ? pipelines.map(name => `
+                        <div class="sw-pipeline-item${s.pipelineName === name ? ' selected' : ''}" onclick="app.swSelectPipeline('${this.escapeHtml(name)}')">
+                            <span>🔧 ${this.escapeHtml(name)}</span>
+                        </div>`).join('') : `<div class="sw-hint" style="margin-top:8px">⚠ パイプラインがまだありません。<br>スキップしてノード作成後に設定できます。</div>`}
+                </div>`;
+            nextBtn.textContent = '確認 →';
+            nextBtn.onclick = () => this.swNext();
+
+        } else if (cur === 3) {
+            // Step 4: 確認
+            const tmpl = this.SW_TEMPLATES.find(t => t.id === s.templateId);
+            const preview = s.content ? s.content.slice(0, 80) + (s.content.length > 80 ? '…' : '') : '（空）';
+            body.innerHTML = `
+                <div class="wizard-icon">✅</div>
+                <h2 class="wizard-title">準備完了！</h2>
+                <div class="sw-summary">
+                    <div class="sw-summary-row"><span class="sw-summary-label">プロジェクト名</span><span>${this.escapeHtml(s.tabName)}</span></div>
+                    <div class="sw-summary-row"><span class="sw-summary-label">テンプレート</span><span>${tmpl ? tmpl.label : '自由形式'}</span></div>
+                    <div class="sw-summary-row"><span class="sw-summary-label">コンテンツ</span><span class="sw-summary-preview">${this.escapeHtml(preview)}</span></div>
+                    <div class="sw-summary-row"><span class="sw-summary-label">パイプライン</span><span>${s.pipelineName ? '🔧 ' + this.escapeHtml(s.pipelineName) : 'スキップ'}</span></div>
+                </div>`;
+            nextBtn.textContent = '🚀 作成する';
+            nextBtn.onclick = () => this.swCreate();
+        }
+
+        document.getElementById('sw-prev').style.visibility = cur === 0 ? 'hidden' : '';
+        document.getElementById('sw-cancel').style.display = cur === 3 ? 'none' : '';
+    },
+
+    swSelectTemplate(id) {
+        this.sw_.templateId = id;
+        const tmpl = this.SW_TEMPLATES.find(t => t.id === id) || this.SW_TEMPLATES[3];
+        this.sw_.content = tmpl.sample;
+        this.sw_.pipelineName = tmpl.pipeline;
+        this.swRender();
+    },
+
+    swSelectPipeline(name) {
+        this.sw_.pipelineName = name;
+        this.swRender();
+    },
+
+    swNext() {
+        if (this.sw_.step < 3) { this.sw_.step++; this.swRender(); }
+    },
+
+    swPrev() {
+        if (this.sw_.step > 0) { this.sw_.step--; this.swRender(); }
+    },
+
+    swCreate() {
+        const s = this.sw_;
+        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str || ''); } };
+
+        // Build root node with content
+        const rootNode = {
+            title: safeB64(s.tabName),
+            content: safeB64(s.content),
+            mimetype: 'text/plain',
+            attachments: [],
+            children: []
+        };
+
+        // Create new tab in state
+        const fileName = 'setup_' + Date.now() + '.json';
+        const tab = { name: s.tabName, file: fileName, root: rootNode };
+        this.state.tabs.push(tab);
+        this.state.activeTab = this.state.tabs.length - 1;
+        this.state.currentNodePath = '';
+
+        // Save via bridge
+        this.postMessage({ type: 'save_node', payload: { tabFile: fileName, root: rootNode } });
+
+        // Also save session
+        this.postMessage({ type: 'save_session', payload: {
+            tabs: this.state.tabs.map(t => ({ name: t.name, file: t.file }))
+        }});
+
+        this.renderTabs();
+        this.renderTree();
+        this.renderList();
+        this.loadEditor('');
+        this.closeSetupWizard();
+        this.addLog(`🚀 プロジェクト "${s.tabName}" を作成しました`);
+
+        // Run pipeline if selected
+        if (s.pipelineName) {
+            setTimeout(() => this.runPipeline(s.pipelineName), 300);
+        }
+    },
+
+    // ── Hint tooltips ──────────────────────────────────────────────
+    setupHints() {
+        const tooltip = document.getElementById('hint-tooltip');
+        if (!tooltip) return;
+        let hintTimer = null;
+
+        document.addEventListener('mouseover', (e) => {
+            const el = e.target.closest('[data-hint]');
+            if (!el) return;
+            clearTimeout(hintTimer);
+            hintTimer = setTimeout(() => {
+                const hint = el.getAttribute('data-hint');
+                if (!hint) return;
+                tooltip.textContent = hint;
+                tooltip.style.display = 'block';
+                const r = el.getBoundingClientRect();
+                let left = r.left;
+                let top = r.bottom + 6;
+                // Keep within viewport
+                tooltip.style.left = '0';
+                tooltip.style.top = '0';
+                tooltip.style.display = 'block';
+                const tw = tooltip.offsetWidth;
+                if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+                if (left < 4) left = 4;
+                tooltip.style.left = left + 'px';
+                tooltip.style.top = top + 'px';
+            }, 500);
+        });
+
+        document.addEventListener('mouseout', (e) => {
+            const el = e.target.closest('[data-hint]');
+            if (!el) return;
+            clearTimeout(hintTimer);
+            tooltip.style.display = 'none';
+        });
+
+        document.addEventListener('click', () => {
+            clearTimeout(hintTimer);
+            tooltip.style.display = 'none';
+        });
+    },
+
     // Keyboard shortcuts
     handleKey(e) {
         if (e.ctrlKey && e.key === 's') { e.preventDefault(); this.saveFile(); }
         if (e.ctrlKey && e.key === 'f') { e.preventDefault(); document.getElementById('search-box')?.focus(); }
         if (e.altKey && e.key === 'ArrowLeft')  { e.preventDefault(); this.navBack(); }
         if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); this.navForward(); }
+        if (e.key === 'F1') { e.preventDefault(); this.showWizard(); }
     }
 };
 

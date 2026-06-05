@@ -97,6 +97,9 @@ private:
     int currentStepIndex_{-1};
     bool waitingForManual_{false};
 
+    std::string runId_;
+    std::string startedAt_;
+
     // Parallel step state
     std::unique_ptr<ParallelState> parallelState_;
     void ExecuteNextParallelBranch();
