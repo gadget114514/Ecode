@@ -1,2 +1,24 @@
 #pragma once
-#define IDI_APP_ICON 101
+#define IDI_APP_ICON         101
+#define IDR_MENU_MAIN        200
+#define ID_FILE_NEW          201
+#define ID_FILE_OPEN         202
+#define ID_FILE_SAVE         203
+#define ID_FILE_SAVE_AS      204
+#define ID_FILE_IMPORT_ZIP   205
+#define ID_FILE_EXPORT_NODE  206
+#define ID_FILE_EXIT         207
+#define ID_FILE_RECENT_BASE  210
+#define ID_PIPELINE_RUN      220
+#define ID_PIPELINE_MANAGER  221
+#define ID_PIPELINE_HISTORY  222
+#define ID_PIPELINE_CANCEL   223
+#define ID_PROVIDERS_CONFIGURE 230
+#define ID_PROVIDERS_TEST    231
+#define ID_VIEW_TREE         240
+#define ID_VIEW_LIST         241
+#define ID_VIEW_EDITOR       242
+#define ID_VIEW_MESSAGES     243
+#define ID_VIEW_FULLSCREEN   244
+#define ID_HELP_DOCS         250
+#define ID_HELP_ABOUT        251

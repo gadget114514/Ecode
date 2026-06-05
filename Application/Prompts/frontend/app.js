@@ -94,6 +94,25 @@ const app = {
                 this.state.providers = msg.payload || {};
                 this.onProvidersResult(this.state.providers);
                 break;
+            case 'menu_command':
+                this.handleMenuCommand(msg.payload);
+                break;
+            case 'open_file_result':
+                this.onFileSelected(msg.payload.path);
+                break;
+            case 'save_as_result':
+                this.onSaveAsResult(msg.payload.path);
+                break;
+            case 'pipeline_list':
+                this.state.pipelines = msg.payload.pipelines || [];
+                this.addLog('📋 Pipelines updated');
+                break;
+            case 'history_list_result':
+                this.onHistoryListResult(msg.payload);
+                break;
+            case 'history_detail_result':
+                this.onHistoryDetailResult(msg.payload);
+                break;
         }
     },
 
@@ -254,10 +273,47 @@ const app = {
             <div class="meta-header">
                 <span class="meta-pipeline-name">📋 ${this.escapeHtml(meta.pipelineName)}</span>
                 <span class="meta-date">${(meta.executedAt||'').replace('T',' ').replace('Z','')}</span>
-                <button class="meta-reproduce-btn" onclick="app.reproducePipeline(${this.escapeHtml(JSON.stringify(meta.pipelineName))})">▶ 再実行</button>
+                <button class="meta-reproduce-btn" data-pipeline="${this.escapeHtml(meta.pipelineName)}">▶ 再実行</button>
+                <button class="meta-save-btn">💾 パイプラインとして保存</button>
             </div>
             <div class="meta-steps">${stepsHtml}</div>`;
+        // Attach click handlers
+        const reproduceBtn = el.querySelector('.meta-reproduce-btn');
+        if (reproduceBtn) {
+            reproduceBtn.onclick = () => {
+                const name = reproduceBtn.dataset.pipeline;
+                if (name) this.reproducePipeline(name);
+            };
+        }
+        const saveBtn = el.querySelector('.meta-save-btn');
+        if (saveBtn) {
+            saveBtn.onclick = () => {
+                try {
+                    const pipeline = {
+                        name: meta.pipelineName || 'pipeline',
+                        mode: 'basic',
+                        outputMode: 'child',
+                        outputNaming: '{pipeline_name}_{timestamp}',
+                        steps: (meta.steps || []).map(s => {
+                            const step = { name: s.name, type: s.type };
+                            if (s.provider) step.provider = s.provider;
+                            if (s.model) step.model = s.model;
+                            if (s.systemPrompt) step.systemPrompt = s.systemPrompt;
+                            if (s.userPrompt) step.userPrompt = s.userPrompt;
+                            if (s.temperature) step.temperature = s.temperature;
+                            return step;
+                        })
+                    };
+                    this.postMessage({ type: 'save_pipeline', payload: pipeline });
+                    this.addLog(`💾 Pipeline "${pipeline.name}" saved from metadata`);
+                } catch (e) {
+                    this.addLog('⚠ Failed to save pipeline: ' + e.message);
+                }
+            };
+        }
     },
+
+
 
     reproducePipeline(pipelineName) {
         if (!this.state.currentNode) { this.addLog('⚠ ノードを選択してください'); return; }
@@ -424,6 +480,32 @@ const app = {
 
     testConnection() {
         this.addLog('🔌 Test connection not yet implemented.');
+    },
+
+    handleMenuCommand(cmd) {
+        switch (cmd.action) {
+            case 'new_tab':         this.newTab(); break;
+            case 'save':            this.saveFile(); break;
+            case 'save_as':         this.saveFileAs(); break;
+            case 'import_zip':      this.addLog('📦 Import ZIP — coming soon'); break;
+            case 'export_node':     this.addLog('📤 Export Node — coming soon'); break;
+            case 'run_pipeline':    this.runPipeline(); break;
+            case 'pipeline_manager': this.addLog('⚡ Pipeline Manager — coming soon'); break;
+            case 'pipeline_history': this.showHistory(); break;
+            case 'config':          this.showConfig(); break;
+            case 'test_connection': this.testConnection(); break;
+            case 'toggle_pane':     this.togglePane(cmd.pane + '-pane'); break;
+            case 'about':           this.showAbout(); break;
+            default: this.addLog('⚠ Unknown menu command: ' + cmd.action);
+        }
+    },
+
+    onSaveAsResult(path) {
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && path) {
+            tab.file = path.split('/').pop().split('\\').pop();
+            this.addLog('💾 Saved as: ' + path);
+        }
     },
 
     // Tree rendering
@@ -770,6 +852,17 @@ const app = {
 
     log(msg) { this.addLog(msg); },
 
+    togglePane(id) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.toggle('collapsed');
+            // Save pane states
+            const states = JSON.parse(localStorage.getItem('prompts_panes') || '{}');
+            states[id] = el.classList.contains('collapsed');
+            localStorage.setItem('prompts_panes', JSON.stringify(states));
+        }
+    },
+
     // ── Wizard ────────────────────────────────────────────────────
     WIZARD_STEPS: [
         {
@@ -1023,6 +1116,97 @@ const app = {
         this.postMessage({ type: 'set_language', payload: { language: lang } });
         this.closeSettings();
         this.addLog(`🌐 Language set to: ${sel.options[sel.selectedIndex].text}`);
+    },
+
+    // ── Execution History ─────────────────────────────────────────
+    showHistory() {
+        const modal = document.getElementById('history-modal');
+        if (!modal) return;
+        document.getElementById('history-list-view').innerHTML =
+            '<div class="history-loading">読み込み中...</div>';
+        document.getElementById('history-list-view').style.display = '';
+        document.getElementById('history-detail-view').style.display = 'none';
+        modal.classList.add('visible');
+        this.postMessage({ type: 'history_list' });
+    },
+
+    closeHistory() {
+        document.getElementById('history-modal').classList.remove('visible');
+    },
+
+    onHistoryListResult(payload) {
+        const items = (payload && payload.items) ? payload.items : [];
+        const listView = document.getElementById('history-list-view');
+        if (!listView) return;
+        if (items.length === 0) {
+            listView.innerHTML = '<div class="history-empty">実行履歴がありません</div>';
+            return;
+        }
+        listView.innerHTML = items.map(item => `
+            <div class="history-item" onclick="app.showHistoryDetail(${JSON.stringify(item.id)})">
+                <div class="history-item-name">${this.escapeHtml(item.pipelineName || '')}</div>
+                <div class="history-item-meta">
+                    <span class="history-item-date">${this.escapeHtml((item.executedAt || '').replace('T',' ').replace('Z',''))}</span>
+                    <span class="history-item-steps">${item.stepCount} step${item.stepCount !== 1 ? 's' : ''}</span>
+                    <span class="history-item-status ${this.escapeHtml(item.status || 'completed')}">${this.escapeHtml(item.status || 'completed')}</span>
+                </div>
+            </div>`).join('');
+    },
+
+    showHistoryDetail(id) {
+        document.getElementById('history-list-view').style.display = 'none';
+        const detailView = document.getElementById('history-detail-view');
+        detailView.style.display = '';
+        detailView.innerHTML = '<div class="history-loading">読み込み中...</div>';
+        this.postMessage({ type: 'history_detail', payload: { id } });
+    },
+
+    onHistoryDetailResult(record) {
+        const detailView = document.getElementById('history-detail-view');
+        if (!detailView) return;
+        if (!record || !record.pipelineName) {
+            detailView.innerHTML = '<div class="history-empty">データが見つかりません</div>';
+            return;
+        }
+        const stepsHtml = (record.steps || []).map((step, i) => `
+            <div class="history-step">
+                <div class="history-step-header" onclick="this.parentElement.classList.toggle('expanded')">
+                    <span class="history-step-num">${i + 1}</span>
+                    <span class="history-step-name">${this.escapeHtml(step.name || '')}</span>
+                    <span class="history-step-type">${this.escapeHtml(step.type || '')}</span>
+                    ${step.tokens ? `<span class="history-step-tokens">${step.tokens} tok</span>` : ''}
+                    <span class="history-step-toggle">▶</span>
+                </div>
+                <div class="history-step-body">
+                    <div class="history-step-section">
+                        <div class="history-step-label">Input</div>
+                        <pre class="history-step-content">${this.escapeHtml(step.input || '')}</pre>
+                    </div>
+                    <div class="history-step-section">
+                        <div class="history-step-label">Output</div>
+                        <pre class="history-step-content">${this.escapeHtml(step.output || '')}</pre>
+                    </div>
+                </div>
+            </div>`).join('');
+        detailView.innerHTML = `
+            <div class="history-detail-nav">
+                <button class="btn-back" onclick="app.backToHistoryList()">← 一覧に戻る</button>
+            </div>
+            <div class="history-detail-header">
+                <div class="history-detail-name">${this.escapeHtml(record.pipelineName || '')}</div>
+                <div class="history-detail-date">${this.escapeHtml((record.executedAt || '').replace('T',' ').replace('Z',''))}</div>
+            </div>
+            ${record.outputContent ? `<div class="history-detail-output">
+                <div class="history-step-label">最終出力</div>
+                <pre class="history-step-content">${this.escapeHtml(record.outputContent)}</pre>
+            </div>` : ''}
+            <div class="history-steps">${stepsHtml}</div>`;
+    },
+
+    backToHistoryList() {
+        document.getElementById('history-detail-view').style.display = 'none';
+        document.getElementById('history-list-view').style.display = '';
+        this.postMessage({ type: 'history_list' });
     },
 
     // ── About / Copyright ──────────────────────────────────────────
