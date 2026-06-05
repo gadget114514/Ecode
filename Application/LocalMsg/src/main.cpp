@@ -90,6 +90,7 @@ static std::wstring s2ws(const std::string& s) {
 #define IDC_COMM_LOG        113
 #define IDC_DEBUG_LOG       114
 #define IDC_RECEIVE_BTN     115
+#define IDC_DISSOLVE_BTN    116
 #define IDC_USER_FILTER     119
 
 #define IDM_SEND_FILES  201
@@ -260,6 +261,7 @@ static HWND g_textInput      = nullptr;
 static HWND g_sendTextBtn    = nullptr;
 static HWND g_attachBtn      = nullptr;
 static std::vector<std::wstring> g_pendingFiles;
+static HWND g_dissolveBtn    = nullptr;
 static HWND g_xferList       = nullptr;
 static HWND g_commLog        = nullptr;
 static HWND g_debugLog       = nullptr;
@@ -2351,9 +2353,10 @@ static void DoLayout(HWND hwnd) {
     int btnH = 26, nameH = 22, filterH = 22, inputH = 200, rightX = lw + divW;
     int attachW = 80, sendW = lw - attachW;
 
-    int reloadW = lw / 2, recvW = lw - reloadW;
-    MoveWindow(g_reloadBtn,   0,0,                    reloadW, btnH, TRUE);
-    MoveWindow(GetDlgItem(hwnd, IDC_RECEIVE_BTN), reloadW,0, recvW, btnH, TRUE);
+    int btnThird = lw / 3;
+    MoveWindow(g_reloadBtn,   0,0,                    btnThird, btnH, TRUE);
+    MoveWindow(GetDlgItem(hwnd, IDC_RECEIVE_BTN), btnThird,0, btnThird, btnH, TRUE);
+    MoveWindow(g_dissolveBtn, btnThird*2,0,           lw-btnThird*2, btnH, TRUE);
     MoveWindow(g_peerList,    0,btnH,                 lw, ch-btnH-inputH-btnH, TRUE);
     MoveWindow(g_textInput,   0,ch-inputH-btnH,       lw, inputH, TRUE);
     MoveWindow(g_attachBtn,   0,ch-btnH,              attachW, btnH, TRUE);
@@ -2512,6 +2515,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         CreateWindowExW(0,L"BUTTON",L"Receive", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 0,0,10,10, hwnd, (HMENU)IDC_RECEIVE_BTN, nullptr, nullptr);
 
+        g_dissolveBtn = CreateWindowExW(0,L"BUTTON",L"Dissolve", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 0,0,10,10, hwnd, (HMENU)IDC_DISSOLVE_BTN, nullptr, nullptr);
+
         g_peerNameLabel = CreateWindowExW(WS_EX_CLIENTEDGE,L"STATIC",L"(no peer selected)", WS_CHILD|WS_VISIBLE|SS_LEFT|SS_CENTERIMAGE, 0,0,10,10, hwnd, (HMENU)IDC_PEER_NAME_LABEL, nullptr, nullptr);
         SendMessageW(g_peerNameLabel, WM_SETFONT, (WPARAM)hFont, FALSE);
 
@@ -2657,6 +2662,25 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g_announceNow=true;
             AnnouncePseudoUsers();
             DebugLog(L"[ls] Reload: re-sending multicast announces");
+            return 0;
+        }
+        if (id==IDC_DISSOLVE_BTN) {
+            EnterCriticalSection(&g_pseudoCs);
+            for (auto& pu : g_pseudoUsers)
+                SendBrExit(pu.username);
+            g_pseudoUsers.clear();
+            LeaveCriticalSection(&g_pseudoCs);
+            EnterCriticalSection(&g_msgCs);
+            g_messages.clear();
+            g_msgReadPtr.clear();
+            g_nextMsgId = 1;
+            LeaveCriticalSection(&g_msgCs);
+            EnterCriticalSection(&g_xferCs);
+            g_fileInbox.clear();
+            LeaveCriticalSection(&g_xferCs);
+            SetWindowTextW(g_chatView, L"");
+            UpdatePeerList();
+            DebugLog(L"[ls] Dissolve: all agents and history cleared");
             return 0;
         }
         if (id==IDC_RECEIVE_BTN) {

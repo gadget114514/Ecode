@@ -35,6 +35,7 @@ public:
     // History
     void SaveHistory(const std::string &recordJson);
     std::vector<std::wstring> ListHistory();
+    std::string LoadHistoryRecord(const std::wstring &filename);
     
     // Providers
     std::map<std::string, ProviderConfig> LoadProviders();
@@ -46,8 +47,13 @@ public:
     
     std::wstring GetBasePath() const { return basePath_; }
 
+    // Recent Files
+    std::vector<std::wstring> LoadRecentFiles();
+    void SaveRecentFiles(const std::vector<std::wstring> &files);
+
     // Serialize a Node tree to JSON string (for Bridge transmission)
     static std::string SerializeNode(const Node &node);
+    static std::string SerializePipelines(const std::vector<Pipeline> &pipelines);
 
     bool EnsureDirectory(const std::wstring &path);
 

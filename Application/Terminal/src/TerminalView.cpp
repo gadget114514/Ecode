@@ -501,7 +501,7 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
         if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
             std::wstring iniPath = std::wstring(appdata) + L"\\Ecode\\settings.ini";
             int lines = (int)GetPrivateProfileIntW(
-                L"Terminal", L"ScrollbackLines", 10000, iniPath.c_str());
+                L"Terminal", L"ScrollbackLines", 100000, iniPath.c_str());
             buffer_.setMaxHistoryLines(lines);
 
             clickToOpenHyperlink_ = GetPrivateProfileIntW(

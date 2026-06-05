@@ -211,7 +211,7 @@ private:
     bool savedPendingWrapAlt_ = false;
     int scrollTop_    = 0;
     int scrollBottom_ = 29;
-    int maxHistoryLines_ = 10000;
+    int maxHistoryLines_ = 100000;
 
     // tab stops (default every 8 columns)
     std::vector<bool> tabStops_;

@@ -440,6 +440,16 @@ add_plugin(JYEditor       Application/JYEditor)
 add_plugin(Prompts        Application/Prompts)
 add_plugin(FastDired      Application/FastDired)
 
+# Build FastDired plugin via its own CMake build tree
+set(FASTDIRED_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Application/FastDired/build")
+add_custom_command(TARGET ecode PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${FASTDIRED_BUILD_DIR}"
+    COMMAND ${CMAKE_COMMAND} -S "${CMAKE_CURRENT_SOURCE_DIR}/Application/FastDired"
+        -B "${FASTDIRED_BUILD_DIR}" -G "${CMAKE_GENERATOR}" -A x64
+    COMMAND ${CMAKE_COMMAND} --build "${FASTDIRED_BUILD_DIR}" --config $<CONFIG>
+    COMMENT "Building FastDired..."
+)
+
 # Copy FastFileSearch to apps/ directory for app launcher
 set(plugin_out "$<TARGET_FILE_DIR:ecode>")
 add_custom_command(TARGET ecode POST_BUILD

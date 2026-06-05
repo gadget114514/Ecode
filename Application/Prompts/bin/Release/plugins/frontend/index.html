@@ -12,19 +12,22 @@
 <body>
 <div id="app">
     <div id="toolbar">
-        <button id="btn-nav-back" onclick="app.navBack()" title="Back (Alt+←)" disabled>←</button>
-        <button id="btn-nav-fwd"  onclick="app.navForward()" title="Forward (Alt+→)" disabled>→</button>
+        <button id="btn-hamburger" onclick="app.showHamburger(event)" data-hint="メニュー" style="display:none">☰</button>
+        <button id="btn-nav-back" onclick="app.navBack()" data-hint="前のノードに戻る (Alt+←)" disabled>←</button>
+        <button id="btn-nav-fwd"  onclick="app.navForward()" data-hint="次のノードへ進む (Alt+→)" disabled>→</button>
         <span class="separator">|</span>
-        <button id="btn-new" onclick="app.newTab()">📄 <span data-i18n="New">New</span></button>
-        <button id="btn-open" onclick="app.openFile()">📂 <span data-i18n="Open">Open</span></button>
-        <button id="btn-save" onclick="app.saveFile()">💾 <span data-i18n="Save">Save</span></button>
-        <button id="btn-saveas" onclick="app.saveFileAs()">💾 <span data-i18n="SaveAs">Save As</span></button>
+        <button id="btn-new" onclick="app.newTab()" data-hint="新しいタブを作成 (Ctrl+T)">📄 <span data-i18n="New">New</span></button>
+        <button id="btn-open" onclick="app.openFile()" data-hint="JSONファイルを開く (Ctrl+O)">📂 <span data-i18n="Open">Open</span></button>
+        <button id="btn-save" onclick="app.saveFile()" data-hint="現在のタブを保存 (Ctrl+S)">💾 <span data-i18n="Save">Save</span></button>
+        <button id="btn-saveas" onclick="app.saveFileAs()" data-hint="別名で保存 (Ctrl+Shift+S)">💾 <span data-i18n="SaveAs">Save As</span></button>
         <span class="separator">|</span>
-        <button id="btn-pipeline" onclick="app.runPipeline()">▶ <span data-i18n="RunPipeline">Run</span></button>
-        <button id="btn-config" onclick="app.showConfig()">⚙ <span data-i18n="Config">Config</span></button>
+        <button id="btn-pipeline" onclick="app.runPipeline()" data-hint="選択中のノードにパイプラインを実行 (F5)">▶ <span data-i18n="RunPipeline">Run</span></button>
+        <button id="btn-config" onclick="app.showConfig()" data-hint="APIキー・プロバイダの設定">⚙ <span data-i18n="Config">Config</span></button>
         <span class="spacer"></span>
         <input type="text" id="search-box" placeholder="Search..." oninput="app.search(this.value)">
         <button onclick="app.toggleTestMode()" id="btn-test-mode">🧪 <span data-i18n="Test">Test</span></button>
+        <button id="btn-setup" onclick="app.showSetupWizard()" data-hint="セットアップウィザード — 新しいプロジェクトをすぐに開始">🚀</button>
+        <button id="btn-help" onclick="app.showWizard()" data-hint="使い方ガイドを表示 (F1)">❓</button>
     </div>
     <div id="tab-bar"></div>
     <div id="main-content">
@@ -76,6 +79,87 @@
         <div id="messages-content"></div>
     </div>
 </div>
+<!-- Hint Tooltip -->
+<div id="hint-tooltip" class="hint-tooltip" style="display:none"></div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal">
+    <div class="modal-content settings-modal-content">
+        <span class="modal-close" onclick="app.closeSettings()">&times;</span>
+        <h2 data-i18n="SettingsTitle">Settings</h2>
+        <div class="settings-row">
+            <label class="settings-label" data-i18n="SettingsLanguageLabel">Display Language</label>
+            <select id="settings-lang" class="settings-select">
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="fr">Français</option>
+                <option value="es">Español</option>
+                <option value="pt">Português</option>
+                <option value="de">Deutsch</option>
+            </select>
+        </div>
+        <div class="settings-actions">
+            <button onclick="app.saveSettings()" class="btn-primary" data-i18n="SettingsSave">Save</button>
+            <button onclick="app.closeSettings()" data-i18n="SettingsClose">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- About Modal -->
+<div id="about-modal" class="modal">
+    <div class="modal-content about-modal-content">
+        <span class="modal-close" onclick="app.closeAbout()">&times;</span>
+        <div class="about-icon">🤖</div>
+        <h2 id="about-title" data-i18n="AboutTitle">About Prompts</h2>
+        <p id="about-desc" class="about-desc" data-i18n="AboutDesc">AI prompt and pipeline management tool.</p>
+        <div class="about-version"><span data-i18n="AboutVersion">Version</span> <span id="about-ver">1.0</span></div>
+        <div class="about-links">
+            <a href="#" onclick="app.closeAbout(); app.showCopyright(); return false;" data-i18n="MenuCopyright">Copyright &amp; Licenses</a>
+        </div>
+    </div>
+</div>
+
+<!-- Copyright Modal -->
+<div id="copyright-modal" class="modal">
+    <div class="modal-content copyright-modal-content">
+        <span class="modal-close" onclick="app.closeCopyright()">&times;</span>
+        <h2 data-i18n="CopyrightTitle">Copyright &amp; Licenses</h2>
+        <pre id="copyright-body" class="copyright-body"></pre>
+    </div>
+</div>
+
+<!-- Hamburger Dropdown (created dynamically) -->
+
+<!-- Setup Wizard Modal -->
+<div id="setup-wizard-modal" class="modal">
+    <div class="modal-content wizard-content setup-wizard-content">
+        <div class="wizard-progress" id="sw-progress"></div>
+        <div class="wizard-body" id="sw-body"></div>
+        <div class="wizard-footer">
+            <button id="sw-cancel" onclick="app.closeSetupWizard()">キャンセル</button>
+            <div class="wizard-nav">
+                <button id="sw-prev" onclick="app.swPrev()">← 前へ</button>
+                <button id="sw-next" class="btn-primary">次へ →</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Wizard Modal -->
+<div id="wizard-modal" class="modal">
+    <div class="modal-content wizard-content">
+        <div class="wizard-progress" id="wizard-progress"></div>
+        <div class="wizard-body" id="wizard-body"></div>
+        <div class="wizard-footer">
+            <button id="wizard-skip" onclick="app.closeWizard()">スキップ</button>
+            <div class="wizard-nav">
+                <button id="wizard-prev" onclick="app.wizardPrev()">← 前へ</button>
+                <button id="wizard-next" class="btn-primary">次へ →</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Manual Step Modal -->
 <div id="manual-modal" class="modal">
     <div class="modal-content manual-modal-content">
@@ -108,6 +192,17 @@
         <div id="config-tab-general" class="config-tab-panel" style="display:none">
             <p style="color:#888" data-i18n="GeneralSettingsPlaceholder">General settings coming soon.</p>
         </div>
+    </div>
+</div>
+<!-- History Modal -->
+<div id="history-modal" class="modal">
+    <div class="modal-content history-modal-content">
+        <div class="history-modal-header">
+            <span>📜 実行履歴</span>
+            <span class="modal-close" onclick="app.closeHistory()">&times;</span>
+        </div>
+        <div id="history-list-view"></div>
+        <div id="history-detail-view" style="display:none"></div>
     </div>
 </div>
 <script src="app.js"></script>
