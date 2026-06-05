@@ -1,3 +1,5 @@
+*.old
+*.log
 third_party_reference
 .antigravitycli/
 build/
