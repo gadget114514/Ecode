@@ -105,6 +105,11 @@ const app = {
                 break;
             case 'pipeline_list':
                 this.state.pipelines = msg.payload.pipelines || [];
+                // If pipeline manager is open, sync its local list
+                if (this.pmState_) {
+                    this.pmState_.pipelines = this.state.pipelines.slice();
+                    this.pmRenderPipelineList();
+                }
                 this.addLog('📋 Pipelines updated');
                 break;
             case 'history_list_result':
@@ -511,7 +516,7 @@ const app = {
             case 'import_zip':      this.addLog('📦 Import ZIP — coming soon'); break;
             case 'export_node':     this.addLog('📤 Export Node — coming soon'); break;
             case 'run_pipeline':    this.runPipeline(); break;
-            case 'pipeline_manager': this.addLog('⚡ Pipeline Manager — coming soon'); break;
+            case 'pipeline_manager': this.showPipelineManager(); break;
             case 'pipeline_history': this.showHistory(); break;
             case 'config':          this.showConfig(); break;
             case 'test_connection': this.testConnection(); break;
@@ -1800,6 +1805,420 @@ const app = {
         if (s.pipelineName) {
             setTimeout(() => this.runPipeline(s.pipelineName), 300);
         }
+    },
+
+    // ── Pipeline Manager ──────────────────────────────────────────
+
+    PM_STEP_TYPES: {
+        ai:         { icon: '🤖', label: 'AI Call', fields: ['provider','model','systemPrompt','userPrompt','temperature','maxTokens','attachMedia'] },
+        manual:     { icon: '📝', label: 'Manual Review', fields: ['mode','prompt','choices'] },
+        command:    { icon: '⚙️', label: 'CLI Command', fields: ['command','args','workingDir','timeout','resultAs'] },
+        tool:       { icon: '🔧', label: 'External Tool', fields: ['command','args','waitForExit','resultAs','resultFile','confirm'] },
+        fetch:      { icon: '🌐', label: 'HTTP Fetch', fields: ['url','method','auth','resultAs'] },
+        condition:  { icon: '🔀', label: 'Condition', fields: ['expression','operator','value','onTrue','onFalse'] },
+        transform:  { icon: '🔄', label: 'Transform', fields: ['engine','expression','input'] },
+        call_pipeline: { icon: '📦', label: 'Call Pipeline', fields: ['pipelineName','input','inheritAttachments'] },
+        foreach:    { icon: '🔁', label: 'Foreach', fields: ['input','itemVariable','concurrency'] },
+        parallel:   { icon: '⚡', label: 'Parallel', fields: ['branches','outputMode'] },
+        wait:       { icon: '⏱️', label: 'Wait', fields: ['durationMs','until','pollIntervalMs','timeoutMs'] },
+        history:    { icon: '📜', label: 'History', fields: ['runId','stepIndex','field'] }
+    },
+
+    pmState_: { pipelines: [], selectedIndex: -1, dirty: false, stepEditIndex: -1 },
+
+    showPipelineManager() {
+        this.pmState_.pipelines = (this.state.pipelines || []).slice();
+        this.pmState_.selectedIndex = -1;
+        this.pmState_.dirty = false;
+        document.getElementById('pipeline-manager-modal').classList.add('visible');
+        this.pmRenderPipelineList();
+        document.getElementById('pm-editor').style.display = 'none';
+        document.getElementById('pm-empty').style.display = '';
+        document.getElementById('pm-mermaid').innerHTML = '';
+    },
+
+    closePipelineManager() {
+        document.getElementById('pipeline-manager-modal').classList.remove('visible');
+    },
+
+    pmRenderPipelineList() {
+        const el = document.getElementById('pm-pipeline-list');
+        if (!el) return;
+        const list = this.pmState_.pipelines;
+        el.innerHTML = list.map((p, i) => `
+            <div class="pm-pipeline-item${i === this.pmState_.selectedIndex ? ' active' : ''}"
+                 onclick="app.pmSelectPipeline(${i})">
+                ${this.escapeHtml(p.name || 'Unnamed')}
+            </div>`).join('');
+    },
+
+    pmSelectPipeline(index) {
+        this.pmState_.selectedIndex = index;
+        this.pmState_.dirty = false;
+        this.pmRenderPipelineList();
+        this.pmLoadEditor();
+    },
+
+    pmNewPipeline() {
+        const list = this.pmState_.pipelines;
+        const name = 'New Pipeline ' + (list.length + 1);
+        list.push({ name, mode: 'basic', outputMode: 'child', outputNaming: '{pipeline_name}_{timestamp}', retryCount: 3, retryDelayMs: 2000, steps: [] });
+        this.pmState_.selectedIndex = list.length - 1;
+        this.pmState_.dirty = true;
+        this.pmRenderPipelineList();
+        this.pmLoadEditor();
+        this.addLog('➕ New pipeline created');
+    },
+
+    pmSwitchMode(mode, btn) {
+        document.querySelectorAll('.pm-mode-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('pm-body-basic').style.display = mode === 'basic' ? '' : 'none';
+        document.getElementById('pm-body-expert').style.display = mode === 'expert' ? '' : 'none';
+        this.pmDirty();
+    },
+
+    pmLoadEditor() {
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length) {
+            document.getElementById('pm-editor').style.display = 'none';
+            document.getElementById('pm-empty').style.display = '';
+            return;
+        }
+        document.getElementById('pm-editor').style.display = '';
+        document.getElementById('pm-empty').style.display = 'none';
+        const p = list[i];
+        document.getElementById('pm-name').value = p.name || '';
+        document.getElementById('pm-output-mode').value = p.outputMode || 'child';
+        document.getElementById('pm-output-naming').value = p.outputNaming || '{pipeline_name}_{timestamp}';
+        document.getElementById('pm-retry-count').value = p.retryCount || 3;
+        document.getElementById('pm-retry-delay').value = p.retryDelayMs || 2000;
+        this.pmRenderSteps();
+    },
+
+    pmRenderSteps() {
+        const el = document.getElementById('pm-step-list');
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (!el || i < 0 || i >= list.length) return;
+        const steps = list[i].steps || [];
+        const info = this.PM_STEP_TYPES;
+        el.innerHTML = steps.map((s, si) => {
+            const typeInfo = info[s.type] || { icon: '❓', label: s.type };
+            return `<div class="pm-step-item">
+                <span class="pm-step-drag" title="Drag to reorder">⠿</span>
+                <span class="pm-step-icon">${typeInfo.icon}</span>
+                <span class="pm-step-name" onclick="app.pmEditStep(${si})">${this.escapeHtml(s.name || typeInfo.label)}</span>
+                <span class="pm-step-type-badge">${this.escapeHtml(s.type)}</span>
+                <button class="pm-step-edit-btn" onclick="app.pmEditStep(${si})">✏</button>
+                <button class="pm-step-del-btn" onclick="app.pmDeleteStep(${si})">✕</button>
+            </div>`;
+        }).join('');
+        this.pmRenderMermaid();
+    },
+
+    pmAddStep() {
+        const sel = document.getElementById('pm-step-type-select');
+        const type = sel.value;
+        const typeInfo = this.PM_STEP_TYPES[type] || { icon: '❓', label: type };
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length) return;
+        if (!list[i].steps) list[i].steps = [];
+        list[i].steps.push({ name: typeInfo.label, type, params: {} });
+        this.pmState_.dirty = true;
+        this.pmRenderSteps();
+        this.addLog(`➕ Step added: ${typeInfo.label}`);
+    },
+
+    pmEditStep(index) {
+        this.pmState_.stepEditIndex = index;
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length) return;
+        const step = list[i].steps[index];
+        if (!step) return;
+        const typeInfo = this.PM_STEP_TYPES[step.type] || { icon: '❓', label: step.type, fields: [] };
+        document.getElementById('pm-step-edit-title').textContent = `✏ ${typeInfo.icon} ${typeInfo.label}`;
+        const form = document.getElementById('pm-step-edit-form');
+        form.innerHTML = `
+            <div class="field-row">
+                <label>Name</label>
+                <input type="text" id="pms-name" value="${this.escapeHtml(step.name || '')}">
+            </div>
+            <div class="field-row">
+                <label>Type</label>
+                <select id="pms-type" onchange="app.pmStepEditTypeChanged()">
+                    ${Object.entries(this.PM_STEP_TYPES).map(([k, v]) =>
+                        `<option value="${k}"${k === step.type ? ' selected' : ''}>${v.icon} ${v.label}</option>`
+                    ).join('')}
+                </select>
+            </div>
+            <div class="pm-step-edit-fields" id="pms-fields">${this.pmBuildFieldInputs(step)}</div>`;
+        document.getElementById('pm-step-edit-modal').classList.add('visible');
+    },
+
+    pmStepEditTypeChanged() {
+        const stepType = document.getElementById('pms-type').value;
+        const i = this.pmState_.selectedIndex;
+        const si = this.pmState_.stepEditIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length || si < 0) return;
+        const step = list[i].steps[si];
+        if (!step) return;
+        step.type = stepType;
+        const typeInfo = this.PM_STEP_TYPES[stepType] || { icon: '❓', label: stepType, fields: [] };
+        document.getElementById('pm-step-edit-title').textContent = `✏ ${typeInfo.icon} ${typeInfo.label}`;
+        // Keep name if exists, otherwise use type label
+        if (!step.name || !step.name.trim()) step.name = typeInfo.label;
+        document.getElementById('pms-name').value = step.name;
+        document.getElementById('pms-fields').innerHTML = this.pmBuildFieldInputs(step);
+    },
+
+    pmBuildFieldInputs(step) {
+        const typeInfo = this.PM_STEP_TYPES[step.type] || { fields: [] };
+        return typeInfo.fields.map(f => {
+            const val = step.params && step.params[f] ? step.params[f] : '';
+            if (f === 'provider') {
+                return `<div class="field-row">
+                    <label>Provider</label>
+                    <select id="pms-${f}">
+                        <option value="openai"${val === 'openai' ? ' selected' : ''}>OpenAI</option>
+                        <option value="anthropic"${val === 'anthropic' ? ' selected' : ''}>Anthropic</option>
+                        <option value="gemini"${val === 'gemini' ? ' selected' : ''}>Gemini</option>
+                        <option value="ollama"${val === 'ollama' ? ' selected' : ''}>Ollama</option>
+                    </select>
+                </div>`;
+            }
+            if (f === 'mode') {
+                return `<div class="field-row">
+                    <label>Mode</label>
+                    <select id="pms-${f}">
+                        <option value="view"${val === 'view' ? ' selected' : ''}>View</option>
+                        <option value="edit"${val === 'edit' ? ' selected' : ''}>Edit</option>
+                        <option value="select"${val === 'select' ? ' selected' : ''}>Select</option>
+                    </select>
+                </div>`;
+            }
+            if (f === 'method') {
+                return `<div class="field-row">
+                    <label>Method</label>
+                    <select id="pms-${f}">
+                        <option value="GET"${val === 'GET' ? ' selected' : ''}>GET</option>
+                        <option value="POST"${val === 'POST' ? ' selected' : ''}>POST</option>
+                    </select>
+                </div>`;
+            }
+            if (f === 'operator') {
+                return `<div class="field-row">
+                    <label>Operator</label>
+                    <select id="pms-${f}">
+                        <option value="contains"${val === 'contains' ? ' selected' : ''}>contains</option>
+                        <option value="equals"${val === 'equals' ? ' selected' : ''}>equals</option>
+                        <option value="startsWith"${val === 'startsWith' ? ' selected' : ''}>startsWith</option>
+                        <option value="regex"${val === 'regex' ? ' selected' : ''}>regex</option>
+                    </select>
+                </div>`;
+            }
+            if (f === 'resultAs') {
+                return `<div class="field-row">
+                    <label>Result As</label>
+                    <select id="pms-${f}">
+                        <option value="text"${val === 'text' ? ' selected' : ''}>text</option>
+                        <option value="exitcode"${val === 'exitcode' ? ' selected' : ''}>exitcode</option>
+                        <option value="file"${val === 'file' ? ' selected' : ''}>file</option>
+                        <option value="attachment"${val === 'attachment' ? ' selected' : ''}>attachment</option>
+                        <option value="json"${val === 'json' ? ' selected' : ''}>json</option>
+                    </select>
+                </div>`;
+            }
+            if (f === 'engine') {
+                return `<div class="field-row">
+                    <label>Engine</label>
+                    <select id="pms-${f}">
+                        <option value="regex"${val === 'regex' ? ' selected' : ''}>regex</option>
+                        <option value="json_path"${val === 'json_path' ? ' selected' : ''}>json_path</option>
+                        <option value="template"${val === 'template' ? ' selected' : ''}>template</option>
+                    </select>
+                </div>`;
+            }
+            if (f === 'waitForExit' || f === 'confirm' || f === 'inheritAttachments') {
+                return `<div class="field-row">
+                    <label>${f}</label>
+                    <select id="pms-${f}">
+                        <option value="true"${val === 'true' ? ' selected' : ''}>true</option>
+                        <option value="false"${val !== 'true' ? ' selected' : ''}>false</option>
+                    </select>
+                </div>`;
+            }
+            if (f === 'temperature' || f === 'retryCount' || f === 'retryDelayMs' || f === 'timeout' || f === 'timeoutMs' || f === 'durationMs' || f === 'concurrency' || f === 'maxTokens' || f === 'pollIntervalMs') {
+                return `<div class="field-row">
+                    <label>${f}</label>
+                    <input type="number" step="any" id="pms-${f}" value="${this.escapeHtml(val || '')}">
+                </div>`;
+            }
+            if (f === 'systemPrompt' || f === 'userPrompt' || f === 'prompt' || f === 'choices') {
+                return `<div class="field-row">
+                    <label>${f}</label>
+                    <textarea id="pms-${f}">${this.escapeHtml(val || '')}</textarea>
+                </div>`;
+            }
+            return `<div class="field-row">
+                <label>${f}</label>
+                <input type="text" id="pms-${f}" value="${this.escapeHtml(val || '')}">
+            </div>`;
+        }).join('');
+    },
+
+    pmSaveStepEdit() {
+        const i = this.pmState_.selectedIndex;
+        const si = this.pmState_.stepEditIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length || si < 0) return;
+        const step = list[i].steps[si];
+        if (!step) return;
+        step.name = document.getElementById('pms-name')?.value || step.name;
+        step.type = document.getElementById('pms-type')?.value || step.type;
+        const typeInfo = this.PM_STEP_TYPES[step.type] || { fields: [] };
+        if (!step.params) step.params = {};
+        typeInfo.fields.forEach(f => {
+            const el = document.getElementById('pms-' + f);
+            if (el) step.params[f] = el.value;
+        });
+        this.pmState_.dirty = true;
+        this.pmCloseStepEdit();
+        this.pmRenderSteps();
+        this.addLog(`✏ Step "${step.name}" updated`);
+    },
+
+    pmCloseStepEdit() {
+        document.getElementById('pm-step-edit-modal').classList.remove('visible');
+        this.pmState_.stepEditIndex = -1;
+    },
+
+    pmDeleteStep(index) {
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length) return;
+        list[i].steps.splice(index, 1);
+        this.pmState_.dirty = true;
+        this.pmRenderSteps();
+        this.addLog('🗑 Step removed');
+    },
+
+    pmMoveStep(index, dir) {
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length) return;
+        const steps = list[i].steps;
+        const newIdx = index + dir;
+        if (newIdx < 0 || newIdx >= steps.length) return;
+        [steps[index], steps[newIdx]] = [steps[newIdx], steps[index]];
+        this.pmState_.dirty = true;
+        this.pmRenderSteps();
+    },
+
+    pmRenderMermaid() {
+        const el = document.getElementById('pm-mermaid');
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (!el || i < 0 || i >= list.length) { if (el) el.innerHTML = ''; return; }
+        const steps = list[i].steps || [];
+        if (steps.length === 0) { el.innerHTML = '<div style="color:#666;font-size:12px">No steps</div>'; return; }
+        // Build mermaid flowchart
+        let mermaidDef = 'graph LR\n';
+        mermaidDef += '    Input[Input]\n';
+        steps.forEach((s, si) => {
+            const safeName = (s.name || 'step' + si).replace(/[^a-zA-Z0-9]/g, '_');
+            const displayName = (s.name || s.type).replace(/"/g, "'");
+            mermaidDef += `    ${safeName}["${si+1}. ${displayName}"]\n`;
+            if (si === 0) mermaidDef += `    Input --> ${safeName}\n`;
+            else {
+                const prev = (steps[si-1].name || 'step' + (si-1)).replace(/[^a-zA-Z0-9]/g, '_');
+                mermaidDef += `    ${prev} --> ${safeName}\n`;
+            }
+        });
+        const last = (steps[steps.length-1].name || 'step' + (steps.length-1)).replace(/[^a-zA-Z0-9]/g, '_');
+        mermaidDef += `    ${last} --> Output[Output]\n`;
+        el.innerHTML = `<div class="mermaid">${mermaidDef}</div>`;
+        // Render mermaid
+        if (window.mermaid) {
+            try {
+                mermaid.run({ nodes: [el.querySelector('.mermaid')] });
+            } catch(e) {
+                // mermaid may already have rendered
+            }
+        }
+    },
+
+    pmGetCurrentPipeline() {
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length) return null;
+        const p = list[i];
+        return {
+            name: document.getElementById('pm-name')?.value || p.name,
+            mode: 'basic',
+            outputMode: document.getElementById('pm-output-mode')?.value || 'child',
+            outputNaming: document.getElementById('pm-output-naming')?.value || '{pipeline_name}_{timestamp}',
+            retryCount: parseInt(document.getElementById('pm-retry-count')?.value) || 3,
+            retryDelayMs: parseInt(document.getElementById('pm-retry-delay')?.value) || 2000,
+            steps: p.steps || []
+        };
+    },
+
+    pmSave() {
+        const pipeline = this.pmGetCurrentPipeline();
+        if (!pipeline) return;
+        // Update state
+        const i = this.pmState_.selectedIndex;
+        this.pmState_.pipelines[i] = pipeline;
+        this.pmState_.dirty = false;
+        // Send to C++
+        this.postMessage({ type: 'save_pipeline', payload: pipeline });
+        this.addLog(`💾 Pipeline "${pipeline.name}" saved`);
+    },
+
+    pmDelete() {
+        const i = this.pmState_.selectedIndex;
+        const list = this.pmState_.pipelines;
+        if (i < 0 || i >= list.length) return;
+        const name = list[i].name;
+        if (!confirm(`Delete pipeline "${name}"?`)) return;
+        this.postMessage({ type: 'delete_pipeline', payload: { name } });
+        list.splice(i, 1);
+        this.pmState_.selectedIndex = Math.min(i, list.length - 1);
+        this.pmState_.dirty = false;
+        this.pmRenderPipelineList();
+        this.pmLoadEditor();
+        this.addLog(`🗑 Pipeline "${name}" deleted`);
+    },
+
+    pmRunNow() {
+        this.pmSave();
+        const pipeline = this.pmGetCurrentPipeline();
+        if (!pipeline || !pipeline.steps || pipeline.steps.length === 0) {
+            this.addLog('⚠ No steps in pipeline');
+            return;
+        }
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) { this.addLog('⚠ Select a node first'); return; }
+        const content = node.content ? (() => { try { return decodeURIComponent(escape(atob(node.content))); } catch { return atob(node.content); } })() : '';
+        const tab = this.state.tabs[this.state.activeTab];
+        this.postMessage({ type: 'run_pipeline', payload: {
+            pipelineName: pipeline.name,
+            nodeId: this.state.currentNodePath || '',
+            tabFile: tab ? tab.file : '',
+            content
+        }});
+        this.state.pipelineRunning = true;
+        this.closePipelineManager();
+        this.addLog(`▶ Pipeline "${pipeline.name}" started`);
+    },
+
+    pmDirty() {
+        this.pmState_.dirty = true;
     },
 
     // ── Hint tooltips ──────────────────────────────────────────────
