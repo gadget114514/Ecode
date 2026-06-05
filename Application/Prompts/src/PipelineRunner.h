@@ -26,6 +26,10 @@ struct HistoryStep {
     int completionTokens = 0;
     double durationMs = 0;
     std::string status = "pending";
+
+    // Evaluation (SkillOpt-style feedback signals)
+    std::string evaluation;      // "" | "ok" | "rejected" | "pinned"
+    std::string evaluationNote;
 };
 
 struct HistoryRecord {
@@ -36,6 +40,9 @@ struct HistoryRecord {
     std::string startedAt;
     std::string status;
     std::vector<HistoryStep> steps;
+
+    // Evaluation of the run as a whole
+    std::string evaluation;  // "" | "ok" | "rejected"
 };
 
 // State for a running parallel step

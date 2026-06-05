@@ -34,8 +34,13 @@ public:
     
     // History
     void SaveHistory(const std::string &recordJson);
+    void UpdateHistoryEvaluation(const std::wstring &filename, const std::string &evaluation);
     std::vector<std::wstring> ListHistory();
     std::string LoadHistoryRecord(const std::wstring &filename);
+
+    // Optimizer: rejected-edit buffer and version snapshots
+    void SaveOptimizerData(const std::wstring &relativePath, const std::string &json);
+    std::string LoadOptimizerData(const std::wstring &relativePath);
     
     // Providers
     std::map<std::string, ProviderConfig> LoadProviders();
