@@ -76,13 +76,20 @@ void TerminalBuffer::resize(int columns, int rows) {
     while ((int)screen_.size() < rows_)
         screen_.insert(screen_.begin(), blankLine());
     if (insertCount > 0) {
-        cursorRow_ += insertCount;
+        cursorRow_         += insertCount;
+        savedCursorRow_    += insertCount;
+        savedCursorRowAlt_ += insertCount;
     } else {
         const int discardCount = (std::max)(0, (int)oldScreen.size() - rows_);
-        cursorRow_ -= discardCount;
+        cursorRow_         -= discardCount;
+        savedCursorRow_    -= discardCount;
+        savedCursorRowAlt_ -= discardCount;
     }
 
     clampCursor();
+
+    savedCursorRow_    = clamp(savedCursorRow_,    0, rows_ - 1);
+    savedCursorRowAlt_ = clamp(savedCursorRowAlt_, 0, rows_ - 1);
 
     // Resize tab stops if columns changed
     if (columns_ != (int)tabStops_.size()) {

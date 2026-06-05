@@ -4,6 +4,8 @@
 #include <deque>
 #include <functional>
 #include <atomic>
+#include <map>
+#include <memory>
 #include <windows.h>
 #include <winhttp.h>
 #include "NodeData.h"
@@ -14,6 +16,7 @@ struct HistoryStep {
     std::string type;
     std::string input;
     std::string output;
+    std::map<std::string, std::string> parallelBranches; // branch name → output (parallel step)
     int retries = 0;
     int iterations = 0;
     bool test = false;
@@ -35,33 +38,46 @@ struct HistoryRecord {
     std::vector<HistoryStep> steps;
 };
 
+// State for a running parallel step
+struct ParallelState {
+    struct Branch {
+        std::string name;
+        std::vector<PipelineStep> steps;
+    };
+    std::vector<Branch> branches;
+    int currentBranch = 0;
+    std::map<std::string, std::string> results; // branch name → final output
+    std::string inputContent;
+};
+
 class PipelineRunner {
 public:
     PipelineRunner();
     ~PipelineRunner();
-    
+
     void SetBridgeCallback(std::function<void(const std::string &type, const std::string &json)> cb);
-    
-    // Execute pipeline with given input
-    void Run(const std::string &pipelineName, 
+
+    void Run(const std::string &pipelineName,
              const std::vector<PipelineStep> &steps,
              const std::string &inputContent,
              const std::vector<Attachment> &inputAttachments,
              const std::string &outputMode);
-    
+
     // Dynamic queue operations
     void AppendStep(const PipelineStep &step);
     void InsertStep(size_t index, const PipelineStep &step);
     void RemoveStep(size_t index);
     void UpdateStep(size_t index, const PipelineStep &step);
     void AppendPipelineSteps(const std::string &pipelineName);
-    
-    // Cancel current execution
+
     void Cancel();
     bool IsRunning() const { return running_; }
-    
-    // Register provider
+
+    void ResumeManual(const std::string &content);
+    void CancelManual();
+
     void RegisterProvider(const std::string &type, const std::string &apiKey, const std::string &baseUrl);
+    static std::string JsonEscape(const std::string &s);
 
 private:
     std::atomic<bool> running_{false};
@@ -73,22 +89,28 @@ private:
     std::string outputMode_;
     std::string pipelineName_;
     std::function<void(const std::string&, const std::string&)> bridgeCb_;
-    
+
     HINTERNET hSession_{nullptr};
     HINTERNET hRequest_{nullptr};
-    
+
     std::vector<HistoryStep> historySteps_;
     int currentStepIndex_{-1};
-    
+    bool waitingForManual_{false};
+
+    // Parallel step state
+    std::unique_ptr<ParallelState> parallelState_;
+    void ExecuteNextParallelBranch();
+
     void RunNextStep();
     void ExecuteStep(const PipelineStep &step);
     void HandleError(const std::string &message);
     void PostBridge(const std::string &type, const std::string &json);
-    
-    // Provider management
+    std::string BuildMetaJson();
+
+    std::vector<PipelineStep> executedStepParams_;
+
     std::map<std::string, class AIProvider*> providers_;
-    
-    // WinHTTP async callback
+
     static void CALLBACK WinHttpCallback(HINTERNET hInternet, DWORD_PTR dwContext,
                                           DWORD dwInternetStatus, LPVOID lpvStatusInformation,
                                           DWORD dwStatusInformationLength);

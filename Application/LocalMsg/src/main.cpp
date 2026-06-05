@@ -321,6 +321,7 @@ static SOCKET g_restSock     = INVALID_SOCKET;
 // Forward declarations
 static bool IsPseudoUser(const std::wstring& username);
 static std::wstring GetPrimaryUser();
+static bool AddPseudoUser(const std::wstring& username);
 static void PushMessage(const std::wstring& from, const std::wstring& to, const std::wstring& text, bool isEnvelop = false);
 
 // File inbox for pseudo-user auto-accept transfers (protected by g_xferCs)
@@ -370,6 +371,135 @@ static std::string JsonBuild(std::vector<std::pair<std::string,std::string>> kv)
         r += "\"" + kv[i].first + "\":\"" + kv[i].second + "\"";
     }
     return r + "}";
+}
+
+// ---------------------------------------------------------------------------
+// State persistence (save/load pseudo users and messages)
+// ---------------------------------------------------------------------------
+static std::wstring GetDataDir() {
+    PWSTR path = nullptr;
+    if (SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &path) == S_OK) {
+        std::wstring dir = path;
+        CoTaskMemFree(path);
+        dir += L"\\localmsg";
+        CreateDirectoryW(dir.c_str(), nullptr);
+        return dir;
+    }
+    return L".\\localmsg_data";
+}
+
+static void SaveState() {
+    std::wstring dir = GetDataDir();
+    DWORD written;
+
+    // Save pseudo users (binary: [count][len][data]...)
+    std::wstring usersPath = dir + L"\\users.dat";
+    HANDLE hf = CreateFileW(usersPath.c_str(), GENERIC_WRITE, 0, nullptr,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hf != INVALID_HANDLE_VALUE) {
+        EnterCriticalSection(&g_pseudoCs);
+        int count = (int)g_pseudoUsers.size();
+        WriteFile(hf, &count, sizeof(count), &written, nullptr);
+        for (auto& pu : g_pseudoUsers) {
+            int len = (int)pu.username.size() * (int)sizeof(wchar_t);
+            WriteFile(hf, &len, sizeof(len), &written, nullptr);
+            WriteFile(hf, pu.username.c_str(), len, &written, nullptr);
+        }
+        LeaveCriticalSection(&g_pseudoCs);
+        CloseHandle(hf);
+    }
+
+    // Save messages + nextMsgId (binary)
+    std::wstring msgPath = dir + L"\\messages.dat";
+    hf = CreateFileW(msgPath.c_str(), GENERIC_WRITE, 0, nullptr,
+                     CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hf != INVALID_HANDLE_VALUE) {
+        EnterCriticalSection(&g_msgCs);
+        WriteFile(hf, &g_nextMsgId, sizeof(g_nextMsgId), &written, nullptr);
+        int count = (int)g_messages.size();
+        WriteFile(hf, &count, sizeof(count), &written, nullptr);
+        for (auto& m : g_messages) {
+            WriteFile(hf, &m.id, sizeof(m.id), &written, nullptr);
+            auto writeStr = [&](const std::wstring& s) {
+                int len = (int)s.size() * (int)sizeof(wchar_t);
+                WriteFile(hf, &len, sizeof(len), &written, nullptr);
+                WriteFile(hf, s.c_str(), len, &written, nullptr);
+            };
+            writeStr(m.from);
+            writeStr(m.to);
+            writeStr(m.text);
+            writeStr(m.time);
+            WriteFile(hf, &m.isEnvelop, sizeof(m.isEnvelop), &written, nullptr);
+            WriteFile(hf, &m.isRead, sizeof(m.isRead), &written, nullptr);
+        }
+        LeaveCriticalSection(&g_msgCs);
+        CloseHandle(hf);
+    }
+}
+
+static void LoadState() {
+    std::wstring dir = GetDataDir();
+
+    // Load pseudo users
+    std::wstring usersPath = dir + L"\\users.dat";
+    HANDLE hf = CreateFileW(usersPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                            nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hf != INVALID_HANDLE_VALUE) {
+        DWORD read;
+        int count = 0;
+        if (ReadFile(hf, &count, sizeof(count), &read, nullptr) && count > 0) {
+            for (int i = 0; i < count; ++i) {
+                int len = 0;
+                if (!ReadFile(hf, &len, sizeof(len), &read, nullptr) || len <= 0) break;
+                std::wstring buf(len / 2 + 1, 0);
+                DWORD toRead = (DWORD)len;
+                if (ReadFile(hf, &buf[0], toRead, &read, nullptr)) {
+                    buf.resize(read / 2);
+                    AddPseudoUser(buf);
+                } else break;
+            }
+        }
+        CloseHandle(hf);
+    }
+
+    // Load messages
+    std::wstring msgPath = dir + L"\\messages.dat";
+    hf = CreateFileW(msgPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                     nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hf != INVALID_HANDLE_VALUE) {
+        DWORD read;
+        if (ReadFile(hf, &g_nextMsgId, sizeof(g_nextMsgId), &read, nullptr)) {
+            int count = 0;
+            if (ReadFile(hf, &count, sizeof(count), &read, nullptr) && count > 0) {
+                EnterCriticalSection(&g_msgCs);
+                for (int i = 0; i < count; ++i) {
+                    Message m;
+                    if (!ReadFile(hf, &m.id, sizeof(m.id), &read, nullptr)) break;
+                    auto readStr = [&](std::wstring& out) -> bool {
+                        int len = 0;
+                        if (!ReadFile(hf, &len, sizeof(len), &read, nullptr)) return false;
+                        out.clear();
+                        if (len > 0) {
+                            out.resize(len / 2);
+                            DWORD toRead = (DWORD)len;
+                            if (!ReadFile(hf, &out[0], toRead, &read, nullptr)) return false;
+                            out.resize(read / 2);
+                        }
+                        return true;
+                    };
+                    if (!readStr(m.from)) break;
+                    if (!readStr(m.to)) break;
+                    if (!readStr(m.text)) break;
+                    if (!readStr(m.time)) break;
+                    if (!ReadFile(hf, &m.isEnvelop, sizeof(m.isEnvelop), &read, nullptr)) break;
+                    if (!ReadFile(hf, &m.isRead, sizeof(m.isRead), &read, nullptr)) break;
+                    g_messages.push_back(m);
+                }
+                LeaveCriticalSection(&g_msgCs);
+            }
+        }
+        CloseHandle(hf);
+    }
 }
 
 static std::string EscapeJson(const std::string& s) {
@@ -2154,10 +2284,11 @@ static void UpdatePeerList() {
         if (CountUnreadEnvelop(row.name) > 0)
             name = L"\u25CF " + name;
         ListView_SetItemText(g_peerList, i, 0, (LPWSTR)name.c_str());
-        ListView_SetItemText(g_peerList, i, 1, (LPWSTR)row.addr.c_str());
-        ListView_SetItemText(g_peerList, i, 2, (LPWSTR)row.udpPort.c_str());
-        ListView_SetItemText(g_peerList, i, 3, (LPWSTR)row.httpPort.c_str());
-        ListView_SetItemText(g_peerList, i, 4, (LPWSTR)row.proto.c_str());
+        ListView_SetItemText(g_peerList, i, 1, (LPWSTR)(CountUnreadEnvelop(row.name) > 0 ? L"有" : L""));
+        ListView_SetItemText(g_peerList, i, 2, (LPWSTR)row.addr.c_str());
+        ListView_SetItemText(g_peerList, i, 3, (LPWSTR)row.udpPort.c_str());
+        ListView_SetItemText(g_peerList, i, 4, (LPWSTR)row.httpPort.c_str());
+        ListView_SetItemText(g_peerList, i, 5, (LPWSTR)row.proto.c_str());
     }
 }
 
@@ -2368,11 +2499,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             WS_CHILD|WS_VISIBLE|LVS_REPORT|LVS_SHOWSELALWAYS|LVS_SINGLESEL,
             0,0,10,10, hwnd, (HMENU)IDC_PEER_LIST, nullptr, nullptr);
         ListView_SetExtendedListViewStyle(g_peerList, LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
-        { LVCOLUMN c{}; c.mask=LVCF_TEXT|LVCF_WIDTH; c.cx=120; c.pszText=(LPWSTR)L"Name"; ListView_InsertColumn(g_peerList,0,&c);
-          c.cx=130; c.pszText=(LPWSTR)L"Address"; ListView_InsertColumn(g_peerList,1,&c);
-          c.cx=60;  c.pszText=(LPWSTR)L"UDP Port"; ListView_InsertColumn(g_peerList,2,&c);
-          c.cx=60;  c.pszText=(LPWSTR)L"HTTP Port"; ListView_InsertColumn(g_peerList,3,&c);
-          c.cx=60;  c.pszText=(LPWSTR)L"Protocol";  ListView_InsertColumn(g_peerList,4,&c); }
+        { LVCOLUMN c{}; c.mask=LVCF_TEXT|LVCF_WIDTH; c.cx=120; c.pszText=(LPWSTR)L"Name";    ListView_InsertColumn(g_peerList,0,&c);
+          c.cx=40;  c.pszText=(LPWSTR)L"Unread";  ListView_InsertColumn(g_peerList,1,&c);
+          c.cx=130; c.pszText=(LPWSTR)L"Address"; ListView_InsertColumn(g_peerList,2,&c);
+          c.cx=60;  c.pszText=(LPWSTR)L"UDP Port";ListView_InsertColumn(g_peerList,3,&c);
+          c.cx=60;  c.pszText=(LPWSTR)L"HTTP Port";ListView_InsertColumn(g_peerList,4,&c);
+          c.cx=60;  c.pszText=(LPWSTR)L"Protocol"; ListView_InsertColumn(g_peerList,5,&c); }
 
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
@@ -2421,6 +2553,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (p > 0 && p < 65536) g_ipmsgPort = p;
           }
         }
+
+        LoadState();
 
         DragAcceptFiles(hwnd, TRUE);
         g_acceptSem = CreateSemaphoreW(nullptr, LS_MAX_CONNS, LS_MAX_CONNS, nullptr);
@@ -2739,6 +2873,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_DESTROY:
         g_stopThreads=true; KillTimer(hwnd,1);
+        SaveState();
         // Broadcast BR_EXIT for all local users before closing sockets
         EnterCriticalSection(&g_pseudoCs);
         for (auto& pu : g_pseudoUsers)

@@ -399,6 +399,7 @@ void ConPtySession::IoLoop() {
     if (!ReadFile(outputReadSide_, readBuf_, sizeof(readBuf_), &bytesRead, &readOv_)) {
         if (GetLastError() != ERROR_IO_PENDING) { running_ = false; return; }
     }
+    // Synchronous completion signals readEvent_ immediately — handled in first iteration.
 
     bool writePending = false;
 
@@ -422,7 +423,7 @@ void ConPtySession::IoLoop() {
                 DWORD written = 0;
                 if (!WriteFile(inputWriteSide_, writeBuf_.data(), (DWORD)writeBuf_.size(),
                                &written, &writeOv_)) {
-                    if (GetLastError() != ERROR_IO_PENDING) break;
+                    if (GetLastError() != ERROR_IO_PENDING) break; // pipe closed
                 }
                 writePending = true;
             }
@@ -444,7 +445,7 @@ void ConPtySession::IoLoop() {
             DWORD bytes = 0;
             BOOL ok = GetOverlappedResult(outputReadSide_, &readOv_, &bytes, FALSE);
             if (ok && bytes > 0 && onOutput_) onOutput_(readBuf_, bytes);
-            if (!ok) break;
+            if (!ok) break; // broken pipe — process exited
 
             // Rearm: issue next overlapped read immediately
             readOv_ = {};
@@ -463,10 +464,10 @@ void ConPtySession::IoLoop() {
             DWORD bytes = 0;
             GetOverlappedResult(inputWriteSide_, &writeOv_, &bytes, FALSE);
             writePending = false;
-            ResetEvent(writeEvent_);
+            ResetEvent(writeEvent_); // prevent spurious re-signal before next write
 
         } else {
-            break;
+            break; // WAIT_FAILED
         }
     }
 

@@ -1,4 +1,4 @@
-# Prompts Application Design
+﻿# Prompts Application Design
 
 ## Overview
 
@@ -267,6 +267,333 @@ Prompts は n8n のローカル特化版 + プロンプト管理に相当する�
 4. **Dynamic Queue 実行中編集** — パイプライン実行中に待機ステップの追加・編集・削除・順序変更が可能
 5. **OS ツール統合** — awk/sed/ffmpeg/ImageMagick 等の CLI ツールや GUI アプリを直接パイプラインに統合
 6. **ecode 埋め込み** — エディタ内でタブとして利用可能
+
+## UI スケッチ
+
+### コンセプト図
+
+```
+  素材 (ノード)           レシピ (パイプライン)          成果物 (子ノード)
+  ─────────────────  ×   ──────────────────────  =   ─────────────────────
+  あなたのコンテンツ       AIへの指示の連鎖               AI処理結果
+  テキスト/画像/PDF        プロンプト+モデル+順序          ✨ 子ノードとして保存
+                                                         作り方が埋め込まれる
+                                                         成果物→次の素材に使える
+```
+
+ノードには2種類ある:
+
+| 種類 | 外観 | 説明 |
+|------|------|------|
+| 📄 素材ノード | 白文字・通常 | ユーザーが作成したコンテンツ |
+| ✨ 成果物ノード | 青みがかった色・✨アイコン | AI パイプラインが生成した結果 |
+
+---
+
+### メインウィンドウ (Standalone)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ File  Pipeline  Providers  View  Help                                        │  ← Win32 メニューバー
+├──────────────────────────────────────────────────────────────────────────────┤
+│ [📄 New] [📂 Open] [💾 Save] [💾 Save As] │ [▶ Run] [⚡ レシピ] │ [🔍 検索] [⚙] │  ← ツールバー
+├──────────────────────────────────────────────────────────────────────────────┤
+│ [General ×]  [Code ×]  [+ New Tab]                                           │  ← タブバー
+├────────────────────┬─────────────────────────────────────────────────────────┤
+│ 📂 素材            │ 📋 会議メモ の直下                          ▲ ◀Up ▶Down  │
+│                    ├──────────────────────────────────────────────────────── │
+│ 📂 プロジェクトA   │  📄 2024-12-01 議事録                    [▶] [📋]        │
+│  ├📄 原稿.txt      │  ✨ 英訳 (Claude)          ← AI生成:青   [▶] [📋]        │
+│  ├📄 会議メモ ●    │  ✨ 英訳 (GPT-4)           ← AI生成:青   [▶] [📋]        │
+│  │ ├✨英訳(Claude) │  ✨ 翻訳+レビュー済み       ← AI生成:青   [▶] [📋]        │
+│  │ ├✨英訳(GPT-4)  ├──────────────────────────────────────────────────────── │
+│  │ └✨翻訳+レビュー│ ✏ タイトル: [会議メモ                                  ] │
+│  └📷 diagram.png  │ ──────────────────────────────────────────────────────── │
+│ 📂 プロジェクトB   │  2024年12月1日 定例会議                                  │
+│                    │  参加者: 田中、鈴木、佐藤                                │
+│                    │  議題: Q1予算について...                                 │
+│                    │                                                         │
+│                    │ [📋 text/plain ▾] [➕ 子追加] [💾 更新] [🗑 削除] [📋 Copy]│
+│                    │ ──────────────────────────────────────────────────────── │
+│                    │ 📎 添付なし                                              │
+├────────────────────┴─────────────────────────────────────────────────────────┤
+│ [📝 ログ] ▼  [21:45:02] ✅ Pipeline "翻訳→レビュー" completed                │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### メインウィンドウ (--embedded モード)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [☰] [📄] [📂] [💾] [💾▾] │ [▶ Run] [⚡ レシピ] │ [🔍 検索...    ] [⚙] [🧪]  │  ← ツールバーのみ（メニューバーなし）
+├──────────────────────────────────────────────────────────────────────────────┤
+│ [General ×]  [Code ×]  [+]                                                   │
+├────────────────────┬─────────────────────────────────────────────────────────┤
+│  ← 以降は Standalone と同一レイアウト →                                      │
+```
+
+`☰` クリック時:
+
+```
+┌─────────────────────────────┐
+│ ─ File ─────────────────── │
+│   📄 New Tab      Ctrl+T   │
+│   📂 Open...      Ctrl+O   │
+│   💾 Save         Ctrl+S   │
+│   💾 Save As...            │
+│   📦 Import ZIP...         │
+│   📤 Export Node...        │
+│   Recent Files ▶           │
+│ ─ Pipeline ──────────────  │
+│   ▶ Run Pipeline...  F5    │
+│   ⚡ Recipe Manager  Ctrl+P│
+│   📜 History         Ctrl+H│
+│ ─ Providers ─────────────  │
+│   ⚙ Configure...           │
+│ ─ View ──────────────────  │
+│   Toggle Tree      Ctrl+1  │
+│   Toggle Messages  Ctrl+4  │
+└─────────────────────────────┘
+```
+
+---
+
+### ✨ 成果物ノードの表示（エディタ下部のメタパネル）
+
+成果物ノード（AI生成）を選択したとき、エディタ下部に「作り方」が表示される。
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  こんにちは世界！これはテスト翻訳です。                               │  ← content
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│ 📋 翻訳→比較選択        2026-06-04 21:45:00          [▶ 再実行]      │
+│ ─────────────────────────────────────────────────────────────────── │
+│  1  Translate   ai   anthropic   claude-sonnet-4-6      312 tok      │
+│  2  Compare     manual compare   (人間が選択)                        │
+│  3  Review      ai   openai      gpt-4.1                180 tok      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+`▶ 再実行` → 現在選択中のノードを素材として同じパイプラインを再実行。
+
+---
+
+### レシピマネージャ (Pipeline Manager)
+
+`[⚡ レシピ]` ボタンまたはメニュー `Pipeline > Recipe Manager` で開く。
+
+```
+┌─ レシピ (パイプライン) ─────────────────────────────────────────────────────────┐
+│ [翻訳→比較選択] [要約] [日報生成] [+ 新規レシピ]                                │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ 名前: [翻訳→比較選択                        ]                                  │
+│ ─────────────────────────────────────────────────────────────────────────────  │
+│ ステップ:                                      フロー図:                       │
+│  ┌──────────────────────────────────────┐    ┌──────────────────────────────┐ │
+│  │ 1  🤖 Multi-translate  [parallel] ↕ │    │ [素材]                        │ │
+│  │       Claude / GPT-4 / Grok          │    │   ↓                          │ │
+│  │  2  👁 比較選択        [compare]  ↕ │    │ [Multi-translate]             │ │
+│  │  3  🤖 Review          [ai]       ↕ │    │   ↓ ← 実行中はここが点滅      │ │
+│  │                                      │    │ [比較選択] ← 人間待ち         │ │
+│  │  [+ ステップ追加 ▾]   [💾 保存]     │    │   ↓                          │ │
+│  └──────────────────────────────────────┘    │ [Review]                     │ │
+│                                               │   ↓                          │ │
+│  出力: [child ▾]  リトライ: [3× 2s ▾]        │ [出力ノード]                  │ │
+│                             [🗑 削除]  [▶ 今すぐ実行]  └──────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+ステップ編集フォーム（`[✏]` クリック時、type=ai の場合）:
+
+```
+┌─ ステップ編集 ────────────────────────────────────────────┐
+│ 名前: [Translate                                        ] │
+│ 種類: [🤖 AI Call ▾]                                      │
+│ ─────────────────────────────────────────────────────── │
+│ プロバイダ: [Anthropic ▾]   モデル: [claude-sonnet-4-6 ▾] │
+│ システム:  [You are a professional translator.         ]  │
+│ プロンプト:[以下を英語に翻訳してください:               ]  │
+│           [{content}                                   ]  │
+│  💡 変数: {content} {result} {step.N.result}              │
+│ 温度: [0.3]   最大トークン: [4096]                        │
+│ ─────────────────────────────────────────────────────── │
+│                              [✓ 保存]  [✕ キャンセル]    │
+└───────────────────────────────────────────────────────────┘
+```
+
+---
+
+### パイプライン実行ダイアログ
+
+```
+┌─ 実行中: 翻訳→比較選択 ─────────────────────────────────────────────────┐
+│                                                                          │
+│  [素材] ──→ [Multi-translate] ──→ [比較選択] ──→ [Review] ──→ [出力]   │
+│                  ✅ 完了            ⏳ 待機                               │
+│                                                                          │
+├──────────────────────────────────────┬───────────────────────────────────┤
+│ キュー                                │ 出力 (ストリーミング)              │
+│  ✅ Multi-translate [ロック]          │ 【Claude】                        │
+│  ⏳ 比較選択        [編集不可]        │ Hello world! This is...           │
+│  ⏳ Review         [✏][🗑]           │ 【GPT-4】                         │
+│  [+ ステップ追加]                     │ Hi world. This is a...            │
+│  [+ レシピを追加]                     │ 【Grok】                          │
+│                                       │ Hello world, this...              │
+├──────────────────────────────────────┴───────────────────────────────────┤
+│  [████████████░░░░]  Step 2/3     [⏸ 一時停止]  [✕ キャンセル]           │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 比較選択モーダル
+
+#### パターンA: 複数AI（`parallel` ステップ後）
+
+```
+┌─ 比較選択  Step 2  ─────────────────────────────────────────────────────────┐
+│  最も良い翻訳を選んでください                                                │
+│                                                                             │
+│  ┌─ Claude ───────────────────────┐  ┌─ GPT-4 ────────────────────────┐   │
+│  │ Hello, world! This is a test   │  │ Hi world. This is a translation │   │
+│  │ translation of the original    │  │ test of the original Japanese   │   │
+│  │ Japanese text. The system      │  │ content. It has been            │   │
+│  │ works correctly and fluently.  │  │ successfully converted.         │   │
+│  │                                │  │                                 │   │
+│  │         [✓ これを選ぶ]          │  │         [✓ これを選ぶ]          │   │
+│  └────────────────────────────────┘  └─────────────────────────────────┘   │
+│  ┌─ Grok ─────────────────────────┐                                        │
+│  │ Hello world, this translation  │                                        │
+│  │ demonstrates the capabilities  │                                        │
+│  │ of the AI pipeline system.     │                                        │
+│  │         [✓ これを選ぶ]          │                          [Cancel]      │
+│  └────────────────────────────────┘                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### パターンB: 単一AI・複数候補（`splitBy: "---"` で分割）
+
+```
+┌─ 比較選択  Step 2  ─────────────────────────────────────────────────────────┐
+│  最も良いスタイルを選んでください  （1つのAIが生成した3案）                 │
+│                                                                             │
+│  ┌─ 候補 1 ───────────────────────┐  ┌─ 候補 2 ───────────────────────┐   │
+│  │ [Formal]                       │  │ [Casual]                        │   │
+│  │ Hello, world. This translation │  │ Hey world! Just testing this    │   │
+│  │ adheres to formal standards    │  │ translation thing out, seems    │   │
+│  │ of professional communication. │  │ to work pretty well!            │   │
+│  │         [✓ これを選ぶ]          │  │         [✓ これを選ぶ]          │   │
+│  └────────────────────────────────┘  └─────────────────────────────────┘   │
+│  ┌─ 候補 3 ───────────────────────┐                                        │
+│  │ [Technical]                    │                                        │
+│  │ Input: "Hello world" →         │                                        │
+│  │ Output: Translation verified.  │                          [Cancel]      │
+│  │         [✓ これを選ぶ]          │                                        │
+│  └────────────────────────────────┘                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Manual Step モーダル（view / edit / select）
+
+```
+┌─ 確認  Step 3  ──────────────────────────────────┐   ← view モード
+│  翻訳結果を確認してください                       │
+│ ┌──────────────────────────────────────────────┐ │
+│ │ Hello, world! This is a test translation...  │ │  ← 前ステップの出力（読み取り専用）
+│ └──────────────────────────────────────────────┘ │
+│                           [Continue]  [Cancel]   │
+└──────────────────────────────────────────────────┘
+
+┌─ 編集  Step 3  ──────────────────────────────────┐   ← edit モード
+│  内容を編集してから Continue を押してください     │
+│ ┌──────────────────────────────────────────────┐ │
+│ │ Hello, world! This is a test translation...  │ │  ← 編集可能 textarea
+│ │ （ここを直接編集できる）                       │ │
+│ └──────────────────────────────────────────────┘ │
+│                           [Continue]  [Cancel]   │
+└──────────────────────────────────────────────────┘
+
+┌─ 選択  Step 3  ──────────────────────────────────┐   ← select モード
+│  生成された WAV を聴いて判定してください          │
+│ ┌──────────────────────────────────────────────┐ │
+│ │ (生成コンテンツのプレビュー)                   │ │
+│ └──────────────────────────────────────────────┘ │
+│  [✅ OK — 次のステップへ]                         │
+│  [🔄 Re-generate（最初からやり直す）]             │
+│  [✕ Cancel pipeline]                             │
+└──────────────────────────────────────────────────┘
+```
+
+---
+
+### Config モーダル（⚙）
+
+```
+┌─ Config ────────────────────────────────────────────────────────┐
+│  [Providers]  [General]                                 ×       │
+├────────────────────────────────────────────────────────────────┤
+│  ┌─ OpenAI ──────────────────────────────────────────────────┐  │
+│  │  API Key   [sk-••••••••••••••••••••••••••••••••••••] 👁   │  │
+│  │  Base URL  [https://api.openai.com/v1              ]      │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│  ┌─ Anthropic ───────────────────────────────────────────────┐  │
+│  │  API Key   [sk-ant-••••••••••••••••••••••••••••••••] 👁   │  │
+│  │  Base URL  [https://api.anthropic.com               ]     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│  ┌─ Gemini ──────────────────────────────────────────────────┐  │
+│  │  API Key   [AI••••••••••••••••••••••••••••••••••••••] 👁  │  │
+│  │  Base URL  [https://generativelanguage.googleapis.com]    │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│  ┌─ Ollama (ローカル) ────────────────────────────────────────┐  │
+│  │  API Key   [(不要)                                  ] 👁   │  │
+│  │  Base URL  [http://localhost:11434                  ]      │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│  ┌─ カスタム (OpenAI互換) ─────────────────────────────────────┐ │
+│  │  名前      [Grok                                    ]      │  │
+│  │  API Key   [xai-••••••••••••••••••••••••••••••••••••] 👁  │  │
+│  │  Base URL  [https://api.x.ai/v1                     ]     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              [Test Connection]  [Save]          │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 右クリック コンテキストメニュー
+
+```
+┌────────────────────────────────┐
+│  ➕ 子ノードを追加              │
+│  ➕ 兄弟ノードを追加            │
+│  ────────────────────────────  │
+│  ✂  切り取り                   │
+│  📋 コピー                     │
+│  📋 内容をコピー               │
+│  📄 貼り付け                   │
+│  ────────────────────────────  │
+│  🗑 削除                       │
+│  ✏  名前を変更                 │
+│  ────────────────────────────  │
+│  ▲ 上へ移動                    │
+│  ▼ 下へ移動                    │
+│  ────────────────────────────  │
+│  コンテンツ種類  ▶             │
+│  ▶ レシピを適用  ▶             │  ← パイプライン一覧サブメニュー
+│  ────────────────────────────  │
+│  🔍 検索 (Ctrl+F)              │
+│  ────────────────────────────  │
+│  📦 ノードをエクスポート (ZIP)  │
+│  ▶ すべて折りたたむ            │
+│  ▶ すべて展開                  │
+└────────────────────────────────┘
+```
+
+---
 
 ## Layout
 
@@ -1724,3 +2051,998 @@ C++: JsonToNode(payload.node) でデシリアライズ
 | foreach の入力が空 | ループ0回、`{result}` は空文字列 |
 | goto_step で無限ループ | 最大繰り返し回数（デフォルト 100）でキャンセル |
 | recent_files.json が存在しない | エラーなし、空リストで起動 |
+
+---
+
+## Menu System — Standalone vs Embedded
+
+### 設計原則
+
+| モード | ウィンドウ管理者 | メニュー提供方法 |
+|--------|----------------|----------------|
+| Standalone | Prompts.exe 自身 | Win32 ネイティブメニューバー |
+| `--embedded` | ecode（親プロセス） | ツールバー内 `☰` HTML ドロップダウン |
+
+embedded モードではネイティブメニューバーを非表示にし、ツールバーの `☰` ボタンで同等の機能を提供する。Win32 タイトルバーもないため、操作に必要な全エントリをツールバーに集約する。
+
+---
+
+### Standalone メニューバー（Win32 ネイティブ）
+
+```
+File    Edit    Pipeline    Providers    View    Help
+```
+
+#### File
+
+| 項目 | ショートカット | 動作 |
+|------|-------------|------|
+| New Tab | Ctrl+T | 新規タブ（空ルートノード）を作成 |
+| Open... | Ctrl+O | GetOpenFileName → JSON ファイルを新タブで開く |
+| Save | Ctrl+S | 現在のタブを上書き保存 |
+| Save As... | Ctrl+Shift+S | GetSaveFileName → 別名保存 |
+| Import ZIP... | | ノード + blob を ZIP から復元 |
+| Export Node... | | 選択ノード + blob を ZIP に書き出し |
+| Recent Files ▶ | | `recent_files.json` から最大 10 件サブメニュー |
+| ─── | | |
+| Exit | Alt+F4 | 保存確認後に終了 |
+
+#### Pipeline
+
+| 項目 | ショートカット | 動作 |
+|------|-------------|------|
+| Run Pipeline... | F5 | 選択ノードに適用するパイプラインを選ぶサブメニュー |
+| Pipeline Manager | Ctrl+P | Pipeline Manager モーダルを開く |
+| Execution History | Ctrl+H | History パネルを開く |
+| ─── | | |
+| Cancel | Esc | 実行中パイプラインを中断 |
+
+#### Providers
+
+| 項目 | 動作 |
+|------|------|
+| Configure... | Config モーダルの Providers タブを開く |
+| Test Connection | 登録済み全プロバイダへの疎通テスト |
+
+#### View
+
+| 項目 | ショートカット | 動作 |
+|------|-------------|------|
+| Toggle Tree | Ctrl+1 | Tree ペインを折りたたみ / 展開 |
+| Toggle List | Ctrl+2 | List ペインを折りたたみ / 展開 |
+| Toggle Editor | Ctrl+3 | Editor ペインを折りたたみ / 展開 |
+| Toggle Messages | Ctrl+4 | Messages ペインを折りたたみ / 展開 |
+| ─── | | |
+| Full Screen | F11 | ウィンドウを最大化 |
+
+#### Help
+
+| 項目 | 動作 |
+|------|------|
+| Documentation | 設計ドキュメントを既定ブラウザで開く |
+| About Prompts | バージョン情報ダイアログ |
+
+---
+
+### Embedded モード — `☰` ドロップダウン
+
+ネイティブメニューバーは非表示。ツールバー先頭の `☰` ボタンが HTML カスタムドロップダウンを展開する。
+
+```
+☰ | 📄 New | 📂 Open | 💾 Save | 💾 Save As | | ▶ Run | ⚡ Pipelines | ⚙ Config | [Search...] | 🧪 Test
+```
+
+#### `☰` ドロップダウン内容
+
+```
+┌─ File ───────────────────────────────┐
+│  📄 New Tab          Ctrl+T          │
+│  📂 Open...          Ctrl+O          │
+│  💾 Save             Ctrl+S          │
+│  💾 Save As...       Ctrl+Shift+S    │
+│  📦 Import ZIP...                    │
+│  📤 Export Node...                   │
+│  Recent Files ▶                      │
+├─ Pipeline ───────────────────────────┤
+│  ▶ Run Pipeline...   F5              │
+│  ⚡ Pipeline Manager Ctrl+P          │
+│  📜 Execution History Ctrl+H         │
+│  ✕ Cancel            Esc             │
+├─ Providers ──────────────────────────┤
+│  ⚙ Configure...                      │
+├─ View ────────────────────────────────┤
+│  Toggle Tree         Ctrl+1          │
+│  Toggle List         Ctrl+2          │
+│  Toggle Editor       Ctrl+3          │
+│  Toggle Messages     Ctrl+4          │
+├─ Help ────────────────────────────────┤
+│  About Prompts                        │
+└───────────────────────────────────────┘
+```
+
+#### 実装方法
+
+`☰` ボタンの `onclick` で HTML 要素を動的生成し、`document.body` に `position: fixed` でオーバーレイ。外側クリックで閉じる。
+
+```javascript
+// app.js
+showHamburger() {
+    const menu = document.createElement('div');
+    menu.className = 'hamburger-menu';
+    menu.innerHTML = `...`; // 上記メニュー HTML
+    document.body.appendChild(menu);
+    // 外側クリックで閉じる
+    setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+},
+```
+
+#### Standalone / Embedded の判定
+
+C++ 起動時に `--embedded` フラグを `init` メッセージの `embedded` フィールドで JS へ通知。
+
+```json
+{ "type": "init", "payload": { "embedded": true, ... } }
+```
+
+JS 側:
+```javascript
+case 'init':
+    this.state.embedded = msg.payload.embedded || false;
+    if (this.state.embedded) {
+        document.getElementById('btn-hamburger').style.display = '';
+    }
+    break;
+```
+
+#### Win32 メニューバーの実装
+
+`resource.rc` に `IDR_MENU_MAIN` を定義し、`CreateWindowEx` 後に `SetMenu(hwnd, hMenu)` で設定。`WM_COMMAND` で各 `ID_FILE_NEW`、`ID_PIPELINE_RUN` 等をハンドル。
+
+embedded モードでは `SetMenu(hwnd, nullptr)` を呼ばず（そもそも `WS_POPUP` スタイルのためメニューバーは表示されない）。
+
+---
+
+## Provider Config UI（実装済み）
+
+### 概要
+
+⚙ Config ボタン → Config モーダル → Providers タブ で全 AI プロバイダの API Key / Base URL を設定・保存する。
+
+### 対応プロバイダ一覧
+
+| ID | 表示名 | デフォルト Base URL | 備考 |
+|----|--------|---------------------|------|
+| `openai` | OpenAI | `https://api.openai.com/v1` | GPT-4.x / o1 / o3 系 |
+| `anthropic` | Anthropic | `https://api.anthropic.com` | Claude 系 |
+| `gemini` | Gemini | `https://generativelanguage.googleapis.com` | Gemini 2.x 系 |
+| `ollama` | Ollama | `http://localhost:11434` | ローカル LLM |
+| `openai_compat` | Custom (OpenAI互換) | （ユーザー入力） | Grok / Groq / LM Studio 等 |
+
+### OpenAI 互換プロバイダ
+
+ほとんどの新興 AI プロバイダは OpenAI 互換 API エンドポイントを提供している。`openai_compat` タイプを追加することで、専用アダプタなしに任意のプロバイダを利用できる。
+
+| プロバイダ | Base URL |
+|-----------|---------|
+| Grok (xAI) | `https://api.x.ai/v1` |
+| Groq | `https://api.groq.com/openai/v1` |
+| Together AI | `https://api.together.xyz/v1` |
+| Fireworks | `https://api.fireworks.ai/inference/v1` |
+| LM Studio | `http://localhost:1234/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
+
+### Bridge フロー
+
+```
+JS:  postMessage({ type: "get_providers" })
+C++: storage_.LoadProviders() → providers.json 読み込み
+C++: PostToJS("providers_result", { openai: {apiKey, baseUrl}, ... })
+JS:  Config モーダルの各入力フィールドに反映
+
+JS:  postMessage({ type: "save_providers", payload: { openai: {...}, ... } })
+C++: storage_.SaveProviders() → providers.json 書き込み
+C++: runner_.RegisterProvider() で PipelineRunner にも反映
+```
+
+### UI レイアウト
+
+```
+┌─ Config ──────────────────────────────────┐
+│ [Providers]  [General]                    │
+├───────────────────────────────────────────┤
+│ ┌─ OpenAI ────────────────────────────┐   │
+│ │ API Key  [••••••••••••••••••] 👁    │   │
+│ │ Base URL [https://api.openai.com/v1] │   │
+│ └──────────────────────────────────────┘   │
+│ ┌─ Anthropic ─────────────────────────┐   │
+│ │ API Key  [••••••••••••••••••] 👁    │   │
+│ │ Base URL [https://api.anthropic.com] │   │
+│ └──────────────────────────────────────┘   │
+│        ...                                 │
+│              [Test Connection]  [Save]     │
+└───────────────────────────────────────────┘
+```
+
+API Key フィールドは `type="password"` 。👁 ボタンで表示/非表示切り替え。
+
+---
+
+## Manual Step — 人間による確認・編集・選択
+
+### 概要
+
+パイプラインの途中で実行を一時停止し、人間がレビュー・編集・選択を行ってから次ステップへ進む仕組み。
+
+### 3 つのモード
+
+#### `view` — 読み取り専用確認
+
+```
+┌─ 確認 ─ Step 2 ────────────────────────────┐
+│  翻訳結果を確認してください                  │  ← prompt
+│ ┌────────────────────────────────────────┐  │
+│ │ こんにちは、世界！                       │  │  ← 前ステップの出力（編集不可）
+│ │ これはテストの翻訳です。                 │  │
+│ └────────────────────────────────────────┘  │
+│                     [Continue]  [Cancel]    │
+└─────────────────────────────────────────────┘
+```
+
+Continue → 前ステップの出力をそのまま `{result}` として次ステップへ。
+
+#### `edit` — 内容編集
+
+```
+┌─ 編集 ─ Step 2 ────────────────────────────┐
+│  内容を編集してから Continue を押してください │
+│ ┌────────────────────────────────────────┐  │
+│ │ こんにちは、世界！（編集可能）           │  │  ← textarea
+│ └────────────────────────────────────────┘  │
+│                     [Continue]  [Cancel]    │
+└─────────────────────────────────────────────┘
+```
+
+Continue → textarea の内容を `{result}` として次ステップへ。
+
+#### `select` — 選択肢から選ぶ
+
+```
+┌─ 選択 ─ Step 3 ────────────────────────────┐
+│  生成された WAV を聴いて判定してください     │
+│ ┌────────────────────────────────────────┐  │
+│ │ 生成されたテキスト内容のプレビュー...    │  │
+│ └────────────────────────────────────────┘  │
+│  [✅ OK — 次のステップへ]                   │
+│  [🔄 Re-generate（最初からやり直す）]       │
+│  [✕ Cancel pipeline]                       │
+└─────────────────────────────────────────────┘
+```
+
+選択した `action` に従い次の遷移先が決まる（`next_step` / `goto_step` / `cancel`）。
+
+### 実行停止の仕組み
+
+`manual` ステップ到達時:
+
+1. `PipelineRunner::ExecuteStep` が `waitingForManual_ = true` にセット
+2. `PostBridge("manual_step_pause", { index, mode, prompt, content, choices[] })` を JS へ送信
+3. `RunNextStep()` を呼ばずに即リターン → パイプラインは「待機状態」
+
+ユーザーが Continue または選択肢をクリック時:
+
+1. JS: `postMessage({ type: "manual_step_resume", payload: { content } })`
+2. C++: `App::HandleBridgeMessage` → `runner_.ResumeManual(content)`
+3. `PipelineRunner::ResumeManual`: `waitingForManual_ = false`、historyStep に output を記録 → `RunNextStep()`
+
+### Bridge メッセージ
+
+| 方向 | type | payload | 説明 |
+|------|------|---------|------|
+| C++→JS | `manual_step_pause` | `{index, mode, prompt, content, choices[]}` | ユーザー入力待ちへ移行 |
+| JS→C++ | `manual_step_resume` | `{content, action?, gotoStep?}` | Continue / 選択結果を送信 |
+| JS→C++ | `manual_step_cancel` | `{}` | パイプラインを中断 |
+
+### pipeline.json 定義例
+
+```json
+{
+  "type": "manual",
+  "mode": "select",
+  "prompt": "生成された結果を確認して選択してください",
+  "choices": [
+    { "label": "✅ OK — 次へ",      "action": "next_step" },
+    { "label": "🔄 再生成",          "action": "goto_step", "index": 0 },
+    { "label": "✕ キャンセル",       "action": "cancel" }
+  ]
+}
+```
+
+---
+
+## Pipeline Metadata — 散逸防止・再現性確保
+
+### 問題
+
+AI ワークフローで「良い結果が得られた」とき、以下が散逸しやすい:
+- どのプロンプトを使ったか
+- どの順番でどの AI に投げたか  
+- モデル・温度設定
+
+後から同じ処理を再現しようとしても手がかりが残らない。
+
+### 解決: 成果物ノードへのメタデータ埋め込み
+
+パイプライン実行完了時、出力ノードの `pipelineMeta` フィールドに実行記録を JSON で埋め込む。
+
+```json
+{
+  "title": "翻訳→レビュー — 2026-06-04 21:45:00",
+  "content": "base64(こんにちは世界...)",
+  "mimetype": "text/plain",
+  "pipelineMeta": "{\"pipelineName\":\"翻訳→レビュー\",\"executedAt\":\"2026-06-04T21:45:00Z\",\"steps\":[{\"name\":\"Translate\",\"type\":\"ai\",\"provider\":\"anthropic\",\"model\":\"claude-sonnet-4-6\",\"systemPrompt\":\"...\",\"userPrompt\":\"...\",\"output\":\"...\",\"tokens\":312},{\"name\":\"Review\",\"type\":\"ai\",\"provider\":\"openai\",\"model\":\"gpt-4.1\",\"output\":\"...\",\"tokens\":180}]}"
+}
+```
+
+### pipelineMeta フィールドの構造
+
+```typescript
+interface PipelineMeta {
+  pipelineName: string;       // パイプライン名
+  executedAt:   string;       // ISO 8601 timestamp
+  outputContent: string;      // 最終ステップの出力テキスト
+  steps: {
+    name:         string;
+    type:         string;     // "ai" | "command" | "manual" | ...
+    provider?:    string;     // "openai" | "anthropic" | "gemini" | "ollama"
+    model?:       string;     // "gpt-4.1" | "claude-sonnet-4-6" | ...
+    systemPrompt?: string;
+    userPrompt?:  string;
+    temperature?: number;
+    output?:      string;     // このステップの出力
+    tokens?:      number;     // 消費トークン数
+  }[];
+}
+```
+
+### Pipeline Metadata パネル（Editor ペイン下部）
+
+ノード選択時、`pipelineMeta` が存在する場合にエディタ下部に表示。
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 📋 翻訳→レビュー    2026-06-04 21:45:00  [▶ 再実行] │
+├─────────────────────────────────────────────────────┤
+│ 1  Translate    ai  anthropic  claude-sonnet-4-6  312 tok │
+│ 2  Review       ai  openai     gpt-4.1            180 tok │
+└─────────────────────────────────────────────────────┘
+```
+
+- **`▶ 再実行`**: 現在選択中のノードを入力として同名パイプラインを再実行
+- ステップ行をクリック: そのステップのプロンプトと出力をポップアップ表示
+
+### 「パイプラインとして保存」フロー
+
+アドホック実行後、成果物ノードのメタデータから正式なパイプライン定義を生成できる。
+
+```
+成果物ノードを選択
+  → Pipeline Metadata パネルの [💾 パイプラインとして保存] ボタン
+  → 名前入力ダイアログ（デフォルト: pipelineName）
+  → pipelineMeta.steps[] から PipelineStep[] を再構築
+  → pipeline.json に追記
+  → Pipeline Manager に即座に反映
+```
+
+これにより「アドホックに試した → うまくいった → 名前をつけて保存 → 以後いつでも再利用」というフローが完結する。
+
+### C++ 実装: BuildMetaJson()
+
+`PipelineRunner::BuildMetaJson()` は全ステップ完了時に呼ばれ、`executedStepParams_`（ステップ定義）と `historySteps_`（実行結果）を結合してメタ JSON を返す。
+
+```cpp
+std::string PipelineRunner::BuildMetaJson();
+// Returns: {"outputContent":"...","pipelineName":"...","executedAt":"...","steps":[...]}
+```
+
+完了時に `PostBridge("pipeline_completed", BuildMetaJson())` を呼び、JS が `pipeline_completed` を受信して出力ノードを作成・保存する。
+
+### Storage: pipelineMeta の永続化
+
+`Node.pipelineMeta` は `NodeToJson` / `JsonToNode` で `"pipelineMeta"` キーとして JSON に保存される。空文字列の場合はキー自体を省略。
+
+---
+
+## メディアタイプ戦略
+
+### 設計原則: ノードはコンテナ、型は詳細
+
+```
+❌ 型中心設計（避けるべき）:
+  画像ノード、PDFノード、動画ノード ... → 型ごとに異なるUI → Messy
+
+✅ 内容中心設計（採用）:
+  ノード = タイトル + コンテンツ（何でも）
+  型はノードの属性（小さなバッジで表示）
+  パイプラインは型を直接扱わない
+```
+
+### ノードのコンテンツタイプ
+
+| mimetype | エディタ表示 | パイプライン入力 |
+|----------|------------|----------------|
+| `text/plain` | `<textarea>` | テキストとして渡す |
+| `text/html` | marked.js レンダリング + ソース編集 | HTML テキストとして渡す |
+| `application/rtf` | RichEdit HWND オーバーレイ | RTF テキストとして渡す |
+| `image/png` `image/jpeg` `image/webp` | `<img>` タグ表示 | base64 → `{content_file}` でファイル化 or multi-modal |
+| `application/pdf` | `[PDF] nnn KB` + 外部アプリで開く | `{content_file}` でパス渡し |
+| `video/*` | `<video>` タグ / ファイル名表示 | `{content_file}` でパス渡し |
+| `audio/*` | `<audio>` タグ | `{content_file}` でパス渡し |
+| `application/vnd.openxmlformats-officedocument.*` | ファイル名 + サイズ | `{content_file}` |
+
+### 型変換パターン（`command` ステップ）
+
+型変換は外部 CLI ツールに委ねる。Prompts 自身は変換ロジックを持たない。
+
+```json
+// PDF → テキスト
+{ "type": "command", "command": "pdftotext", "args": ["{content_file}", "-"], "resultAs": "text" }
+
+// 画像 → テキスト説明（AI vision）
+{ "type": "ai", "provider": "openai", "model": "gpt-4o", "attachMedia": "all",
+  "userPrompt": "この画像を詳しく説明してください" }
+
+// 音声 → テキスト (Whisper)
+{ "type": "command", "command": "whisper", "args": ["{content_file}", "--output_format", "txt"], "resultAs": "text" }
+
+// 動画 → 音声
+{ "type": "command", "command": "ffmpeg",
+  "args": ["-i", "{content_file}", "-vn", "-acodec", "mp3", "{output_file}"],
+  "resultAs": "file", "resultFile": "{output_file}" }
+
+// PPTX → テキスト
+{ "type": "command", "command": "python", "args": ["-c",
+  "import pptx,sys; [print(s.text) for sl in pptx.Presentation(sys.argv[1]).slides for s in sl.shapes if s.has_text_frame]",
+  "{content_file}"], "resultAs": "text" }
+```
+
+### `{content_file}` プレースホルダー
+
+`command` / `tool` ステップで `{content_file}` を使うと、C++ がノードの content を一時ファイルに書き出してそのパスに置換する。
+
+| mimetype | エンコーディング |
+|----------|----------------|
+| `text/*` | UTF-8 |
+| `application/rtf` | ASCII |
+| `image/*` `video/*` `audio/*` | 生バイナリ |
+| その他 | 生バイナリ |
+
+ステップ終了後に一時ファイルを削除する。
+
+### UIでのMessy回避ルール
+
+1. **ノードのアイコン/バッジは最小限** — 型を示す小さなバッジ（📄 📷 🎵 🎬）のみ
+2. **型固有UIは最小面積** — テキスト以外は「ファイル名 + サイズ + [外部アプリで開く]」のみ
+3. **パイプラインは型を宣言しない** — `{content_file}` として任意のバイナリを扱える
+4. **変換は外部ツール** — ffmpeg / whisper / pdftotext 等を `command` ステップで利用
+
+### 大容量メディアの扱い
+
+1 MB 以上のメディアは `blobs/` ディレクトリに外部保存し、ノード JSON には `file` パスのみ記録（inline: false）。パイプライン実行時は `blobs/` のファイルパスを `{content_file}` として渡す。
+
+---
+
+## Command Step — CLI ツール統合（実装TODO）
+
+### 概要
+
+外部コマンド（ffmpeg / whisper / pdftotext / python / codex / claude 等）をパイプラインステップとして実行する。stdout を `{result}` に格納して次ステップへ渡す。
+
+### pipeline.json 定義
+
+```json
+{
+  "type": "command",
+  "command": "whisper",
+  "args": ["{content_file}", "--output_format", "txt", "--language", "ja"],
+  "timeout": 300,
+  "workingDir": "%APPDATA%/Ecode/Prompts/",
+  "resultAs": "text"
+}
+```
+
+| フィールド | 説明 | デフォルト |
+|-----------|------|---------|
+| `command` | 実行ファイル名またはフルパス | 必須 |
+| `args` | 引数配列。`{content_file}` / `{result}` 等プレースホルダー利用可 | `[]` |
+| `timeout` | タイムアウト秒数 | 60 |
+| `workingDir` | 作業ディレクトリ | appDataPath |
+| `resultAs` | `"text"` = stdout を `{result}` に / `"exitcode"` = 終了コードを `{result}` に / `"file"` = `resultFile` を読み込む | `"text"` |
+| `resultFile` | `resultAs: "file"` 時の出力ファイルパス | — |
+| `env` | 追加環境変数 `{ "KEY": "VALUE" }` | — |
+
+### 非同期実行（スレッドモデル）
+
+`command` ステップは時間がかかる可能性（Codex CLI、whisper等）があるため、ワーカースレッドで実行してメインスレッドをブロックしない。
+
+```
+Main Thread:    Bridge メッセージループ（ブロックなし）
+Worker Thread:  CreateProcess → stdout 読み取り → PostBridge("stream_chunk") → 完了後 RunNextStep()
+```
+
+**実装方針:**
+
+```cpp
+// ExecuteStep 内 (type == "command")
+std::thread([this, step]() {
+    // CreateProcess with stdout pipe
+    // Read stdout in loop → PostBridge("stream_chunk", ...)
+    // On exit: set result → PostBridge("step_done") → RunNextStep()
+}).detach();
+return; // メインスレッドはここで即リターン
+```
+
+### Codex CLI 統合例
+
+OpenAI Codex CLI は `--approval-mode full-auto` でバッチ実行可能。
+
+```json
+{
+  "type": "command",
+  "command": "codex",
+  "args": ["--approval-mode", "full-auto", "{content}"],
+  "timeout": 600,
+  "workingDir": "C:\\your\\project",
+  "resultAs": "text"
+}
+```
+
+同様に Claude Code:
+
+```json
+{
+  "type": "command",
+  "command": "claude",
+  "args": ["-p", "{content}"],
+  "timeout": 600,
+  "workingDir": "C:\\your\\project",
+  "resultAs": "text"
+}
+```
+
+---
+
+## Implementation Status（最新）
+
+### 実装済み ✅
+
+| 機能 | ファイル |
+|------|---------|
+| Win32 ウィンドウ + WebView2 ホスト | `App.h/cpp` |
+| Bridge (C++ ↔ JS) | `Bridge.h/cpp` |
+| Storage (JSON read/write) | `Storage.h/cpp` |
+| Node + pipelineMeta フィールド | `NodeData.h`, `Storage.cpp` |
+| PipelineRunner — ai ステップ (WinHTTP 非同期 SSE) | `PipelineRunner.h/cpp` |
+| PipelineRunner — condition ステップ | `PipelineRunner.cpp` |
+| PipelineRunner — manual ステップ | `PipelineRunner.cpp` |
+| PipelineRunner — BuildMetaJson (pipeline_completed) | `PipelineRunner.cpp` |
+| PipelineRunner — Dynamic Queue (deque) | `PipelineRunner.h/cpp` |
+| AIProvider (OpenAI / Anthropic / Gemini / Ollama) | `AIProvider.h/cpp` |
+| App: get_providers / save_providers Bridge | `App.cpp` |
+| App: manual_step_resume / manual_step_cancel Bridge | `App.cpp` |
+| App: save_node Bridge | `App.cpp` |
+| App: run_pipeline (inputContent 付き) | `App.cpp` |
+| Config モーダル (Providers タブ) | `frontend/index.html`, `app.js`, `style.css` |
+| Manual Step モーダル (view / edit / select) | `frontend/index.html`, `app.js`, `style.css` |
+| Pipeline Metadata パネル (エディタ下部) | `frontend/app.js`, `style.css` |
+| ローカライゼーション (6 言語) | `PromptsLocalization.h/cpp`, `frontend/lang/*.json` |
+
+### 未実装 / TODO
+
+| 機能 | 優先度 | 工数目安 |
+|------|--------|---------|
+| Win32 メニューバー (Standalone) | 高 | 中 |
+| `☰` HTML ドロップダウン (Embedded) | 高 | 小 |
+| `command` ステップ (CreateProcess + stdout pipe) | 高 | 中 |
+| `pipeline_completed` → 子ノード自動作成・保存 | 高 | 小 |
+| 「パイプラインとして保存」ボタン | 高 | 小 |
+| Pipeline Manager UI | 中 | 大 |
+| Execution History UI | 中 | 中 |
+| `save_pipeline` Bridge 実装 | 中 | 小 |
+| Full `init` message (tabs + nodes + pipelines) | 高 | 中 |
+| Recent Files | 低 | 小 |
+| Blob GC (起動時) | 中 | 小 |
+| `tool` / `fetch` / `transform` / `foreach` / `parallel` / `wait` ステップ | 低 | 大 |
+| Trigger (schedule / file_watcher / webhook) | 低 | 大 |
+| Expert モード (Cytoscape.js) | 低 | 大 |
+
+
+---
+
+## パイプライン機能拡張 — Claude の提案
+
+> **用語注記**: ここで「拡張」はパイプラインの実行エンジン（ステップ種別・変数・トリガー等）に関する設計提案を指す。
+> AI agent の文脈・記憶・設定のライフサイクル管理は別概念「**AI Agent ハーネス**」として後節で定義する。
+
+### 追加ステップタイプ
+
+既存の Step Types テーブルへの追加候補。
+
+| Type | Description | block UI? |
+|------|-------------|-----------|
+| `"cache"` | 入力ハッシュで結果をキャッシュ。ヒット時はAI呼び出しをスキップ | No |
+| `"assert"` | 出力を検証し、条件不満足時にエラーまたは警告 | No |
+| `"set_var"` | 任意の値を名前付き変数に格納 → `{var.NAME}` で参照 | No |
+| `"notify"` | Windows トースト通知を送信（長時間バックグラウンド実行用） | No |
+
+---
+
+#### `"cache"` — 結果キャッシュステップ
+
+高コストな AI コールや外部 API の結果をキャッシュし、同一入力では再実行をスキップする。
+
+```json
+{
+  "type": "cache",
+  "key": "{content}",
+  "ttl": 3600,
+  "namespace": "translate_v1",
+  "onMiss": { "type": "ai", "provider": "openai", "model": "gpt-4.1", "userPrompt": "..." }
+}
+```
+
+| フィールド | 説明 | デフォルト |
+|-----------|------|---------|
+| `key` | キャッシュキー（プレースホルダー展開後に SHA-256 ハッシュ） | `{content}` |
+| `ttl` | TTL 秒数（0 = 永続） | 0 |
+| `namespace` | キャッシュ名前空間。プロンプト変更時にバージョンアップして無効化 | `"default"` |
+| `onMiss` | キャッシュミス時に実行するインラインステップ定義 | 必須 |
+
+保存先: `%APPDATA%/Ecode/Prompts/cache/<namespace>/<hash>.json`
+Config に "Clear Cache" ボタンを追加。
+
+---
+
+#### `"assert"` — バリデーション・テストステップ
+
+条件を満たさない場合にパイプラインを停止またはログ警告を出す。Test Mode と組み合わせてパイプラインの自動テストに使える。
+
+```json
+{
+  "type": "assert",
+  "expression": "{result}",
+  "operator": "contains",
+  "value": "翻訳:",
+  "message": "翻訳プレフィックスが見つかりません",
+  "onFail": "cancel"
+}
+```
+
+| `onFail` 値 | 動作 |
+|-------------|------|
+| `"cancel"` | パイプライン中断（`onError` と同じ扱い） |
+| `"warn"` | Messages ペインに黄色警告行を出して継続 |
+| `"goto_step"` | 指定 `index` のステップに戻る |
+
+`operator` は `condition` ステップと共通（`contains` / `equals` / `startsWith` / `regex` / `json_path`）。
+
+---
+
+#### `"set_var"` — 名前付き変数の格納
+
+ステップ出力や展開済みプレースホルダーを名前付き変数に格納する。後続ステップで `{var.NAME}` として参照可能。
+
+```json
+{
+  "type": "set_var",
+  "vars": {
+    "original": "{content}",
+    "translated": "{result}",
+    "run_date": "{date}"
+  }
+}
+```
+
+- `{var.NAME}` は同一パイプライン実行内でのみ有効（セッション変数）
+- 複数の `set_var` で同名キーを使うと上書き
+- 用途: 入力を保存して後続ステップで `{result}` が変わっても元の内容を参照できる。`{step.N.result}` より可読性が高い
+
+---
+
+#### `"notify"` — Windows 通知ステップ
+
+長時間パイプラインの途中で Windows トースト通知を送る。バックグラウンド実行時に有用。
+
+```json
+{
+  "type": "notify",
+  "title": "{pipeline.name} Checkpoint",
+  "message": "Step {step.current}/{step.total} 完了: {result}",
+  "sound": false
+}
+```
+
+Windows Action Center に表示。`winrt` Toast API または `ShellExecute` で実装（依存追加なし）。
+
+---
+
+### 変数プレースホルダー追加
+
+既存の `{content}` / `{result}` / `{step.N.result}` への追加候補。
+
+| 構文 | 内容 |
+|------|------|
+| `{date}` | 実行開始日（`YYYY-MM-DD` 形式） |
+| `{time}` | 実行開始時刻（`HH:mm:ss` 形式） |
+| `{node.title}` | 入力ノードのタイトル |
+| `{node.id}` | 入力ノードの内部 ID |
+| `{node.mimetype}` | 入力ノードの MIME タイプ |
+| `{pipeline.name}` | 実行中パイプライン名 |
+| `{step.current}` | 現在のステップ番号（1 始まり） |
+| `{step.total}` | パイプラインの総ステップ数 |
+| `{env.VAR_NAME}` | Windows 環境変数（例: `{env.USERNAME}`） |
+| `{var.NAME}` | `set_var` ステップで格納した名前付き変数 |
+
+`{date}` / `{time}` / `{node.*}` / `{pipeline.name}` / `{step.current}` / `{step.total}` はパイプライン実行開始時に確定し、全ステップで同じ値を保持する。
+`{env.VAR_NAME}` は `GetEnvironmentVariableW` で取得。存在しない変数名は空文字列に展開する。
+
+---
+
+### Command ステップへの stdin 対応
+
+`jq` / `sed` / `python -c` など、stdin からデータを受け取るコマンドへの対応。`stdin` フィールドを追加。
+
+```json
+{
+  "type": "command",
+  "command": "jq",
+  "args": [".data.text"],
+  "stdin": "{result}",
+  "resultAs": "text"
+}
+```
+
+`stdin` が指定された場合、展開後の文字列を UTF-8 でエンコードして子プロセスの stdin に書き込む。`{content_file}` との併用も可（stdin と args にそれぞれ異なるデータを渡せる）。
+
+---
+
+### Trigger 追加: `node_created`
+
+アプリ内イベントをトリガーにする。特定ノードの配下に子ノードが作成されたとき（貼り付け・DnD・別パイプラインの出力）にパイプラインを自動起動。
+
+```json
+{
+  "type": "node_created",
+  "parentNodeTitle": "受信トレイ",
+  "inputMimetype": "text/plain"
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `parentNodeTitle` | 監視する親ノードのタイトル（部分一致） |
+| `inputMimetype` | フィルタする MIME タイプ（省略時は全タイプ） |
+
+**用途例**:
+- `受信トレイ` ノード配下への貼り付けで自動要約パイプラインが走る
+- 別パイプラインの出力ノード作成がトリガーになり、パイプラインを連鎖できる（`node_created` trigger が `call_pipeline` の代替として機能）
+
+---
+
+### foreach ステップへの `aggregateAs` 追加
+
+現在は結果を改行連結するのみ。集約方式を選べるようにする。
+
+```json
+{
+  "type": "foreach",
+  "input": "{result}",
+  "itemVariable": "item",
+  "steps": [ { "type": "ai", "userPrompt": "Summarize: {item}" } ],
+  "concurrency": 3,
+  "aggregateAs": "json_array"
+}
+```
+
+| `aggregateAs` 値 | 動作 |
+|-----------------|------|
+| `"newline"` | 改行連結（現行デフォルト） |
+| `"json_array"` | JSON 配列 `["result1", "result2", ...]` |
+| `"numbered_list"` | `1. result1\n2. result2\n...` |
+| `"csv"` | カンマ区切り（RFC 4180 エスケープ） |
+
+`"json_array"` にしておくと後続の `condition` / `transform`（`json_path` engine）と組み合わせて要素アクセスが容易になる。
+
+---
+
+### Pipeline レベル: 入力バリデーション
+
+`inputSpec` フィールドをパイプライン定義に追加し、実行前に入力ノードを検証する。
+
+```json
+{
+  "name": "PDF 要約",
+  "inputSpec": {
+    "mimetypes": ["application/pdf"],
+    "minAttachments": 1,
+    "contentNotEmpty": true
+  },
+  "steps": [...]
+}
+```
+
+バリデーション失敗時は「このパイプラインは PDF ノードにのみ対応しています」とダイアログ表示して実行を中断。
+Context Menu の「▶ Run Pipeline」サブメニューでも `inputSpec` 不適合のパイプラインをグレーアウト表示できる。
+
+---
+
+## AI Agent ハーネス
+
+> **定義**: ここで「ハーネス」とは、AI agent が特定のタスクに専念するために必要な **文脈・記憶・スキル・設定のセット** を指す。
+> パイプライン（ステップの実行順序）とは別物。パイプラインは「何をどの順番で実行するか」を定義し、ハーネスは「その AI がどういう存在であるか」を定義する。
+
+### ハーネスの構成要素
+
+```json
+{
+  "name": "technical_translator",
+  "systemPrompt": "You are a professional technical translator specializing in software documentation.",
+  "memory": [
+    "ユーザーはヘビメタ好きで、ユーモアを好む",
+    "プロジェクト固有用語: 'ハーネス' = agent context bundle"
+  ],
+  "skills": ["search_web", "read_file"],
+  "config": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-6",
+    "temperature": 0.3
+  },
+  "baseline": "technical_translator_v1"
+}
+```
+
+| フィールド | 内容 |
+|-----------|------|
+| `systemPrompt` | agent の役割・制約・スタイルを定義するシステムプロンプト |
+| `memory[]` | 過去のやり取りや蓄積された事実。実行のたびに増える |
+| `skills[]` | この agent が利用できるツール・コマンドの識別子 |
+| `config` | デフォルトのモデル・プロバイダ・パラメータ |
+| `baseline` | リセット時に戻すスナップショット名 |
+
+### ライフサイクル: 保存 / 強化 / 再利用 / リセット
+
+```
+保存 (save)     ──→  harnesses/<name>.json に現在の状態をスナップショット
+強化 (enhance)  ──→  memory[] に追記、systemPrompt を更新、skills を追加
+再利用 (reuse)  ──→  別パイプライン実行や別ノードに同じハーネスをロード
+リセット (reset) ──→  baseline スナップショットに巻き戻し（memory をクリア）
+```
+
+### ストレージ
+
+```
+%APPDATA%/Ecode/Prompts/
+└── harnesses/
+    ├── technical_translator.json      ← 現在の状態（memory が蓄積される）
+    ├── technical_translator_v1.json   ← baseline スナップショット
+    └── code_reviewer.json
+```
+
+- **現在状態** (`<name>.json`): パイプライン実行のたびに memory が追記される生きたファイル
+- **ベースライン** (`<name>_<tag>.json`): `save` 操作で明示的に作成するスナップショット。`reset` の戻り先
+
+### パイプラインとの関係
+
+ハーネスはパイプラインの「ai」ステップに `harness` フィールドで指定する。
+
+```json
+{
+  "type": "ai",
+  "harness": "technical_translator",
+  "userPrompt": "以下を翻訳してください:\n\n{content}"
+}
+```
+
+- `harness` が指定された場合、そのハーネスの `systemPrompt` / `config` を使用
+- `systemPrompt` / `provider` / `model` の直接指定はハーネス設定を上書き（オーバーライド可）
+
+### ハーネス操作ステップ
+
+パイプライン内でハーネスのライフサイクルを操作するステップ型。
+
+#### `"harness_enhance"` — 強化ステップ
+
+パイプライン実行中に得た情報をハーネスの memory に追記する。
+
+```json
+{
+  "type": "harness_enhance",
+  "harness": "technical_translator",
+  "add_memory": "{result}",
+  "save_snapshot": false
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `add_memory` | memory[] に追記する文字列（プレースホルダー展開後） |
+| `save_snapshot` | `true` にすると enhance 前の状態をベースラインとして保存 |
+
+#### `"harness_reset"` — リセットステップ
+
+ハーネスを baseline スナップショットに巻き戻す。蓄積された memory をクリアする。
+
+```json
+{
+  "type": "harness_reset",
+  "harness": "technical_translator",
+  "to": "technical_translator_v1"
+}
+```
+
+`to` を省略した場合、`baseline` フィールドが指す名前を使用。
+
+#### `"harness_save"` — 保存ステップ
+
+現在のハーネス状態を名前付きスナップショットとして保存する。
+
+```json
+{
+  "type": "harness_save",
+  "harness": "technical_translator",
+  "tag": "after_project_x"
+}
+```
+
+保存先: `harnesses/technical_translator_after_project_x.json`
+
+### Harness Manager UI
+
+Pipeline Manager と同様に、ハーネスの一覧・編集・スナップショット管理を行う専用パネル。
+
+```
+┌────────────────────────────────────────────────────┐
+│ Harnesses                              [+ New]     │
+├──────────────────┬─────────────────────────────────┤
+│ technical_trans  │  Name: [technical_translator   ]│
+│ code_reviewer    │                                 │
+│                  │  System Prompt:                 │
+│                  │  [You are a professional...   ] │
+│                  │                                 │
+│                  │  Memory (3 entries):            │
+│                  │  ┌───────────────────────────┐  │
+│                  │  │ ユーザーはヘビメタ好き     │  │
+│                  │  │ 用語: ハーネス = ...       │  │
+│                  │  │ [+ Add]  [✕ per item]     │  │
+│                  │  └───────────────────────────┘  │
+│                  │                                 │
+│                  │  Snapshots:                     │
+│                  │  [v1 (baseline)]  [after_prj_x] │
+│                  │  [📸 Save now]  [🔄 Reset to ▾] │
+│                  │                                 │
+│                  │  [💾 Save]  [🗑 Delete]         │
+└──────────────────┴─────────────────────────────────┘
+```
+
+### Bridge メッセージ
+
+| 方向 | type | payload | 説明 |
+|------|------|---------|------|
+| JS→C++ | `save_harness` | `{harness}` | ハーネス定義を保存 |
+| JS→C++ | `reset_harness` | `{name, to}` | ベースラインにリセット |
+| JS→C++ | `snapshot_harness` | `{name, tag}` | 現在状態をスナップショット保存 |
+| C++→JS | `harness_list` | `{harnesses[]}` | ハーネス一覧（起動時 + 保存後） |
+
+### CLAUDE.md / memory との対比（参考）
+
+Prompts アプリのハーネスは、Claude Code の設定ファイル群と概念的に対応する。
+
+| Prompts ハーネス | Claude Code 相当 | 内容 |
+|----------------|----------------|------|
+| `systemPrompt` | `CLAUDE.md` | agent の役割・ルール定義 |
+| `memory[]` | `memory/*.md` (auto memory) | 蓄積された事実・フィードバック |
+| `skills[]` | `.claude/skills/*.md` | 再利用可能なスキル定義 |
+| `config` | `settings.json` | モデル・権限・フック設定 |
+| snapshot (baseline) | git commit / branch | 状態のバージョン管理 |
+
+この対比を念頭に置くと、Prompts のハーネス設計の意図が明確になる:
+**「CLAUDE.md + memory が git で管理されるように、Prompts のハーネスもスナップショットで管理できる」**。
