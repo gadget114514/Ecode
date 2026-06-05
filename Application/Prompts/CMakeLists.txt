@@ -14,6 +14,8 @@ add_executable(Prompts WIN32
     src/JsonParser.cpp
     src/Base64.cpp
     src/PipelineRunner.cpp
+    src/PipelineVersionManager.cpp
+    src/PipelineOptimizer.cpp
     src/AIProvider.cpp
     src/PromptsLocalization.cpp
     resources/resource.rc
@@ -83,3 +85,8 @@ target_link_libraries(test_prompts_storage PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
 
 add_prompts_test(test_prompts_pipelinerunner tests/test_pipelinerunner.cpp src/PipelineRunner.cpp src/Base64.cpp src/NodeData.cpp src/JsonParser.cpp src/AIProvider.cpp)
 target_link_libraries(test_prompts_pipelinerunner PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_optimizer tests/test_optimizer.cpp
+    src/PipelineVersionManager.cpp src/PipelineOptimizer.cpp
+    src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/AIProvider.cpp)
+target_link_libraries(test_prompts_optimizer PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
