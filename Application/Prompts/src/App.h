@@ -7,9 +7,12 @@
 #include "Bridge.h"
 #include "Storage.h"
 #include "PipelineRunner.h"
+#include "PipelineVersionManager.h"
+#include "PipelineOptimizer.h"
 #include "PromptsLocalization.h"
 #include "NodeData.h"
 #include "JsonParser.h"
+#include <memory>
 
 #include <WebView2.h>
 // ICoreWebView2 and ICoreWebView2Controller are defined in WebView2.h
@@ -42,6 +45,9 @@ private:
     Storage storage_;
     Bridge bridge_;
     PipelineRunner runner_;
+    PipelineVersionManager versionMgr_;
+    PipelineOptimizer optimizer_;
+    std::unique_ptr<OptSession> activeOptSession_;
     PromptsLocalization localization_;
     
     std::wstring appDataPath_;
@@ -87,6 +93,20 @@ private:
     // Bridge: execution history
     void HandleHistoryList();
     void HandleHistoryDetail(const std::string &payload);
+
+    // Bridge: evaluation
+    void HandleEvaluateNode(const std::string &payload);
+    void HandleEvaluateHistoryStep(const std::string &payload);
+    void HandleEvaluateHistoryRun(const std::string &payload);
+
+    // Bridge: optimizer
+    void HandleOptimizePipeline(const std::string &payload);
+    void HandleOptimizeApply(const std::string &payload);
+    void HandleOptimizeUndo(const std::string &payload);
+    void HandleOptimizeRedo(const std::string &payload);
+    void HandleOptimizeCheckout(const std::string &payload);
+    void HandleOptimizeReapply(const std::string &payload);
+    void HandleOptimizeVersionList(const std::string &payload);
     
     // Recent files
     void AddRecentFile(const std::wstring &path);

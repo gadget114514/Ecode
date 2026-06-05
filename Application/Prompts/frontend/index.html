@@ -22,6 +22,9 @@
         <button id="btn-saveas" onclick="app.saveFileAs()" data-hint="別名で保存 (Ctrl+Shift+S)">💾 <span data-i18n="SaveAs">Save As</span></button>
         <span class="separator">|</span>
         <button id="btn-pipeline" onclick="app.runPipeline()" data-hint="選択中のノードにパイプラインを実行 (F5)">▶ <span data-i18n="RunPipeline">Run</span></button>
+        <button id="btn-optimize" onclick="app.showOptimize()" data-hint="パイプラインをAIで最適化 (評価シグナルを使用)">✨ <span data-i18n="Optimize">Optimize</span></button>
+        <button id="btn-undo-opt" onclick="app.optimizeUndo()" data-hint="最適化を1つ元に戻す" disabled>⟲</button>
+        <button id="btn-redo-opt" onclick="app.optimizeRedo()" data-hint="最適化をやり直す" disabled>⟳</button>
         <button id="btn-config" onclick="app.showConfig()" data-hint="APIキー・プロバイダの設定">⚙ <span data-i18n="Config">Config</span></button>
         <span class="spacer"></span>
         <input type="text" id="search-box" placeholder="Search..." oninput="app.search(this.value)">
@@ -194,6 +197,66 @@
         </div>
     </div>
 </div>
+<!-- Optimize Modal -->
+<div id="optimize-modal" class="modal">
+    <div class="modal-content optimize-modal-content">
+        <div class="optimize-header">
+            <span>✨ <span data-i18n="OptimizeTitle">Optimize Pipeline</span></span>
+            <span class="modal-close" onclick="app.closeOptimize()">&times;</span>
+        </div>
+        <!-- Tab bar -->
+        <div class="optimize-tabs">
+            <button class="opt-tab active" onclick="app.switchOptTab('config',this)" data-i18n="OptTabConfig">設定</button>
+            <button class="opt-tab" onclick="app.switchOptTab('versions',this)" data-i18n="OptTabVersions">バージョン履歴</button>
+        </div>
+
+        <!-- Config view -->
+        <div id="optimize-config-view" class="opt-tab-panel">
+            <div id="optimize-eval-summary" class="opt-eval-summary" style="display:none"></div>
+            <div class="opt-field-row">
+                <label data-i18n="OptPipelineLabel">パイプライン</label>
+                <select id="opt-pipeline-select"></select>
+            </div>
+            <div class="opt-field-row">
+                <label data-i18n="OptHistoryLimit">解析する履歴数</label>
+                <input type="number" id="opt-history-limit" value="10" min="1" max="50" style="width:80px">
+            </div>
+            <div class="opt-field-row">
+                <label data-i18n="OptMaxEdits">1ステップあたりの最大編集数</label>
+                <input type="number" id="opt-max-edits" value="3" min="1" max="10" style="width:80px">
+            </div>
+            <div class="opt-field-row">
+                <label data-i18n="OptProviderLabel">Optimizer プロバイダ / モデル</label>
+                <select id="opt-provider-select"></select>
+                <select id="opt-model-select" style="margin-left:6px;flex:1"></select>
+            </div>
+            <div class="optimize-actions">
+                <button id="btn-run-optimize" onclick="app.runOptimize()" class="btn-primary" data-i18n="OptAnalyze">解析して提案を生成</button>
+            </div>
+        </div>
+
+        <!-- Loading view -->
+        <div id="optimize-loading-view" class="opt-tab-panel" style="display:none">
+            <div class="opt-spinner"></div>
+            <div id="optimize-progress-text" class="opt-progress-text"></div>
+        </div>
+
+        <!-- Proposals view -->
+        <div id="optimize-proposals-view" class="opt-tab-panel" style="display:none">
+            <div id="optimize-proposals-list" class="opt-proposals-list"></div>
+            <div class="optimize-actions">
+                <button onclick="app.applyOptimize()" class="btn-primary" data-i18n="OptApplyApproved">承認した提案を適用</button>
+                <button onclick="app.discardOptimize()" data-i18n="OptDiscard">破棄</button>
+            </div>
+        </div>
+
+        <!-- Versions view -->
+        <div id="optimize-versions-view" class="opt-tab-panel" style="display:none">
+            <div id="optimize-versions-list" class="opt-versions-list"></div>
+        </div>
+    </div>
+</div>
+
 <!-- History Modal -->
 <div id="history-modal" class="modal">
     <div class="modal-content history-modal-content">

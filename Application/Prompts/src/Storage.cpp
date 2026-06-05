@@ -116,6 +116,12 @@ static JsonValue NodeToJson(const Node &node) {
     obj["children"] = JsonValue::fromArray(children);
     if (!node.pipelineMeta.empty())
         obj["pipelineMeta"] = JsonValue::fromString(node.pipelineMeta);
+    if (!node.evaluation.empty())
+        obj["evaluation"] = JsonValue::fromString(node.evaluation);
+    if (!node.evaluatedAt.empty())
+        obj["evaluatedAt"] = JsonValue::fromString(node.evaluatedAt);
+    if (!node.evaluationNote.empty())
+        obj["evaluationNote"] = JsonValue::fromString(node.evaluationNote);
     return JsonValue::fromObject(obj);
 }
 
@@ -145,6 +151,9 @@ static Node JsonToNode(const JsonValue &val) {
             node.children.push_back(JsonToNode(c));
     }
     if (val.has("pipelineMeta")) node.pipelineMeta = val["pipelineMeta"].string();
+    if (val.has("evaluation")) node.evaluation = val["evaluation"].string();
+    if (val.has("evaluatedAt")) node.evaluatedAt = val["evaluatedAt"].string();
+    if (val.has("evaluationNote")) node.evaluationNote = val["evaluationNote"].string();
     return node;
 }
 
@@ -405,4 +414,35 @@ std::vector<Pipeline> Storage::LoadPipelines() {
 
 void Storage::SavePipelines(const std::vector<Pipeline> &pipelines) {
     WriteFileUtf8(basePath_ + L"\\pipeline.json", SerializePipelines(pipelines));
+}
+
+// --- History: update evaluation field in-place ---
+void Storage::UpdateHistoryEvaluation(const std::wstring &filename, const std::string &evaluation) {
+    std::wstring path = basePath_ + L"\\history\\" + filename;
+    std::string json = ReadFileUtf8(path);
+    if (json.empty()) return;
+    auto val = JsonValue::parse(json);
+    // Rebuild with updated evaluation field
+    // Simple approach: re-serialize the record with the new evaluation
+    std::map<std::string, JsonValue> obj;
+    for (auto &kv : val.object()) obj[kv.first] = kv.second;
+    obj["evaluation"] = JsonValue::fromString(evaluation);
+    WriteFileUtf8(path, JsonValue::fromObject(obj).serialize(true));
+}
+
+// --- Optimizer: generic key-value JSON storage ---
+void Storage::SaveOptimizerData(const std::wstring &relativePath, const std::string &json) {
+    // Ensure opt_versions subdirectory if needed
+    std::wstring fullPath = basePath_ + L"\\" + relativePath;
+    // Create parent directory if it contains a backslash
+    auto sep = fullPath.rfind(L'\\');
+    if (sep != std::wstring::npos) {
+        std::wstring dir = fullPath.substr(0, sep);
+        EnsureDirectory(dir);
+    }
+    WriteFileUtf8(fullPath, json);
+}
+
+std::string Storage::LoadOptimizerData(const std::wstring &relativePath) {
+    return ReadFileUtf8(basePath_ + L"\\" + relativePath);
 }

@@ -113,6 +113,27 @@ const app = {
             case 'history_detail_result':
                 this.onHistoryDetailResult(msg.payload);
                 break;
+            case 'evaluation_saved':
+                this.onEvaluationSaved(msg.payload);
+                break;
+            case 'optimize_proposals':
+                this.onOptimizeProposals(msg.payload);
+                break;
+            case 'optimize_applied':
+                this.onOptimizeApplied(msg.payload);
+                break;
+            case 'optimize_version_changed':
+                this.onOptimizeVersionChanged(msg.payload);
+                break;
+            case 'optimize_version_list_result':
+                this.onOptimizeVersionListResult(msg.payload);
+                break;
+            case 'optimize_error':
+                this.onOptimizeError(msg.payload);
+                break;
+            case 'optimize_progress':
+                this.onOptimizeProgress(msg.payload);
+                break;
         }
     },
 
@@ -604,17 +625,76 @@ const app = {
         this.loadEditor(path);
     },
 
+    // Evaluation badge HTML helper
+    evalBadgeHtml(evaluation) {
+        if (!evaluation) return '';
+        const map = { ok: '👍', rejected: '👎', pinned: '📌' };
+        const icon = map[evaluation] || '';
+        return icon ? `<span class="eval-badge eval-badge-${evaluation}" title="${evaluation}">${icon}</span>` : '';
+    },
+
+    // Evaluation buttons for a node (inline in list/editor)
+    evalButtonsHtml(nodePathOrId, type, currentEval) {
+        const ev = e => JSON.stringify(e);
+        return `<span class="eval-btns" onclick="event.stopPropagation()">
+            <button class="eval-btn ${currentEval==='ok'?'active':''}" title="OK" onclick="app.evaluateItem(${ev(type)},${ev(nodePathOrId)},'ok'${currentEval==='ok'?',true':''})">👍</button>
+            <button class="eval-btn ${currentEval==='rejected'?'active':''}" title="却下" onclick="app.evaluateItem(${ev(type)},${ev(nodePathOrId)},'rejected'${currentEval==='rejected'?',true':''})">👎</button>
+            <button class="eval-btn ${currentEval==='pinned'?'active':''}" title="ピン止め" onclick="app.evaluateItem(${ev(type)},${ev(nodePathOrId)},'pinned'${currentEval==='pinned'?',true':''})">📌</button>
+        </span>`;
+    },
+
+    // Toggle evaluation (click active → clear)
+    evaluateItem(type, id, evaluation, isActive) {
+        const newEval = isActive ? '' : evaluation;
+        if (type === 'node') {
+            // id is "tabFile|nodePath"
+            const [tabFile, nodePath] = id.split('|');
+            // Update in-memory node
+            const node = this.getNodeByPath(nodePath);
+            if (node) {
+                node.evaluation = newEval;
+                node.evaluatedAt = new Date().toISOString();
+                this.renderList();
+                this.loadEditor(this.state.currentNodePath);
+            }
+            this.postMessage({ type: 'evaluate_node', payload: { nodeId: nodePath, tabFile, evaluation: newEval, note: '' } });
+        } else if (type === 'step') {
+            // id is "runId|stepIndex"
+            const [runId, stepIdx] = id.split('|');
+            this.postMessage({ type: 'evaluate_history_step', payload: { runId, stepIndex: parseInt(stepIdx), evaluation: newEval, note: '' } });
+            // Update rendered detail view step badge
+            const badge = document.querySelector(`[data-step-eval="${runId}-${stepIdx}"]`);
+            if (badge) badge.className = `eval-badge eval-badge-${newEval}`;
+        } else if (type === 'run') {
+            this.postMessage({ type: 'evaluate_history_run', payload: { runId: id, evaluation: newEval } });
+        }
+    },
+
+    onEvaluationSaved(payload) {
+        const evalLabels = { ok: '👍 OK', rejected: '👎 却下', pinned: '📌 ピン止め', '': '評価クリア' };
+        this.addLog(`✅ 評価保存: ${evalLabels[payload.evaluation] || payload.evaluation}`);
+        this.renderList();
+    },
+
     // List rendering
     renderList() {
         const el = document.getElementById('list-content');
         if (!el) return;
         const node = this.getNodeByPath(this.state.currentNodePath);
         if (!node || !node.children) { el.innerHTML = '<div class="empty">Select a node</div>'; return; }
+        const tab = this.state.tabs[this.state.activeTab];
+        const tabFile = tab ? tab.file : '';
         el.innerHTML = node.children.map((child, i) => {
             const display = this.escapeHtml(child.title ? atob(child.title) : this.getTitleFallback(child));
-            return `<div class="list-item" ondblclick="app.copyItemText(${i})">
-                <span>${display}</span>
-                <button class="copy-btn" onclick="app.copyItemText(${i})">📋</button>
+            const childPath = (this.state.currentNodePath ? this.state.currentNodePath + '/' : '/') + i;
+            const evalBadge = this.evalBadgeHtml(child.evaluation);
+            const evalBtns = this.evalButtonsHtml(`${tabFile}|${childPath}`, 'node', child.evaluation || '');
+            return `<div class="list-item ${child.evaluation ? 'has-eval eval-' + child.evaluation : ''}" ondblclick="app.copyItemText(${i})">
+                <span class="list-item-title">${evalBadge}${display}</span>
+                <span class="list-item-actions">
+                    ${evalBtns}
+                    <button class="copy-btn" onclick="app.copyItemText(${i})">📋</button>
+                </span>
             </div>`;
         }).join('');
     },
@@ -1142,15 +1222,17 @@ const app = {
             listView.innerHTML = '<div class="history-empty">実行履歴がありません</div>';
             return;
         }
-        listView.innerHTML = items.map(item => `
-            <div class="history-item" onclick="app.showHistoryDetail(${JSON.stringify(item.id)})">
-                <div class="history-item-name">${this.escapeHtml(item.pipelineName || '')}</div>
+        listView.innerHTML = items.map(item => {
+            const evalBadge = this.evalBadgeHtml(item.evaluation || '');
+            return `<div class="history-item ${item.evaluation ? 'has-eval eval-' + item.evaluation : ''}" onclick="app.showHistoryDetail(${JSON.stringify(item.id)})">
+                <div class="history-item-name">${evalBadge}${this.escapeHtml(item.pipelineName || '')}</div>
                 <div class="history-item-meta">
-                    <span class="history-item-date">${this.escapeHtml((item.executedAt || '').replace('T',' ').replace('Z',''))}</span>
+                    <span class="history-item-date">${this.escapeHtml((item.executedAt || item.startedAt || '').replace('T',' ').replace('Z',''))}</span>
                     <span class="history-item-steps">${item.stepCount} step${item.stepCount !== 1 ? 's' : ''}</span>
                     <span class="history-item-status ${this.escapeHtml(item.status || 'completed')}">${this.escapeHtml(item.status || 'completed')}</span>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
     },
 
     showHistoryDetail(id) {
@@ -1168,13 +1250,21 @@ const app = {
             detailView.innerHTML = '<div class="history-empty">データが見つかりません</div>';
             return;
         }
-        const stepsHtml = (record.steps || []).map((step, i) => `
-            <div class="history-step">
+        const runId = record.id || '';
+        const runEval = record.evaluation || '';
+
+        const stepsHtml = (record.steps || []).map((step, i) => {
+            const stepEval = step.evaluation || '';
+            const stepEvalBtns = this.evalButtonsHtml(`${runId}|${i}`, 'step', stepEval);
+            const evalBadge = this.evalBadgeHtml(stepEval);
+            return `
+            <div class="history-step ${stepEval ? 'has-eval eval-' + stepEval : ''}">
                 <div class="history-step-header" onclick="this.parentElement.classList.toggle('expanded')">
                     <span class="history-step-num">${i + 1}</span>
-                    <span class="history-step-name">${this.escapeHtml(step.name || '')}</span>
+                    <span class="history-step-name">${evalBadge}${this.escapeHtml(step.name || '')}</span>
                     <span class="history-step-type">${this.escapeHtml(step.type || '')}</span>
-                    ${step.tokens ? `<span class="history-step-tokens">${step.tokens} tok</span>` : ''}
+                    ${step.promptTokens || step.completionTokens ? `<span class="history-step-tokens">${(step.promptTokens||0)+(step.completionTokens||0)} tok</span>` : ''}
+                    <span class="history-step-eval-btns" onclick="event.stopPropagation()">${stepEvalBtns}</span>
                     <span class="history-step-toggle">▶</span>
                 </div>
                 <div class="history-step-body">
@@ -1187,14 +1277,20 @@ const app = {
                         <pre class="history-step-content">${this.escapeHtml(step.output || '')}</pre>
                     </div>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
+
+        const runEvalBtns = this.evalButtonsHtml(runId, 'run', runEval);
         detailView.innerHTML = `
             <div class="history-detail-nav">
                 <button class="btn-back" onclick="app.backToHistoryList()">← 一覧に戻る</button>
             </div>
             <div class="history-detail-header">
                 <div class="history-detail-name">${this.escapeHtml(record.pipelineName || '')}</div>
-                <div class="history-detail-date">${this.escapeHtml((record.executedAt || '').replace('T',' ').replace('Z',''))}</div>
+                <div class="history-detail-meta">
+                    <span class="history-detail-date">${this.escapeHtml((record.startedAt || record.executedAt || '').replace('T',' ').replace('Z',''))}</span>
+                    <span class="history-detail-run-eval">${runEvalBtns}</span>
+                </div>
             </div>
             ${record.outputContent ? `<div class="history-detail-output">
                 <div class="history-step-label">最終出力</div>
@@ -1207,6 +1303,270 @@ const app = {
         document.getElementById('history-detail-view').style.display = 'none';
         document.getElementById('history-list-view').style.display = '';
         this.postMessage({ type: 'history_list' });
+    },
+
+    // ── Optimize Modal ─────────────────────────────────────────────
+
+    showOptimize() {
+        const modal = document.getElementById('optimize-modal');
+        if (!modal) return;
+        this._optimizeSession = null;
+
+        // Populate pipeline selector
+        const pipelineSel = document.getElementById('opt-pipeline-select');
+        const pipelines = this.state.pipelines || [];
+        if (pipelines.length === 0) {
+            this.addLog('⚠ パイプラインがありません');
+            return;
+        }
+        pipelineSel.innerHTML = pipelines.map(p =>
+            `<option value="${this.escapeHtml(p.name)}">${this.escapeHtml(p.name)}</option>`
+        ).join('');
+
+        // Populate provider/model selectors
+        this._populateOptProviders();
+
+        // Show config view by default
+        this.switchOptTab('config', document.querySelector('.opt-tab'));
+
+        // Hide loading/proposals
+        this._showOptView('config');
+
+        // Load version info for currently selected pipeline
+        const name = pipelineSel.value;
+        if (name) this.postMessage({ type: 'optimize_version_list', payload: { pipelineName: name } });
+
+        modal.classList.add('visible');
+    },
+
+    closeOptimize() {
+        document.getElementById('optimize-modal').classList.remove('visible');
+        this._optimizeSession = null;
+    },
+
+    discardOptimize() {
+        this._optimizeSession = null;
+        this._showOptView('config');
+    },
+
+    _populateOptProviders() {
+        const providers = this.state.providers || {};
+        const provSel = document.getElementById('opt-provider-select');
+        const modelSel = document.getElementById('opt-model-select');
+        const keys = Object.keys(providers);
+        provSel.innerHTML = keys.map(k => `<option value="${this.escapeHtml(k)}">${this.escapeHtml(k)}</option>`).join('');
+        provSel.onchange = () => this._updateOptModels();
+        this._updateOptModels();
+    },
+
+    _updateOptModels() {
+        const providers = this.state.providers || {};
+        const provSel = document.getElementById('opt-provider-select');
+        const modelSel = document.getElementById('opt-model-select');
+        if (!provSel || !modelSel) return;
+        const prov = providers[provSel.value];
+        const models = (prov && prov.models) ? prov.models : [];
+        modelSel.innerHTML = models.map(m => `<option value="${this.escapeHtml(m)}">${this.escapeHtml(m)}</option>`).join('');
+    },
+
+    switchOptTab(tabName, btn) {
+        document.querySelectorAll('.opt-tab').forEach(t => t.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        if (tabName === 'config') {
+            this._showOptView('config');
+        } else if (tabName === 'versions') {
+            this._showOptView('versions');
+            const name = document.getElementById('opt-pipeline-select')?.value;
+            if (name) this.postMessage({ type: 'optimize_version_list', payload: { pipelineName: name } });
+        }
+    },
+
+    _showOptView(viewName) {
+        ['config', 'loading', 'proposals', 'versions'].forEach(v => {
+            const el = document.getElementById(`optimize-${v}-view`);
+            if (el) el.style.display = v === viewName ? '' : 'none';
+        });
+    },
+
+    runOptimize() {
+        const pipelineName = document.getElementById('opt-pipeline-select')?.value;
+        const historyLimit = parseInt(document.getElementById('opt-history-limit')?.value) || 10;
+        const maxEditsPerStep = parseInt(document.getElementById('opt-max-edits')?.value) || 3;
+        const provider = document.getElementById('opt-provider-select')?.value;
+        const model = document.getElementById('opt-model-select')?.value;
+
+        if (!pipelineName || !provider || !model) {
+            this.addLog('⚠ パイプライン・プロバイダ・モデルを選択してください');
+            return;
+        }
+
+        this._showOptView('loading');
+        document.getElementById('optimize-progress-text').textContent = '準備中...';
+
+        this.postMessage({ type: 'optimize_pipeline', payload: { pipelineName, historyLimit, maxEditsPerStep, provider, model } });
+    },
+
+    applyOptimize() {
+        if (!this._optimizeSession) return;
+        const proposals = this._optimizeSession.proposals || [];
+        const approved = [], rejected = [];
+        proposals.forEach((_, i) => {
+            const card = document.getElementById(`opt-proposal-${i}`);
+            if (!card) return;
+            if (card.dataset.decision === 'rejected') rejected.push(i);
+            else approved.push(i);
+        });
+        this.postMessage({ type: 'optimize_apply', payload: {
+            sessionId: this._optimizeSession.sessionId,
+            pipelineName: this._optimizeSession.pipelineName,
+            approved,
+            rejected
+        }});
+    },
+
+    onOptimizeProposals(payload) {
+        this._optimizeSession = {
+            sessionId: payload.sessionId,
+            pipelineName: payload.pipelineName,
+            proposals: payload.proposals || []
+        };
+        const summary = payload.evaluationSummary || {};
+
+        // Show eval summary
+        const summaryEl = document.getElementById('optimize-eval-summary');
+        if (summaryEl) {
+            summaryEl.style.display = '';
+            summaryEl.innerHTML = `<span class="opt-eval-count ok">👍 OK: ${summary.okCount||0}</span>
+                <span class="opt-eval-count rejected">👎 却下: ${summary.rejectedCount||0}</span>
+                <span class="opt-eval-count pinned">📌 ピン止め: ${summary.pinnedCount||0}</span>
+                <span class="opt-eval-hint">（これらのシグナルを使って最適化しました）</span>`;
+        }
+
+        const listEl = document.getElementById('optimize-proposals-list');
+        if (!listEl) return;
+        if (this._optimizeSession.proposals.length === 0) {
+            listEl.innerHTML = '<div class="opt-no-proposals">提案がありませんでした。実行履歴に評価（OK/却下）を付けると精度が上がります。</div>';
+        } else {
+            listEl.innerHTML = this._optimizeSession.proposals.map((p, i) => {
+                const opClass = { replace: 'op-replace', add: 'op-add', delete: 'op-delete' }[p.op] || '';
+                const opLabel = { replace: '置換', add: '追加', delete: '削除' }[p.op] || p.op;
+                return `<div class="opt-proposal-card" id="opt-proposal-${i}" data-decision="approved">
+                    <div class="opt-proposal-header">
+                        <span class="opt-op-badge ${opClass}">${opLabel}</span>
+                        <span class="opt-proposal-target">${this.escapeHtml(p.stepName)} › ${this.escapeHtml(p.field)}</span>
+                        <span class="opt-proposal-decision-btns">
+                            <button class="opt-dec-btn approve active" onclick="app.setProposalDecision(${i},'approved')">✓ 承認</button>
+                            <button class="opt-dec-btn reject" onclick="app.setProposalDecision(${i},'rejected')">✗ 却下</button>
+                        </span>
+                    </div>
+                    ${p.op !== 'add' && p.oldValue ? `<div class="opt-diff-row old"><span class="opt-diff-label">現在</span><pre class="opt-diff-text">${this.escapeHtml(p.oldValue)}</pre></div>` : ''}
+                    ${p.op !== 'delete' && p.newValue ? `<div class="opt-diff-row new"><span class="opt-diff-label">${p.op === 'add' ? '追加' : '変更後'}</span><pre class="opt-diff-text">${this.escapeHtml(p.newValue)}</pre></div>` : ''}
+                    <div class="opt-rationale">${this.escapeHtml(p.rationale || '')}</div>
+                </div>`;
+            }).join('');
+        }
+        this._showOptView('proposals');
+    },
+
+    setProposalDecision(index, decision) {
+        const card = document.getElementById(`opt-proposal-${index}`);
+        if (!card) return;
+        card.dataset.decision = decision;
+        card.querySelectorAll('.opt-dec-btn').forEach(b => b.classList.remove('active'));
+        const btn = card.querySelector(`.opt-dec-btn.${decision === 'approved' ? 'approve' : 'reject'}`);
+        if (btn) btn.classList.add('active');
+        card.classList.toggle('opt-rejected', decision === 'rejected');
+    },
+
+    onOptimizeApplied(payload) {
+        this.addLog(`✅ 最適化適用: v${payload.version} (承認 ${payload.approvedCount}, 却下 ${payload.rejectedCount})`);
+        this._optimizeSession = null;
+        // Refresh version list and switch to it
+        const name = payload.pipelineName;
+        if (name) {
+            this.postMessage({ type: 'optimize_version_list', payload: { pipelineName: name } });
+        }
+        this._showOptView('versions');
+        // Switch tab button
+        document.querySelectorAll('.opt-tab').forEach(t => t.classList.remove('active'));
+        const vTab = document.querySelector('.opt-tab[onclick*="versions"]');
+        if (vTab) vTab.classList.add('active');
+    },
+
+    onOptimizeVersionChanged(payload) {
+        const undoBtn = document.getElementById('btn-undo-opt');
+        const redoBtn = document.getElementById('btn-redo-opt');
+        if (undoBtn) undoBtn.disabled = !payload.canUndo;
+        if (redoBtn) redoBtn.disabled = !payload.canRedo;
+        this.addLog(`🔄 ${payload.pipelineName} → v${payload.version}`);
+        // Refresh version list if modal is open
+        const modal = document.getElementById('optimize-modal');
+        if (modal && modal.classList.contains('visible')) {
+            this.postMessage({ type: 'optimize_version_list', payload: { pipelineName: payload.pipelineName } });
+        }
+    },
+
+    onOptimizeVersionListResult(payload) {
+        const cursor = payload.cursor || {};
+        const entries = cursor.entries || [];
+        const listEl = document.getElementById('optimize-versions-list');
+        if (!listEl) return;
+        if (entries.length === 0) {
+            listEl.innerHTML = '<div class="opt-no-proposals">バージョン履歴がありません。最適化を実行するとここに記録されます。</div>';
+            return;
+        }
+        const current = cursor.currentVersion || 0;
+        listEl.innerHTML = [...entries].reverse().map(e => {
+            const isCurrent = e.version === current;
+            const ts = (e.timestamp || '').replace('T',' ').replace('Z','');
+            return `<div class="opt-version-item ${isCurrent ? 'current' : ''}">
+                <span class="opt-ver-num">v${e.version}</span>
+                ${isCurrent ? '<span class="opt-ver-current-badge">現在</span>' : ''}
+                <span class="opt-ver-label">${this.escapeHtml(e.label || '')}</span>
+                <span class="opt-ver-date">${this.escapeHtml(ts)}</span>
+                <span class="opt-ver-actions">
+                    ${!isCurrent ? `<button class="opt-ver-btn" onclick="app.checkoutVersion(${JSON.stringify(payload.pipelineName)},${e.version})">Checkout</button>` : ''}
+                    ${e.version > 1 ? `<button class="opt-ver-btn" onclick="app.reapplyVersion(${JSON.stringify(payload.pipelineName)},${e.version})">Re-apply</button>` : ''}
+                </span>
+            </div>`;
+        }).join('');
+    },
+
+    optimizeUndo() {
+        const pipelines = this.state.pipelines || [];
+        if (pipelines.length === 0) return;
+        // Use the pipeline currently selected in toolbar, or first
+        const name = this._lastOptPipeline || (pipelines[0] && pipelines[0].name) || '';
+        if (name) this.postMessage({ type: 'optimize_undo', payload: { pipelineName: name } });
+    },
+
+    optimizeRedo() {
+        const pipelines = this.state.pipelines || [];
+        const name = this._lastOptPipeline || (pipelines[0] && pipelines[0].name) || '';
+        if (name) this.postMessage({ type: 'optimize_redo', payload: { pipelineName: name } });
+    },
+
+    checkoutVersion(pipelineName, version) {
+        if (!confirm(`v${version} に切り替えますか？`)) return;
+        this._lastOptPipeline = pipelineName;
+        this.postMessage({ type: 'optimize_checkout', payload: { pipelineName, version } });
+    },
+
+    reapplyVersion(pipelineName, version) {
+        if (!confirm(`v${version} の承認済み提案を現在のパイプラインに再適用しますか？`)) return;
+        this._lastOptPipeline = pipelineName;
+        this.postMessage({ type: 'optimize_reapply', payload: { pipelineName, version } });
+    },
+
+    onOptimizeError(payload) {
+        this._showOptView('config');
+        this.addLog(`❌ 最適化エラー: ${payload.message || ''}`);
+        this.showError(payload.message || '最適化に失敗しました');
+    },
+
+    onOptimizeProgress(payload) {
+        const el = document.getElementById('optimize-progress-text');
+        if (el) el.textContent = payload.message || '';
     },
 
     // ── About / Copyright ──────────────────────────────────────────
