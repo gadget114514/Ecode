@@ -406,7 +406,13 @@ void UpdateMenu(HWND hwnd) {
              L10N("menu_help_keybindings"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_ABOUT, L10N("menu_help_about"));
   AppendMenu(hHelp, MF_STRING, IDM_HELP_COPYRIGHT, L10N("menu_help_copyright"));
-  AppendMenu(hHelp, MF_STRING, IDM_HELP_MESSAGES, L10N("menu_help_messages"));
+  {
+    Buffer *msgBuf = g_editor->GetBufferByName(L"*Messages*");
+    UINT msgFlags = MF_STRING;
+    if (msgBuf && !msgBuf->IsHidden())
+      msgFlags |= MF_CHECKED;
+    AppendMenu(hHelp, msgFlags, IDM_HELP_MESSAGES, L10N("menu_help_messages"));
+  }
   AppendMenu(hHelp, MF_STRING, IDM_HELP_CLEAR_MESSAGES, L10N("menu_help_clear_messages"));
 
   // AI Menu (hidden by default, only shown when IsShowAI)

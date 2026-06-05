@@ -179,6 +179,137 @@ void TestLargeJson() {
     std::cout << "Test Passed: Large JSON (100 keys)" << std::endl;
 }
 
+void TestManyJsonCases() {
+    // 1. 50 valid JSON cases and their expected types
+    struct ValidCase {
+        std::string json;
+        JsonValue::Type expectedType;
+    };
+    std::vector<ValidCase> validCases = {
+        {"100", JsonValue::Number},
+        {"-100", JsonValue::Number},
+        {"100.5", JsonValue::Number},
+        {"-100.5", JsonValue::Number},
+        {"1e2", JsonValue::Number},
+        {"1.5e-2", JsonValue::Number},
+        {"0.0001", JsonValue::Number},
+        {"-0.0", JsonValue::Number},
+        {"true", JsonValue::Bool},
+        {"false", JsonValue::Bool},
+        {"null", JsonValue::Null},
+        {"\"\"", JsonValue::String},
+        {"\"a\"", JsonValue::String},
+        {"\"abc\"", JsonValue::String},
+        {"\"\\\"\"", JsonValue::String},
+        {"\"\\\\\"", JsonValue::String},
+        {"\"\\/\"", JsonValue::String},
+        {"\"\\b\"", JsonValue::String},
+        {"\"\\f\"", JsonValue::String},
+        {"\"\\n\"", JsonValue::String},
+        {"\"\\r\"", JsonValue::String},
+        {"\"\\t\"", JsonValue::String},
+        {"\"\\u0000\"", JsonValue::String},
+        {"\"\\u001f\"", JsonValue::String},
+        {"\"\\u1234\"", JsonValue::String},
+        {"[]", JsonValue::Array},
+        {"[1]", JsonValue::Array},
+        {"[1,2]", JsonValue::Array},
+        {"[1,2,3]", JsonValue::Array},
+        {"[\"a\"]", JsonValue::Array},
+        {"[\"a\",\"b\"]", JsonValue::Array},
+        {"[true,false,null]", JsonValue::Array},
+        {"[[]]", JsonValue::Array},
+        {"[[1],[2,3]]", JsonValue::Array},
+        {"{}", JsonValue::Object},
+        {"{\"a\":1}", JsonValue::Object},
+        {"{\"a\":1,\"b\":2}", JsonValue::Object},
+        {"{\"a\":true,\"b\":null}", JsonValue::Object},
+        {"{\"a\":[]}", JsonValue::Object},
+        {"{\"a\":{}}", JsonValue::Object},
+        {"{\"a\":{\"b\":{\"c\":1}}}", JsonValue::Object},
+        {" \n\t\r 100 \n\t\r ", JsonValue::Number},
+        {" \n\t\r [ \n\t\r ] \n\t\r ", JsonValue::Array},
+        {" \n\t\r { \n\t\r } \n\t\r ", JsonValue::Object},
+        {"{\"spaced key\" : \"value\"}", JsonValue::Object},
+        {"[ 1 , 2 , 3 ]", JsonValue::Array},
+        {"{\"a\":[1,2,{\"b\":true}]}", JsonValue::Object},
+        {"\"escaped: \\\\ \\\" \\/ \\b \\f \\n \\r \\t\"", JsonValue::String},
+        {"123456789.987654321", JsonValue::Number},
+        {"-123456789.987654321", JsonValue::Number}
+    };
+
+    int caseId = 0;
+    for (const auto &c : validCases) {
+        auto val = JsonValue::parse(c.json);
+        VERIFY(val.type() == c.expectedType, "valid json case #" + std::to_string(caseId) + " (" + c.json + ") type mismatch, expected " + std::to_string(c.expectedType) + " got " + std::to_string(val.type()));
+        caseId++;
+    }
+
+    // 2. 50 invalid JSON cases (they should parse to Null or have invalid structures instead of crashing)
+    // Note: since our parser doesn't throw exceptions, we verify it handles invalid input without crashing.
+    std::vector<std::string> invalidCases = {
+        "{",
+        "}",
+        "[",
+        "]",
+        "{\"a\"}",
+        "{\"a\":}",
+        "{\"a\":1",
+        "{\"a\":1,",
+        "{\"a\":1,}",
+        "{\"a\":1 \"b\":2}",
+        "{\"a\"::1}",
+        "{a:1}",
+        "{'a':1}",
+        "{\"a\":'b'}",
+        "[1,",
+        "[1,]",
+        "[1 2]",
+        "[,1]",
+        "\"unterminated",
+        "\"escaped unclosed \\\"",
+        "\"invalid escape \\x\"",
+        "\"invalid unicode \\u12\"",
+        "\"invalid unicode \\u123z\"",
+        "tru",
+        "fals",
+        "nul",
+        "1.2.3",
+        "1e2e3",
+        "1.5e-+2",
+        "1.5e+-2",
+        "--1",
+        "++1",
+        "1+",
+        "1-",
+        "0123", // octal-like is often invalid in standard JSON but let's check it doesn't crash
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        "",
+        " ",
+        "\n",
+        "[,]",
+        "{\"a\":1,,\"b\":2}",
+        "[1,,2]",
+        "\"\\u\"",
+        "\"\\u0\"",
+        "\"\\u00\"",
+        "\"\\u000\"",
+        "\"\\u000g\"",
+        "{\"a\":{\"b\":[1,2"
+    };
+
+    caseId = 0;
+    for (const auto &json : invalidCases) {
+        // Just make sure it doesn't crash.
+        auto val = JsonValue::parse(json);
+        (void)val;
+        caseId++;
+    }
+    std::cout << "Test Passed: Many JSON Cases (100+ validation test scenarios)" << std::endl;
+}
+
 int main() {
     try {
         TestNull();
@@ -192,6 +323,7 @@ int main() {
         TestPrettyPrint();
         TestEdgeCases();
         TestLargeJson();
+        TestManyJsonCases();
         std::cout << "=== ALL JSON PARSER TESTS PASSED ===" << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Test suite failed: " << e.what() << std::endl;

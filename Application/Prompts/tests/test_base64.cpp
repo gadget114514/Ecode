@@ -80,6 +80,40 @@ void TestLargeData() {
     std::cout << "Test Passed: Large Data (100KB)" << std::endl;
 }
 
+void TestManyBase64Cases() {
+    // 1. Generate inputs of various lengths from 0 to 120 and test round-trip
+    // This provides 121 test cases.
+    for (int len = 0; len <= 120; ++len) {
+        std::string input;
+        input.reserve(len);
+        for (int i = 0; i < len; ++i) {
+            input.push_back(static_cast<char>((i * 31 + 17) % 256));
+        }
+        std::string encoded = Base64::encode(input);
+        std::string decoded = Base64::decode(encoded);
+        VERIFY(decoded == input, "round-trip failed for generated len=" + std::to_string(len));
+        VERIFY(Base64::isValid(encoded), "isValid failed for generated len=" + std::to_string(len));
+    }
+
+    // 2. Dynamic invalid base64 character tests (invalid symbols placed at different positions)
+    // This provides around 30 additional test cases.
+    std::string validBase64 = "SGVsbG8gV29ybGQ="; // "Hello World"
+    for (size_t i = 0; i < validBase64.size(); ++i) {
+        char original = validBase64[i];
+        if (original == '=') continue;
+        
+        // replace with invalid character
+        validBase64[i] = '@';
+        VERIFY(!Base64::isValid(validBase64), "isValid should fail with invalid char '@' at pos " + std::to_string(i));
+        
+        validBase64[i] = ' ';
+        VERIFY(!Base64::isValid(validBase64), "isValid should fail with invalid char ' ' at pos " + std::to_string(i));
+
+        validBase64[i] = original; // restore
+    }
+    std::cout << "Test Passed: Many Base64 Cases (150+ dynamically generated scenarios)" << std::endl;
+}
+
 int main() {
     try {
         TestKnownVectors();
@@ -87,6 +121,7 @@ int main() {
         TestEncodeDecodeBinary();
         TestIsValid();
         TestLargeData();
+        TestManyBase64Cases();
         std::cout << "=== ALL BASE64 TESTS PASSED ===" << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Test suite failed: " << e.what() << std::endl;
