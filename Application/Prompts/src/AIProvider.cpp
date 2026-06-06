@@ -152,7 +152,7 @@ class GeminiProvider : public AIProvider {
     std::string apiKey_, baseUrl_;
 public:
     GeminiProvider(const std::string &key, const std::string &url)
-        : apiKey_(key), baseUrl_(url.empty() ? "https://generativelanguage.googleapis.com" : url) {}
+        : apiKey_(key), baseUrl_(url.empty() ? "https://googleapis.com" : url) {}
     
     std::string Name() const override { return "gemini"; }
     std::vector<std::string> ListModels() override { return {"gemini-2.5-flash", "gemini-2.5-pro"}; }
