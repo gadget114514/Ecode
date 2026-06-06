@@ -740,6 +740,7 @@ LRESULT HandleMouseDown(HWND hwnd, LPARAM lParam) {
       size_t pos = activeBuffer->VisualToLogicalOffset(totalVisualPos);
 
       activeBuffer->SetCaretPos(pos);
+      activeBuffer->UpdateDesiredColumn();
       if (!(GetKeyState(VK_SHIFT) & 0x8000))
         activeBuffer->SetSelectionAnchor(pos);
       EnsureCaretVisible(hwnd);
