@@ -48,3 +48,9 @@ volatile LONG g_grepCancelFlag = 0;
 bool g_grepSearchActive = false;
 void UpdateMenu(HWND) {}
 void UpdateTabs(HWND) {}
+
+// Stubs for Editor functions used by SettingsManager in test builds
+#include "../include/Editor.h"
+size_t Editor::OpenFile(const std::wstring &) { return static_cast<size_t>(-1); }
+void Editor::NewFile(const std::string &) {}
+void Editor::CloseBuffer(size_t) {}
