@@ -90,6 +90,19 @@ static LRESULT HandleCreate(HWND hwnd) {
   if (initOk && g_compileAllScripts)
     g_scriptEngine->CompileAllScripts();
   g_editor->NewFile();
+
+  // Auto-restore session on launch
+  int autoSaveIndex = SettingsManager::Instance().GetAutoSaveSessionIndex();
+  if (autoSaveIndex != -1) {
+    int ret = MessageBoxW(hwnd, L"An auto-saved session was found. Restore?", L"Ecode Session", MB_YESNO | MB_ICONQUESTION);
+    if (ret == IDYES) {
+      if (g_editor->GetBuffers().size() > 0) {
+        g_editor->CloseBuffer(0);
+      }
+      SettingsManager::Instance().LoadSession(autoSaveIndex);
+    }
+    SettingsManager::Instance().ClearAutoSaveSession();
+  }
   ScanPlugins();
   UpdateMenu(hwnd);
   SetTimer(hwnd, 1, 500, NULL);
@@ -416,6 +429,24 @@ static LRESULT HandleClose(HWND hwnd) {
 
 static void HandleDestroy(HWND hwnd) {
   (void)hwnd;
+
+  // Auto-save session on exit
+  bool shouldSave = false;
+  if (g_editor) {
+    const auto &buffers = g_editor->GetBuffers();
+    if (buffers.size() > 1) {
+      shouldSave = true;
+    } else if (buffers.size() == 1) {
+      auto *buf = buffers[0].get();
+      if (!buf->GetPath().empty() || buf->GetTotalLength() > 0) {
+        shouldSave = true;
+      }
+    }
+  }
+  if (shouldSave) {
+    int autoIdx = SettingsManager::Instance().SaveSession(L"*AutoSave*");
+    SettingsManager::Instance().SetAutoSaveSessionIndex(autoIdx);
+  }
 
   // Destroy embedded windows first to request graceful exit
   for (auto &t : g_appTabs) {
