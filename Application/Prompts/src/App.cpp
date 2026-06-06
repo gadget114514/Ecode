@@ -31,6 +31,7 @@ App::App()
         if (type == "pipeline_completed") {
             storage_.SaveHistory(json);
         }
+        bridge_.PostToJS("log", "{\"message\":\"🏃 PipelineRunner Callback: type=" + type + "\"}");
         bridge_.PostToJS(type, json);
     });
     bridge_.SetHandler([this](const std::string &type, const std::string &payload) {
@@ -376,6 +377,7 @@ void App::InitWebView2() {
 
                                     auto val = JsonValue::parse(s);
                                     std::string type = val["type"].string();
+                                    app->bridge_.PostToJS("log", "{\"message\":\"📥 WebMessage Received: type=" + type + "\"}");
                                     if (type == "init_complete") {
                                         app->SendFullInit();
                                     } else {
@@ -412,6 +414,20 @@ void App::InitWebView2() {
                             }
                         };
                         app->webview_->add_PermissionRequested(Make<PermissionHandler>(app).Get(), nullptr);
+
+                        // Notify JS when navigation is completed so frontend knows the host is ready
+                        struct NavCompletedHandler : RuntimeClass<RuntimeClassFlags<ClassicCom>, ICoreWebView2NavigationCompletedEventHandler> {
+                            App *app;
+                            NavCompletedHandler(App *a) : app(a) {}
+                            HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *args) override {
+                                BOOL isSuccess = FALSE;
+                                if (args) args->get_IsSuccess(&isSuccess);
+                                app->bridge_.PostToJS("log", "{\"message\":\"🌐 WebView2 Navigation Completed (success=" + std::to_string(isSuccess) + ")\"}");
+                                app->bridge_.PostToJS("ready", "{}");
+                                return S_OK;
+                            }
+                        };
+                        app->webview_->add_NavigationCompleted(Make<NavCompletedHandler>(app).Get(), nullptr);
 
                         // Set up virtual host mapping
                         ICoreWebView2_3 *wv3 = nullptr;
