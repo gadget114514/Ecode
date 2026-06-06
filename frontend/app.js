@@ -510,7 +510,7 @@ const app = {
         const DEFAULT_PROVIDERS = [
             { id: 'openai',    label: 'OpenAI',    defaultUrl: 'https://api.openai.com/v1' },
             { id: 'anthropic', label: 'Anthropic',  defaultUrl: 'https://api.anthropic.com' },
-            { id: 'gemini',    label: 'Gemini',     defaultUrl: 'https://generativelanguage.googleapis.com' },
+            { id: 'gemini',    label: 'Gemini',     defaultUrl: 'https://googleapis.com' },
             { id: 'ollama',    label: 'Ollama',     defaultUrl: 'http://localhost:11434' },
         ];
         // Collect all provider IDs: predefined + any custom ones from data
@@ -581,8 +581,12 @@ const app = {
         if (!list) return;
         const providers = {};
         list.querySelectorAll('.provider-item').forEach(item => {
-            const keyInput = item.querySelector('input[type="password"]');
-            const urlInput = item.querySelector('input[type="text"]');
+            let keyInput = null;
+            let urlInput = null;
+            item.querySelectorAll('input').forEach(inp => {
+                if (inp.id.startsWith('key-')) keyInput = inp;
+                else if (inp.id.startsWith('url-')) urlInput = inp;
+            });
             if (!keyInput || !urlInput) return;
             const id = keyInput.id.replace('key-', '');
             const existing = (this.state.providers && this.state.providers[id]) || {};
