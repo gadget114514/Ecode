@@ -39,6 +39,9 @@ BEGIN
     END
     POPUP "&Help"
     BEGIN
+        MENUITEM "Welcome &Guide\tF1",     ID_HELP_WIZARD
+        MENUITEM "&Setup Wizard...",       ID_HELP_SETUP_WIZARD
+        MENUITEM SEPARATOR
         MENUITEM "&Documentation",         ID_HELP_DOCS
         MENUITEM "&About Prompts",         ID_HELP_ABOUT
     END

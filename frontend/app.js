@@ -205,6 +205,10 @@ const app = {
     },
 
     switchTab(index) {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            this.clearAllSpeakingStyles();
+        }
         this.state.activeTab = index;
         this.renderTabs();
         this.renderTree();
@@ -522,6 +526,8 @@ const app = {
             case 'test_connection': this.testConnection(); break;
             case 'toggle_pane':     this.togglePane(cmd.pane + '-pane'); break;
             case 'about':           this.showAbout(); break;
+            case 'welcome_wizard':  this.showWizard(); break;
+            case 'setup_wizard':    this.showSetupWizard(); break;
             default: this.addLog('⚠ Unknown menu command: ' + cmd.action);
         }
     },
@@ -623,6 +629,10 @@ const app = {
     // --- end navigation history ---
 
     selectNode(path) {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            this.clearAllSpeakingStyles();
+        }
         this.pushNav();
         this.state.currentNodePath = path;
         this.renderTree();
@@ -953,73 +963,36 @@ const app = {
         {
             icon: '🤖',
             title: 'Prompts へようこそ',
-            body: `<p><b>Prompts</b> は AI プロンプトとパイプラインを管理・実行するツールです。</p>
-                   <div class="wizard-concept">
-                     <div class="wizard-concept-item">📄 <b>素材</b><br><small>あなたのテキスト・画像</small></div>
-                     <div class="wizard-concept-arrow">×</div>
-                     <div class="wizard-concept-item">🔧 <b>レシピ</b><br><small>AIへの指示の連鎖</small></div>
-                     <div class="wizard-concept-arrow">=</div>
-                     <div class="wizard-concept-item">✨ <b>成果物</b><br><small>AI処理結果</small></div>
-                   </div>
-                   <p>成果物には<b>「どのAIで・どんな指示で作ったか」</b>が埋め込まれ、後から再現できます。</p>`,
+            body: '<p><b>Prompts</b> は AI プロンプトとパイプラインを管理・実行するツールです。</p><p>データはローカルの JSON ファイルに保存され、git で管理できます。</p>',
             tips: [
-                { icon: '🔁', text: '同じパイプラインを別の素材に繰り返し適用できます。一度作ったレシピはずっと使えます。' },
-                { icon: '📂', text: 'データはローカルの JSON ファイルに保存。git で管理でき、バックアップはフォルダをコピーするだけです。' }
+                { icon: '🔁', text: '同じパイプラインを別の素材に繰り返し適用できます。' },
+                { icon: '📂', text: 'データはローカルの JSON ファイルに保存されます。' }
             ]
         },
         {
             icon: '⚙',
             title: 'APIキーを設定する',
-            body: `<p>AIパイプラインを実行するには、使用するプロバイダのAPIキーが必要です。</p>
-                   <ul class="wizard-list">
-                     <li>🟢 <b>OpenAI</b> — GPT-4.1, o1 など</li>
-                     <li>🟣 <b>Anthropic</b> — Claude シリーズ</li>
-                     <li>🔵 <b>Gemini</b> — Google AI</li>
-                     <li>⚫ <b>Ollama</b> — ローカルLLM（無料）</li>
-                   </ul>
-                   <p>右上の <b>⚙ Config</b> ボタンから設定できます。</p>
-                   <button class="wizard-action-btn" onclick="app.closeWizard(); app.showConfig();">⚙ 今すぐ設定する</button>`,
+            body: '<p>AIパイプラインを実行するには、使用するプロバイダのAPIキーが必要です。</p><p>右上の ⚙ Config ボタンから設定できます。</p>',
             tips: [
-                { icon: '🆓', text: 'Ollama はローカルで動くためAPIキー不要。まず無料で試したい場合は Ollama から始めましょう。' },
-                { icon: '🌐', text: 'Grok・Groq・LM Studio など OpenAI 互換の API は「カスタム」プロバイダとして Base URL を変えるだけで使えます。' }
+                { icon: '🆓', text: 'Ollama はローカルで動くためAPIキー不要です。' }
             ]
         },
         {
             icon: '📄',
             title: '素材ノードを作る',
-            body: `<p>ツリーにノードを追加して、処理したいテキストや画像を入れます。</p>
-                   <ul class="wizard-list">
-                     <li>🚀 <b>セットアップウィザード</b> — テンプレートから一発作成</li>
-                     <li>右クリック → <b>子ノードを追加</b></li>
-                     <li>タイトルと内容を入力 → <b>💾 更新</b></li>
-                   </ul>
-                   <p>ノードはツリー構造で管理されます。素材の下に成果物が子ノードとして蓄積されます。</p>`,
+            body: '<p>ツリーにノードを追加して、処理したいテキストや画像を入れます。</p>',
             tips: [
-                { icon: '🖼', text: 'テキスト以外にも画像・PDF・RTFを格納できます。ファイルをエディタにドロップして添付しましょう。' },
-                { icon: '↩', text: 'Alt+← / Alt+→ で訪れたノードの履歴を前後に移動できます。深いツリーを探索するときに便利です。' },
-                { icon: '🔍', text: 'Ctrl+F で全タブ・全ノードを横断検索できます。ノードが増えてきたらぜひ活用してください。' }
+                { icon: '🖼', text: 'テキスト以外にも画像・PDF・RTFを格納できます。' },
+                { icon: '🎙️', text: '入力欄では音声での入力（🎙️）やテキストの読み上げ（🔊）も可能です。' }
             ]
         },
         {
             icon: '▶',
             title: 'パイプラインを実行する',
-            body: `<p>ノードを選択して <b>▶ Run</b> ボタンを押すと、パイプラインが実行されます。</p>
-                   <ul class="wizard-list">
-                     <li>複数のAIを順番に適用できます</li>
-                     <li><b>人間の確認ステップ</b>を挟めます</li>
-                     <li>複数AIの結果を<b>比較して選択</b>できます</li>
-                     <li>結果は子ノードとして自動保存されます</li>
-                   </ul>
-                   <div class="wizard-shortcut-box">
-                     <span>Alt+← / Alt+→</span> ノード履歴を移動<br>
-                     <span>Ctrl+F</span> 全文検索<br>
-                     <span>F5</span> パイプライン実行<br>
-                     <span>F1</span> このガイドを表示
-                   </div>`,
+            body: '<p>ノードを選択して ▶ Run ボタンを押すと、パイプラインが実行されます。</p>',
             tips: [
-                { icon: '⚖', text: '同じ素材を Claude・GPT-4・Grok に同時投げて結果を比較選択できます（parallel + compare ステップ）。' },
-                { icon: '💾', text: '成果物ノードには「どのパイプラインで作ったか」が自動記録されます。同じ処理を別の素材に再適用するには ▶ 再実行 をクリック。' },
-                { icon: '⌨', text: 'command ステップで ffmpeg・whisper・Codex CLI など任意の外部ツールをパイプラインに組み込めます。' }
+                { icon: '⚖', text: '同じ素材を複数のAIに同時投げて結果を比較できます。' },
+                { icon: '💾', text: '成果物ノードにはパイプライン情報が自動記録されます。' }
             ]
         }
     ],
@@ -1027,9 +1000,15 @@ const app = {
     wizardStep_: 0,
 
     showWizard(forceStep) {
-        this.wizardStep_ = forceStep || 0;
-        document.getElementById('wizard-modal').classList.add('visible');
-        this.renderWizardStep();
+        try {
+            this.wizardStep_ = forceStep || 0;
+            const modal = document.getElementById('wizard-modal');
+            if (!modal) { this.addLog('⚠ wizard-modal not found in DOM'); return; }
+            modal.classList.add('visible');
+            this.renderWizardStep();
+        } catch (e) {
+            this.addLog('❌ Welcome Guide error: ' + (e.message || e));
+        }
     },
 
     closeWizard() {
@@ -1038,42 +1017,51 @@ const app = {
     },
 
     renderWizardStep() {
-        const steps = this.WIZARD_STEPS;
-        const s = steps[this.wizardStep_];
-        const total = steps.length;
-        const cur = this.wizardStep_;
+        try {
+            const steps = this.WIZARD_STEPS;
+            if (!steps || steps.length === 0) { this.addLog('⚠ Wizard steps empty'); return; }
+            const s = steps[this.wizardStep_];
+            if (!s) { this.addLog('⚠ Invalid wizard step: ' + this.wizardStep_); return; }
+            const total = steps.length;
+            const cur = this.wizardStep_;
 
-        // Progress dots
-        document.getElementById('wizard-progress').innerHTML =
-            steps.map((_, i) => `<span class="wizard-dot${i === cur ? ' active' : ''}"></span>`).join('');
+            const progressEl = document.getElementById('wizard-progress');
+            if (progressEl) progressEl.innerHTML =
+                steps.map((_, i) => `<span class="wizard-dot${i === cur ? ' active' : ''}"></span>`).join('');
 
-        // Body
-        const tipsHtml = s.tips && s.tips.length ? `
-            <div class="wizard-tips">
-                <div class="wizard-tips-label">💡 Tips</div>
-                ${s.tips.map(t => `
-                    <div class="wizard-tip">
-                        <span class="wizard-tip-icon">${t.icon}</span>
-                        <span class="wizard-tip-text">${t.text}</span>
-                    </div>`).join('')}
-            </div>` : '';
-        document.getElementById('wizard-body').innerHTML = `
-            <div class="wizard-icon">${s.icon}</div>
-            <h2 class="wizard-title">${this.escapeHtml(s.title)}</h2>
-            <div class="wizard-text">${s.body}</div>
-            ${tipsHtml}`;
+            const tipsHtml = s.tips && s.tips.length ? `
+                <div class="wizard-tips">
+                    <div class="wizard-tips-label">💡 Tips</div>
+                    ${s.tips.map(t => `
+                        <div class="wizard-tip">
+                            <span class="wizard-tip-icon">${t.icon}</span>
+                            <span class="wizard-tip-text">${t.text}</span>
+                        </div>`).join('')}
+                </div>` : '';
+            const bodyEl = document.getElementById('wizard-body');
+            if (bodyEl) bodyEl.innerHTML = `
+                <div class="wizard-icon">${s.icon}</div>
+                <h2 class="wizard-title">${this.escapeHtml(s.title)}</h2>
+                <div class="wizard-text">${s.body}</div>
+                ${tipsHtml}`;
 
-        // Footer buttons
-        document.getElementById('wizard-prev').style.visibility = cur === 0 ? 'hidden' : '';
-        const nextBtn = document.getElementById('wizard-next');
-        if (cur === total - 1) {
-            nextBtn.textContent = '✓ 完了';
-            nextBtn.onclick = () => this.closeWizard();
-        } else {
-            nextBtn.textContent = '次へ →';
-            nextBtn.onclick = () => this.wizardNext();
+            const prevBtn = document.getElementById('wizard-prev');
+            if (prevBtn) prevBtn.style.visibility = cur === 0 ? 'hidden' : '';
+            const nextBtn = document.getElementById('wizard-next');
+            if (nextBtn) {
+                if (cur === total - 1) {
+                    nextBtn.textContent = '✓ 完了';
+                    nextBtn.onclick = () => this.closeWizard();
+                } else {
+                    nextBtn.textContent = '次へ →';
+                    nextBtn.onclick = () => this.wizardNext();
+                }
+            }
+            const skipBtn = document.getElementById('wizard-skip');
+            if (skipBtn) skipBtn.style.display = cur === total - 1 ? 'none' : '';
+        } catch (e) {
+            this.addLog('❌ renderWizardStep error: ' + (e.message || e));
         }
-        document.getElementById('wizard-skip').style.display = cur === total - 1 ? 'none' : '';
     },
 
     wizardNext() {
@@ -1628,6 +1616,27 @@ const app = {
             pipeline: 'レビュー'
         },
         {
+            id: 'image',
+            label: '🖼️ 画像分析・タグ付け',
+            desc: '画像の説明、検出、タグの自動生成',
+            sample: 'この画像を分析して、詳細な説明、写っているオブジェクトの一覧、関連するメタデータやタグを生成してください。',
+            pipeline: '画像分析'
+        },
+        {
+            id: 'video',
+            label: '🎥 動画要約・構成分析',
+            desc: '動画のハイライト、シーンとタイムライン要約',
+            sample: 'この動画のコンテンツを分析し、主要なシーンの要約と、タイムラインに沿った構成表を作成してください。',
+            pipeline: '動画要約'
+        },
+        {
+            id: 'music',
+            label: '🎵 楽曲・音声分析',
+            desc: 'テンポ（BPM）やキー、音声書き起こし',
+            sample: 'この楽曲または音声データを分析し、構成要素、BPM・キーなどの特徴、もしくは書き起こしを抽出してください。',
+            pipeline: '楽曲音声分析'
+        },
+        {
             id: 'free',
             label: '🆓 自由形式',
             desc: 'テンプレートなしで自由に開始',
@@ -1639,13 +1648,17 @@ const app = {
     sw_: { step: 0, tabName: '', templateId: 'free', content: '', pipelineName: '' },
 
     showSetupWizard() {
-        this.sw_ = { step: 0, tabName: 'プロジェクト ' + new Date().toLocaleDateString('ja'), templateId: 'free', content: '', pipelineName: '' };
+        this.sw_ = { step: 0, tabName: 'プロジェクト ' + new Date().toLocaleDateString('ja'), templateId: 'free', content: '', pipelineName: '', files: [] };
         document.getElementById('setup-wizard-modal').classList.add('visible');
         this.swRender();
     },
 
     closeSetupWizard() {
         document.getElementById('setup-wizard-modal').classList.remove('visible');
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            this.clearAllSpeakingStyles();
+        }
     },
 
     swRender() {
@@ -1683,7 +1696,7 @@ const app = {
             nextBtn.onclick = () => {
                 const nameEl = document.getElementById('sw-tab-name');
                 this.sw_.tabName = nameEl ? nameEl.value.trim() || 'プロジェクト' : 'プロジェクト';
-                const tmpl = this.SW_TEMPLATES.find(t => t.id === this.sw_.templateId) || this.SW_TEMPLATES[3];
+                const tmpl = this.SW_TEMPLATES.find(t => t.id === this.sw_.templateId) || this.SW_TEMPLATES.find(t => t.id === 'free');
                 if (!this.sw_.content) this.sw_.content = tmpl.sample;
                 this.sw_.pipelineName = tmpl.pipeline;
                 this.swNext();
@@ -1695,8 +1708,44 @@ const app = {
                 <div class="wizard-icon">📄</div>
                 <h2 class="wizard-title">最初のコンテンツを入力</h2>
                 <p class="wizard-text" style="margin-bottom:10px">処理したいテキストを入力・貼り付けてください。後から変更できます。</p>
-                <textarea id="sw-content" class="sw-textarea" placeholder="テキストをここに入力...">${this.escapeHtml(s.content)}</textarea>
-                <div class="sw-hint">💡 画像・PDFなどは後からノードにドロップして追加できます</div>`;
+                <div class="textarea-container">
+                    <textarea id="sw-content" class="sw-textarea" placeholder="テキストをここに入力するか、ファイルをドロップ...">${this.escapeHtml(s.content)}</textarea>
+                    <button class="speak-btn" id="sw-speak-btn" onclick="app.toggleSpeak('sw-content', 'sw-speak-btn')" title="音声読み上げ">🔊</button>
+                    <button class="voice-btn" id="sw-voice-btn" onclick="app.toggleVoiceInput('sw-content', 'sw-voice-btn')" title="音声入力">🎙️</button>
+                </div>
+                <div class="sw-files-list" id="sw-files-list"></div>
+                <div class="sw-hint">💡 テキスト入力に加え、画像・動画・音楽などのメディアファイルをここにドラッグ＆ドロップして追加できます。</div>`;
+            
+            const textarea = document.getElementById('sw-content');
+            if (textarea) {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    textarea.addEventListener(eventName, (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }, false);
+                });
+
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    textarea.addEventListener(eventName, () => {
+                        textarea.classList.add('dragover');
+                    }, false);
+                });
+
+                ['dragleave', 'drop'].forEach(eventName => {
+                    textarea.addEventListener(eventName, () => {
+                        textarea.classList.remove('dragover');
+                    }, false);
+                });
+
+                textarea.addEventListener('drop', (e) => {
+                    const dt = e.dataTransfer;
+                    const files = dt.files;
+                    this.swHandleFiles(files);
+                }, false);
+            }
+
+            this.swRenderFilesList();
+
             nextBtn.textContent = '次へ →';
             nextBtn.onclick = () => {
                 const el = document.getElementById('sw-content');
@@ -1728,6 +1777,8 @@ const app = {
             // Step 4: 確認
             const tmpl = this.SW_TEMPLATES.find(t => t.id === s.templateId);
             const preview = s.content ? s.content.slice(0, 80) + (s.content.length > 80 ? '…' : '') : '（空）';
+            const filesCount = s.files ? s.files.length : 0;
+            const filesSummary = filesCount > 0 ? `${filesCount} 個のファイル添付` : 'なし';
             body.innerHTML = `
                 <div class="wizard-icon">✅</div>
                 <h2 class="wizard-title">準備完了！</h2>
@@ -1735,6 +1786,7 @@ const app = {
                     <div class="sw-summary-row"><span class="sw-summary-label">プロジェクト名</span><span>${this.escapeHtml(s.tabName)}</span></div>
                     <div class="sw-summary-row"><span class="sw-summary-label">テンプレート</span><span>${tmpl ? tmpl.label : '自由形式'}</span></div>
                     <div class="sw-summary-row"><span class="sw-summary-label">コンテンツ</span><span class="sw-summary-preview">${this.escapeHtml(preview)}</span></div>
+                    <div class="sw-summary-row"><span class="sw-summary-label">添付ファイル</span><span>${filesSummary}</span></div>
                     <div class="sw-summary-row"><span class="sw-summary-label">パイプライン</span><span>${s.pipelineName ? '🔧 ' + this.escapeHtml(s.pipelineName) : 'スキップ'}</span></div>
                 </div>`;
             nextBtn.textContent = '🚀 作成する';
@@ -1747,7 +1799,7 @@ const app = {
 
     swSelectTemplate(id) {
         this.sw_.templateId = id;
-        const tmpl = this.SW_TEMPLATES.find(t => t.id === id) || this.SW_TEMPLATES[3];
+        const tmpl = this.SW_TEMPLATES.find(t => t.id === id) || this.SW_TEMPLATES.find(t => t.id === 'free');
         this.sw_.content = tmpl.sample;
         this.sw_.pipelineName = tmpl.pipeline;
         this.swRender();
@@ -1766,16 +1818,101 @@ const app = {
         if (this.sw_.step > 0) { this.sw_.step--; this.swRender(); }
     },
 
+    swHandleFiles(files) {
+        if (!files || files.length === 0) return;
+        for (let i = 0; i < files.length; i++) {
+            const f = files[i];
+            const reader = new FileReader();
+            
+            const isText = f.type.startsWith('text/') || f.name.endsWith('.txt') || f.name.endsWith('.json') || f.name.endsWith('.md');
+            
+            reader.onload = (e) => {
+                const res = e.target.result;
+                if (isText) {
+                    const ta = document.getElementById('sw-content');
+                    if (ta && !ta.value.trim()) {
+                        ta.value = res;
+                        this.sw_.content = res;
+                    }
+                }
+                
+                let base64Data = '';
+                if (isText) {
+                    try {
+                        base64Data = btoa(unescape(encodeURIComponent(res)));
+                    } catch {
+                        base64Data = btoa(res);
+                    }
+                } else {
+                    const parts = res.split(',');
+                    base64Data = parts.length > 1 ? parts[1] : res;
+                }
+                
+                if (!this.sw_.files) this.sw_.files = [];
+                if (!this.sw_.files.some(existing => existing.name === f.name)) {
+                    this.sw_.files.push({
+                        name: f.name,
+                        size: f.size,
+                        mimetype: f.type || 'application/octet-stream',
+                        content: base64Data
+                    });
+                    this.swRenderFilesList();
+                }
+            };
+            
+            if (isText) {
+                reader.readAsText(f);
+            } else {
+                reader.readAsDataURL(f);
+            }
+        }
+    },
+
+    swRenderFilesList() {
+        const el = document.getElementById('sw-files-list');
+        if (!el) return;
+        const files = this.sw_.files || [];
+        if (files.length === 0) {
+            el.innerHTML = '';
+            return;
+        }
+        el.innerHTML = files.map((f, i) => `
+            <div class="sw-file-item">
+                <div style="display:flex; flex-direction:column; gap:2px">
+                    <span class="sw-file-name" title="${this.escapeHtml(f.name)}">${this.escapeHtml(f.name)}</span>
+                    <span class="sw-file-info">${f.mimetype} (${Math.round(f.size/1024)} KB)</span>
+                </div>
+                <button class="sw-file-remove" onclick="app.swRemoveFile(${i})">×</button>
+            </div>
+        `).join('');
+    },
+
+    swRemoveFile(idx) {
+        if (this.sw_.files) {
+            this.sw_.files.splice(idx, 1);
+            this.swRenderFilesList();
+        }
+    },
+
     swCreate() {
         const s = this.sw_;
         const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str || ''); } };
+
+        const attachments = (s.files || []).map(f => ({
+            id: 'att_' + Math.random().toString(36).substring(2, 11),
+            mimetype: f.mimetype,
+            inline: true,
+            content: f.content,
+            file: f.name,
+            size: f.size
+        }));
 
         // Build root node with content
         const rootNode = {
             title: safeB64(s.tabName),
             content: safeB64(s.content),
             mimetype: 'text/plain',
-            attachments: [],
+            attachments: attachments,
             children: []
         };
 
@@ -2271,6 +2408,147 @@ const app = {
         if (e.altKey && e.key === 'ArrowLeft')  { e.preventDefault(); this.navBack(); }
         if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); this.navForward(); }
         if (e.key === 'F1') { e.preventDefault(); this.showWizard(); }
+    },
+
+    toggleVoiceInput(textareaId, buttonId) {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            this.addLog('❌ 音声入力（SpeechRecognition）はこのブラウザ/環境でサポートされていません。');
+            alert('音声入力はお使いの環境でサポートされていません。');
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (!this.voiceRecognitions_) {
+            this.voiceRecognitions_ = {};
+        }
+
+        const textarea = document.getElementById(textareaId);
+        const button = document.getElementById(buttonId);
+        if (!textarea || !button) return;
+
+        let rec = this.voiceRecognitions_[textareaId];
+
+        if (rec) {
+            rec.stop();
+            return;
+        }
+
+        rec = new SpeechRecognition();
+        rec.continuous = true;
+        rec.interimResults = false;
+        rec.lang = this.state.language === 'ja' ? 'ja-JP' : 'en-US';
+
+        rec.onstart = () => {
+            button.classList.add('recording');
+            button.title = '音声入力停止';
+            this.addLog('🎙️ 音声入力開始... お話しください。');
+        };
+
+        rec.onresult = (event) => {
+            let resultText = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    resultText += event.results[i][0].transcript;
+                }
+            }
+            if (resultText) {
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const val = textarea.value;
+                textarea.value = val.substring(0, start) + resultText + val.substring(end);
+                
+                const newCursorPos = start + resultText.length;
+                textarea.setSelectionRange(newCursorPos, newCursorPos);
+                textarea.focus();
+
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                
+                if (textareaId === 'node-content') {
+                    this.updateNode();
+                } else if (textareaId === 'sw-content') {
+                    this.sw_.content = textarea.value;
+                }
+            }
+        };
+
+        rec.onerror = (event) => {
+            this.addLog('❌ 音声認識エラー: ' + event.error);
+            console.error('Speech recognition error:', event.error);
+            cleanup();
+        };
+
+        rec.onend = () => {
+            this.addLog('🎙️ 音声入力終了。');
+            cleanup();
+        };
+
+        const cleanup = () => {
+            button.classList.remove('recording');
+            button.title = '音声入力';
+            if (this.voiceRecognitions_[textareaId] === rec) {
+                delete this.voiceRecognitions_[textareaId];
+            }
+        };
+
+        this.voiceRecognitions_[textareaId] = rec;
+        rec.start();
+    },
+
+    toggleSpeak(textareaId, buttonId) {
+        if (!('speechSynthesis' in window)) {
+            this.addLog('❌ 音声読み上げ（SpeechSynthesis）はこのブラウザ/環境でサポートされていません。');
+            alert('音声読み上げはお使いの環境でサポートされていません。');
+            return;
+        }
+
+        const textarea = document.getElementById(textareaId);
+        const button = document.getElementById(buttonId);
+        if (!textarea || !button) return;
+
+        if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+            this.clearAllSpeakingStyles();
+            this.addLog('🔊 読み上げを停止しました。');
+            return;
+        }
+
+        const text = textarea.value.trim();
+        if (!text) {
+            this.addLog('⚠ 読み上げるテキストがありません。');
+            return;
+        }
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = this.state.language === 'ja' ? 'ja-JP' : 'en-US';
+
+        utterance.onstart = () => {
+            button.classList.add('speaking');
+            button.title = '読み上げ停止';
+            this.addLog('🔊 テキストの読み上げを開始します...');
+        };
+
+        utterance.onend = () => {
+            button.classList.remove('speaking');
+            button.title = '音声読み上げ';
+            this.addLog('🔊 読み上げが完了しました。');
+        };
+
+        utterance.onerror = (event) => {
+            this.addLog('❌ 読み上げエラー: ' + event.error);
+            console.error('Speech synthesis error:', event.error);
+            button.classList.remove('speaking');
+            button.title = '音声読み上げ';
+        };
+
+        window.speechSynthesis.speak(utterance);
+    },
+
+    clearAllSpeakingStyles() {
+        document.querySelectorAll('.speak-btn').forEach(btn => {
+            btn.classList.remove('speaking');
+            btn.title = '音声読み上げ';
+        });
     }
 };
 
