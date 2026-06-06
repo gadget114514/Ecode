@@ -82,9 +82,17 @@
         </div>
     </div>
     <div id="messages-pane" class="pane">
-        <div class="pane-header" onclick="app.togglePane('messages-pane')">📝 <span data-i18n="Messages">Messages</span></div>
-        <div id="messages-content"></div>
+        <div class="pane-header" onclick="app.togglePane('messages-pane')">
+            <span>📝 <span data-i18n="Messages">Messages</span></span>
+            <span class="messages-actions">
+                <button class="msg-action-btn" onclick="event.stopPropagation();app.copyAllLogs()" title="Copy all logs" data-hint="Copy all logs">📋</button>
+                <button class="msg-action-btn" onclick="event.stopPropagation();app.clearLogs()" title="Clear logs" data-hint="Clear logs">✕</button>
+            </span>
+        </div>
+        <div id="messages-content" oncontextmenu="event.preventDefault();app.showLogContextMenu(event)"></div>
     </div>
+    <!-- Log Context Menu -->
+    <div id="log-context-menu" class="context-menu" style="display:none"></div>
 </div>
 <!-- Hint Tooltip -->
 <div id="hint-tooltip" class="hint-tooltip" style="display:none"></div>
@@ -180,11 +188,13 @@
     </div>
 </div>
 
-<!-- Config Modal -->
-<div id="config-modal" class="modal">
-    <div class="modal-content">
-        <span class="modal-close" onclick="app.closeConfig()">&times;</span>
-        <h2 data-i18n="Config">Config</h2>
+<!-- Config Panel (non-modal floating) -->
+<div id="config-panel">
+    <div class="config-drag-handle" id="config-drag-handle">
+        <span>⚙ <span data-i18n="Config">Config</span></span>
+        <button onclick="app.closeConfig()">&times;</button>
+    </div>
+    <div class="config-body">
         <div class="config-tabs">
             <button class="config-tab active" onclick="app.switchConfigTab('providers', this)" data-i18n="Providers">Providers</button>
             <button class="config-tab" onclick="app.switchConfigTab('general', this)" data-i18n="General">General</button>
@@ -192,8 +202,8 @@
         <div id="config-tab-providers" class="config-tab-panel">
             <div class="provider-list" id="provider-list"></div>
             <div class="config-actions">
-                <button onclick="app.testConnection()" data-i18n="TestConnection">Test Connection</button>
                 <button onclick="app.saveProviders()" class="btn-primary" data-i18n="Save">Save</button>
+                <button onclick="app.closeConfig()" data-i18n="Close">Close</button>
             </div>
         </div>
         <div id="config-tab-general" class="config-tab-panel" style="display:none">
