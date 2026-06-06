@@ -44,7 +44,7 @@ public:
     
     // Providers
     std::map<std::string, ProviderConfig> LoadProviders();
-    void SaveProviders(const std::map<std::string, ProviderConfig> &providers);
+    bool SaveProviders(const std::map<std::string, ProviderConfig> &providers);
     
     // Pipelines
     std::vector<Pipeline> LoadPipelines();
