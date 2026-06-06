@@ -23,7 +23,20 @@ bool Storage::Init(const std::wstring &appDataPath) {
 }
 
 bool Storage::EnsureDirectory(const std::wstring &path) {
-    return CreateDirectoryW(path.c_str(), NULL) || GetLastError() == ERROR_ALREADY_EXISTS;
+    if (CreateDirectoryW(path.c_str(), NULL)) return true;
+    DWORD err = GetLastError();
+    if (err == ERROR_ALREADY_EXISTS) return true;
+    if (err == ERROR_PATH_NOT_FOUND) {
+        // Create parent directory recursively
+        size_t sep = path.rfind(L'\\');
+        if (sep != std::wstring::npos && sep > 0) {
+            std::wstring parent = path.substr(0, sep);
+            if (EnsureDirectory(parent)) {
+                return CreateDirectoryW(path.c_str(), NULL) || GetLastError() == ERROR_ALREADY_EXISTS;
+            }
+        }
+    }
+    return false;
 }
 
 std::wstring Storage::GetUserDataPath() const {
@@ -330,7 +343,8 @@ std::map<std::string, ProviderConfig> Storage::LoadProviders() {
     return providers;
 }
 
-void Storage::SaveProviders(const std::map<std::string, ProviderConfig> &providers) {
+bool Storage::SaveProviders(const std::map<std::string, ProviderConfig> &providers) {
+    EnsureDirectory(basePath_);
     std::map<std::string, JsonValue> obj;
     for (auto &kv : providers) {
         std::map<std::string, JsonValue> cfg;
@@ -342,7 +356,8 @@ void Storage::SaveProviders(const std::map<std::string, ProviderConfig> &provide
         cfg["models"] = JsonValue::fromArray(models);
         obj[kv.first] = JsonValue::fromObject(cfg);
     }
-    WriteFileUtf8(basePath_ + L"\\providers.json", JsonValue::fromObject(obj).serialize(true));
+    std::wstring filePath = basePath_ + L"\\providers.json";
+    return WriteFileUtf8(filePath, JsonValue::fromObject(obj).serialize(true));
 }
 
 // --- Pipelines ---

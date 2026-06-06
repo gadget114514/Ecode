@@ -48,6 +48,9 @@ const app = {
                 if (msg.payload.pipelines) {
                     this.state.pipelines = msg.payload.pipelines;
                 }
+                if (msg.payload.providers) {
+                    this.state.providers = msg.payload.providers;
+                }
                 // Always show hamburger (embedded: replaces menubar; standalone: supplement)
                 const hb = document.getElementById('btn-hamburger');
                 if (hb) hb.style.display = '';
@@ -138,6 +141,12 @@ const app = {
                 break;
             case 'optimize_progress':
                 this.onOptimizeProgress(msg.payload);
+                break;
+            case 'test_connection_result':
+                this.onTestConnectionResult(msg.payload);
+                break;
+            case 'log':
+                this.addLog('📋 ' + (msg.payload.message || ''));
                 break;
         }
     },
@@ -447,14 +456,47 @@ const app = {
     },
 
     showConfig() {
-        const modal = document.getElementById('config-modal');
-        modal.classList.add('visible');
+        const panel = document.getElementById('config-panel');
+        if (!panel) return;
+        panel.classList.add('visible');
         this.onProvidersResult(this.state.providers || {});
-        this.postMessage({ type: 'get_providers' });
+        this.initConfigDrag();
+        this.addLog('⚙ Config opened');
     },
 
     closeConfig() {
-        document.getElementById('config-modal').classList.remove('visible');
+        const panel = document.getElementById('config-panel');
+        if (!panel) return;
+        // Auto-save on close
+        this.saveProviders();
+        panel.classList.remove('visible');
+    },
+
+    initConfigDrag() {
+        const panel = document.getElementById('config-panel');
+        const handle = document.getElementById('config-drag-handle');
+        if (!panel || !handle) return;
+        // Remove old listeners
+        const newHandle = handle.cloneNode(true);
+        handle.parentNode.replaceChild(newHandle, handle);
+        let dragging = false, startX, startY, origX, origY;
+        newHandle.onmousedown = (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            dragging = true;
+            const rect = panel.getBoundingClientRect();
+            startX = e.clientX; startY = e.clientY;
+            origX = rect.left; origY = rect.top;
+            panel.style.left = origX + 'px';
+            panel.style.top = origY + 'px';
+            panel.style.right = 'auto';
+            e.preventDefault();
+        };
+        document.onmousemove = (e) => {
+            if (!dragging) return;
+            panel.style.left = (origX + e.clientX - startX) + 'px';
+            panel.style.top = (origY + e.clientY - startY) + 'px';
+        };
+        document.onmouseup = () => { dragging = false; };
     },
 
     switchConfigTab(name, btn) {
@@ -465,27 +507,67 @@ const app = {
     },
 
     onProvidersResult(providers) {
-        const PROVIDERS = [
+        const DEFAULT_PROVIDERS = [
             { id: 'openai',    label: 'OpenAI',    defaultUrl: 'https://api.openai.com/v1' },
             { id: 'anthropic', label: 'Anthropic',  defaultUrl: 'https://api.anthropic.com' },
             { id: 'gemini',    label: 'Gemini',     defaultUrl: 'https://generativelanguage.googleapis.com' },
             { id: 'ollama',    label: 'Ollama',     defaultUrl: 'http://localhost:11434' },
         ];
+        // Collect all provider IDs: predefined + any custom ones from data
+        const knownIds = DEFAULT_PROVIDERS.map(p => p.id);
+        const allIds = [...knownIds];
+        if (providers) {
+            Object.keys(providers).forEach(id => {
+                if (!allIds.includes(id)) allIds.push(id);
+            });
+        }
         const list = document.getElementById('provider-list');
         if (!list) return;
-        list.innerHTML = PROVIDERS.map(p => {
-            const cfg = providers[p.id] || {};
-            return `<div class="provider-item">
-                <div class="provider-name">${p.label}</div>
+        list.innerHTML = allIds.map(id => {
+            const def = DEFAULT_PROVIDERS.find(p => p.id === id);
+            const cfg = (providers && providers[id]) || {};
+            const label = def ? def.label : id.charAt(0).toUpperCase() + id.slice(1);
+            const defaultUrl = def ? def.defaultUrl : 'https://api.openai.com/v1';
+            const isCustom = !knownIds.includes(id);
+            return `<div class="provider-item${isCustom ? ' provider-custom' : ''}">
+                <div class="provider-name">${label}${isCustom ? ' <span class="provider-custom-badge">custom</span>' : ''}</div>
                 <label>API Key</label>
                 <div class="api-key-row">
-                    <input type="password" id="key-${p.id}" value="${this.escapeHtml(cfg.apiKey||'')}" placeholder="sk-...">
-                    <button type="button" onclick="app.toggleKeyVisible('key-${p.id}',this)">👁</button>
+                    <input type="password" id="key-${id}" value="${this.escapeHtml(cfg.apiKey||'')}">
+                    <button type="button" onclick="app.toggleKeyVisible('key-${id}',this)">👁</button>
                 </div>
                 <label>Base URL</label>
-                <input type="text" id="url-${p.id}" value="${this.escapeHtml(cfg.baseUrl||p.defaultUrl)}" placeholder="${this.escapeHtml(p.defaultUrl)}">
+                <input type="text" id="url-${id}" value="${this.escapeHtml(cfg.baseUrl||defaultUrl)}" placeholder="${this.escapeHtml(defaultUrl)}">
+                <div class="test-row">
+                    <button type="button" class="btn-test" onclick="app.testProviderConnection('${id}')" data-i18n="Test">Test</button>
+                    <span class="test-status" id="test-status-${id}"></span>
+                </div>
+                ${isCustom ? `<button class="provider-remove-btn" onclick="app.removeCustomProvider('${id}')">✕ remove</button>` : ''}
             </div>`;
         }).join('');
+        // Add custom provider button at the bottom
+        list.innerHTML += `<div class="provider-add-row">
+            <input type="text" id="new-custom-provider-id" placeholder="provider id (e.g. grok)" style="flex:1">
+            <button onclick="app.addCustomProvider()">+ Add Custom</button>
+        </div>`;
+    },
+
+    addCustomProvider() {
+        const input = document.getElementById('new-custom-provider-id');
+        if (!input || !input.value.trim()) return;
+        const id = input.value.trim().toLowerCase();
+        if (!this.state.providers) this.state.providers = {};
+        this.state.providers[id] = { apiKey: '', baseUrl: '' };
+        this.onProvidersResult(this.state.providers);
+        input.value = '';
+        this.addLog(`➕ Custom provider added: ${id}`);
+    },
+
+    removeCustomProvider(id) {
+        if (!this.state.providers || !this.state.providers[id]) return;
+        delete this.state.providers[id];
+        this.onProvidersResult(this.state.providers);
+        this.addLog(`🗑 Custom provider removed: ${id}`);
     },
 
     toggleKeyVisible(id, btn) {
@@ -495,21 +577,51 @@ const app = {
     },
 
     saveProviders() {
-        const ids = ['openai','anthropic','gemini','ollama'];
+        const list = document.getElementById('provider-list');
+        if (!list) return;
         const providers = {};
-        ids.forEach(id => {
+        list.querySelectorAll('.provider-item').forEach(item => {
+            const keyInput = item.querySelector('input[type="password"]');
+            const urlInput = item.querySelector('input[type="text"]');
+            if (!keyInput || !urlInput) return;
+            const id = keyInput.id.replace('key-', '');
+            const existing = (this.state.providers && this.state.providers[id]) || {};
             providers[id] = {
-                apiKey:  document.getElementById('key-' + id)?.value || '',
-                baseUrl: document.getElementById('url-' + id)?.value || '',
+                apiKey:  keyInput.value || '',
+                baseUrl: urlInput.value || '',
+                models:  existing.models || []
             };
         });
+        if (Object.keys(providers).length === 0) return;
         this.postMessage({ type: 'save_providers', payload: providers });
-        this.closeConfig();
-        this.addLog('✅ Provider settings saved.');
+        this.state.providers = providers;
     },
 
-    testConnection() {
-        this.addLog('🔌 Test connection not yet implemented.');
+    testProviderConnection(id) {
+        const apiKey = document.getElementById('key-' + id)?.value || '';
+        const urlEl = document.getElementById('url-' + id);
+        const baseUrl = urlEl?.value || '';
+        const statusEl = document.getElementById('test-status-' + id);
+        if (statusEl) {
+            statusEl.textContent = '⏳ Testing...';
+            statusEl.className = 'test-status';
+        }
+        this.addLog('🔌 Testing ' + id + ' connection...');
+        this.postMessage({ type: 'test_provider_connection', payload: { provider: id, apiKey, baseUrl } });
+    },
+
+    onTestConnectionResult(result) {
+        const statusEl = document.getElementById('test-status-' + result.provider);
+        if (!statusEl) return;
+        if (result.success) {
+            statusEl.textContent = '✅ ' + result.message;
+            statusEl.className = 'test-status success';
+            this.addLog('✅ ' + result.provider + ' connection OK');
+        } else {
+            statusEl.textContent = '❌ ' + result.message;
+            statusEl.className = 'test-status error';
+            this.addLog('❌ ' + result.provider + ' connection failed: ' + result.message);
+        }
     },
 
     handleMenuCommand(cmd) {
@@ -891,6 +1003,58 @@ const app = {
     showError(msg) {
         this.addLog('❌ ' + msg);
         this.state.pipelineRunning = false;
+    },
+
+    // Log context menu and copy
+    showLogContextMenu(event) {
+        const menu = document.getElementById('log-context-menu');
+        if (!menu) return;
+        const el = event.target.closest('.log-entry');
+        const entryText = el ? el.textContent : '';
+        const allText = this.getAllLogText();
+        menu.innerHTML = `
+            <div class="ctx-item" onclick="app.copyLogEntry(this.dataset.text);app.hideLogContextMenu()" data-text="${this.escapeHtml(entryText)}">📋 Copy Line</div>
+            <div class="ctx-item" onclick="app.copyAllLogs();app.hideLogContextMenu()">📋 Copy All</div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" onclick="app.clearLogs();app.hideLogContextMenu()">✕ Clear</div>
+        `;
+        menu.style.display = 'block';
+        menu.style.left = Math.min(event.clientX, window.innerWidth - 160) + 'px';
+        menu.style.top = Math.min(event.clientY, window.innerHeight - 120) + 'px';
+        setTimeout(() => document.addEventListener('click', app.hideLogContextMenu, { once: true }), 0);
+    },
+
+    hideLogContextMenu() {
+        const menu = document.getElementById('log-context-menu');
+        if (menu) menu.style.display = 'none';
+    },
+
+    copyLogEntry(text) {
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => {
+            this.addLog('📋 Line copied');
+        });
+    },
+
+    copyAllLogs() {
+        const text = this.getAllLogText();
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => {
+            this.addLog('📋 All logs copied');
+        });
+    },
+
+    getAllLogText() {
+        const el = document.getElementById('messages-content');
+        if (!el) return '';
+        return Array.from(el.querySelectorAll('.log-entry'))
+            .map(div => div.textContent)
+            .join('\n');
+    },
+
+    clearLogs() {
+        const el = document.getElementById('messages-content');
+        if (el) el.innerHTML = '';
     },
 
     // Search
