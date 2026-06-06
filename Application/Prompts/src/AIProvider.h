@@ -32,9 +32,12 @@ public:
     virtual std::vector<std::string> ListModels() = 0;
     virtual AIResponse Call(const AIRequest &req) = 0;
     virtual void CallStreaming(const AIRequest &req,
-                               std::function<void(const std::string &chunk)> onChunk,
-                               std::function<void(const AIResponse &)> onDone,
-                               std::function<void(const std::string &error)> onError) = 0;
+                                std::function<void(const std::string &chunk)> onChunk,
+                                std::function<void(const AIResponse &)> onDone,
+                                std::function<void(const std::string &error)> onError) = 0;
+    
+    // Connection test: returns empty string on success, error message on failure
+    virtual std::string TestConnection() = 0;
     
     // Factory
     static AIProvider *Create(const std::string &providerType,

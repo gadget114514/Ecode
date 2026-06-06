@@ -45,6 +45,16 @@ public:
         return resp;
     }
     
+    std::string TestConnection() override {
+        std::string headers = "Authorization: Bearer " + apiKey_ + "\r\n";
+        std::string result = WinHttpRequest(baseUrl_ + "/v1/models", "GET", headers, "");
+        if (result.empty()) return "Connection failed (no response)";
+        auto val = JsonValue::parse(result);
+        if (val.has("error")) return val["error"]["message"].string();
+        if (val.has("data")) return ""; // success
+        return "Unexpected response";
+    }
+    
     void CallStreaming(const AIRequest &req,
                        std::function<void(const std::string&)> onChunk,
                        std::function<void(const AIResponse&)> onDone,
@@ -82,6 +92,16 @@ public:
         if (!result.empty()) resp.content = ExtractAnthropicResponse(result);
         else resp.content = "[Anthropic: empty response]";
         return resp;
+    }
+    
+    std::string TestConnection() override {
+        std::string headers = "x-api-key: " + apiKey_ + "\r\nanthropic-version: 2023-06-01\r\n";
+        std::string result = WinHttpRequest(baseUrl_ + "/v1/models", "GET", headers, "");
+        if (result.empty()) return "Connection failed (no response)";
+        auto val = JsonValue::parse(result);
+        if (val.has("error")) return val["error"]["message"].string();
+        if (val.has("data")) return "";
+        return "Unexpected response";
     }
     
     void CallStreaming(const AIRequest &req,
@@ -149,6 +169,15 @@ public:
         return resp;
     }
     
+    std::string TestConnection() override {
+        std::string result = WinHttpRequest(baseUrl_ + "/v1beta/models?key=" + apiKey_, "GET", "", "");
+        if (result.empty()) return "Connection failed (no response)";
+        auto val = JsonValue::parse(result);
+        if (val.has("error")) return val["error"]["message"].string();
+        if (val.has("models")) return "";
+        return "Unexpected response";
+    }
+    
     void CallStreaming(const AIRequest &req,
                        std::function<void(const std::string&)> onChunk,
                        std::function<void(const AIResponse&)> onDone,
@@ -209,6 +238,15 @@ public:
         if (!result.empty()) resp.content = ExtractOllamaResponse(result);
         else resp.content = "[Ollama: empty response]";
         return resp;
+    }
+    
+    std::string TestConnection() override {
+        std::string result = WinHttpRequest(baseUrl_ + "/api/tags", "GET", "", "");
+        if (result.empty()) return "Connection failed (is Ollama running?)";
+        auto val = JsonValue::parse(result);
+        if (val.has("error")) return val["error"].string();
+        if (val.has("models")) return "";
+        return "Unexpected response";
     }
     
     void CallStreaming(const AIRequest &req,
