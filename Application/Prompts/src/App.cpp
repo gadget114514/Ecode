@@ -180,6 +180,12 @@ void App::OnCommand(int id) {
         else
             ShowWindow(hwnd_, SW_MAXIMIZE);
         break;
+    case ID_HELP_WIZARD:
+        bridge_.PostToJS("menu_command", "{\"action\":\"welcome_wizard\"}");
+        break;
+    case ID_HELP_SETUP_WIZARD:
+        bridge_.PostToJS("menu_command", "{\"action\":\"setup_wizard\"}");
+        break;
     case ID_HELP_DOCS:
         ShellExecuteW(hwnd_, L"open", L"https://github.com/gadget114514/Ecode", nullptr, nullptr, SW_SHOW);
         break;
@@ -388,6 +394,22 @@ void App::InitWebView2() {
                         };
 
                         app->webview_->add_WebMessageReceived(Make<MsgHandler>(app).Get(), nullptr);
+
+                        // Handle permissions (allow microphone access for voice input/Web Speech API)
+                        struct PermissionHandler : RuntimeClass<RuntimeClassFlags<ClassicCom>, ICoreWebView2PermissionRequestedEventHandler> {
+                            App *app;
+                            PermissionHandler(App *a) : app(a) {}
+                            HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2 *, ICoreWebView2PermissionRequestedEventArgs *args) override {
+                                COREWEBVIEW2_PERMISSION_KIND kind;
+                                if (SUCCEEDED(args->get_PermissionKind(&kind))) {
+                                    if (kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE) {
+                                        args->put_State(COREWEBVIEW2_PERMISSION_STATE_ALLOW);
+                                    }
+                                }
+                                return S_OK;
+                            }
+                        };
+                        app->webview_->add_PermissionRequested(Make<PermissionHandler>(app).Get(), nullptr);
 
                         // Set up virtual host mapping
                         ICoreWebView2_3 *wv3 = nullptr;

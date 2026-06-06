@@ -162,6 +162,7 @@ function(add_ecode_test name)
     target_include_directories(${name} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/generated
     )
 endfunction()
 
@@ -315,15 +316,14 @@ target_link_libraries(test_buffer_stress PRIVATE ${TEST_COMMON_LIBS})
 
 add_ecode_test(test_cursor_move
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cursor_move.cpp
-    ${TEST_BASE_SOURCES}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Editor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Buffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PieceTable.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/MemoryMappedFile.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Process.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SettingsManager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src-duktape/duktape.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/FileUtils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/TestGlobals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Localization.cpp
 )
 target_link_libraries(test_cursor_move PRIVATE ${TEST_COMMON_LIBS})
 

@@ -54,7 +54,11 @@
                 <div class="pane-header" onclick="app.togglePane('editor-pane')">✏️ <span data-i18n="Editor">Editor</span></div>
                 <div id="editor-content" class="pane-content">
                     <input type="text" id="node-title" placeholder="Title (base64 auto)">
-                    <textarea id="node-content" placeholder="Content..."></textarea>
+                    <div class="textarea-container">
+                        <textarea id="node-content" placeholder="Content..."></textarea>
+                        <button class="speak-btn" id="editor-speak-btn" onclick="app.toggleSpeak('node-content', 'editor-speak-btn')" title="音声読み上げ">🔊</button>
+                        <button class="voice-btn" id="editor-voice-btn" onclick="app.toggleVoiceInput('node-content', 'editor-voice-btn')" title="音声入力">🎙️</button>
+                    </div>
                     <div id="editor-buttons">
                         <button onclick="app.addChild()">➕ <span data-i18n="AddChild">Add</span></button>
                         <button onclick="app.updateNode()">💾 <span data-i18n="Update">Update</span></button>
