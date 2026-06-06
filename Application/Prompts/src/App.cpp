@@ -2,6 +2,7 @@
 #include "resource.h"
 #include "JsonParser.h"
 #include "Base64.h"
+#include "AIProvider.h"
 #include <shlobj.h>
 #include <commctrl.h>
 #include <commdlg.h>
@@ -12,6 +13,7 @@
 #include <wrl/client.h>
 #include <wrl/implements.h>
 #include <WebView2.h>
+#include <thread>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "ole32.lib")
@@ -365,7 +367,7 @@ void App::InitWebView2() {
                             MsgHandler(App *a) : app(a) {}
                             HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2 *, ICoreWebView2WebMessageReceivedEventArgs *args) override {
                                 LPWSTR raw = nullptr;
-                                args->TryGetWebMessageAsString(&raw);
+                                args->get_WebMessageAsJson(&raw);
                                 if (raw) {
                                     int len = WideCharToMultiByte(CP_UTF8, 0, raw, -1, nullptr, 0, nullptr, nullptr);
                                     std::string s(len, 0);
@@ -509,6 +511,14 @@ void App::SendFullInit() {
         pipelinesJson = "[]";
     }
 
+    // Load and register API providers (resume saved keys)
+    {
+        auto providers = storage_.LoadProviders();
+        for (auto &kv : providers) {
+            runner_.RegisterProvider(kv.first, kv.second.apiKey, kv.second.baseUrl);
+        }
+    }
+
     // Recent files
     recentFiles_ = storage_.LoadRecentFiles();
     UpdateRecentFilesMenu();
@@ -543,12 +553,34 @@ void App::SendFullInit() {
     }
     storage_.GarbageCollectBlobs(referencedBlobs);
 
+    // Build providers JSON
+    std::string providersJson = "{";
+    {
+        bool firstProv = true;
+        auto providers = storage_.LoadProviders();
+        for (auto &kv : providers) {
+            if (!firstProv) providersJson += ",";
+            firstProv = false;
+            std::map<std::string, JsonValue> cfg;
+            cfg["apiKey"]  = JsonValue::fromString(kv.second.apiKey);
+            cfg["baseUrl"] = JsonValue::fromString(kv.second.baseUrl);
+            std::vector<JsonValue> models;
+            for (auto &m : kv.second.models)
+                models.push_back(JsonValue::fromString(m));
+            cfg["models"] = JsonValue::fromArray(models);
+            providersJson += "\"" + PipelineRunner::JsonEscape(kv.first) + "\":"
+                           + JsonValue::fromObject(cfg).serialize(false);
+        }
+    }
+    providersJson += "}";
+
     bridge_.PostToJS("init",
         "{\"language\":\"" + localization_.GetCurrentLanguage() + "\""
         ",\"embedded\":"  + (embedded_ ? "true" : "false") +
         ",\"tabs\":"      + tabsJson +
         ",\"nodes\":"     + nodesJson +
         ",\"pipelines\":" + pipelinesJson +
+        ",\"providers\":" + providersJson +
         ",\"recentFiles\":" + recentJson + "}");
 }
 
@@ -642,14 +674,16 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         SaveFileDialog();
     } else if (type == "get_providers") {
         auto providers = storage_.LoadProviders();
-        std::string json = "{";
-        bool first = true;
+        bridge_.PostToJS("log", "{\"message\":\"get_providers: " + std::to_string(providers.size()) + " providers loaded\"}");
+        std::map<std::string, JsonValue> obj;
         for (auto &kv : providers) {
-            if (!first) json += ",";
-            first = false;
-            json += "\"" + kv.first + "\":{\"apiKey\":\"" + kv.second.apiKey + "\",\"baseUrl\":\"" + kv.second.baseUrl + "\"}";
+            std::map<std::string, JsonValue> cfg;
+            cfg["apiKey"]  = JsonValue::fromString(kv.second.apiKey);
+            cfg["baseUrl"] = JsonValue::fromString(kv.second.baseUrl);
+            obj[kv.first] = JsonValue::fromObject(cfg);
         }
-        json += "}";
+        std::string json = JsonValue::fromObject(obj).serialize(false);
+        bridge_.PostToJS("log", "{\"message\":\"providers json: " + PipelineRunner::JsonEscape(json) + "\"}");
         bridge_.PostToJS("providers_result", json);
     } else if (type == "history_list") {
         HandleHistoryList();
@@ -676,16 +710,77 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
     } else if (type == "optimize_version_list") {
         HandleOptimizeVersionList(payload);
     } else if (type == "save_providers") {
+        bridge_.PostToJS("log", "{\"message\":\"save_providers called, payload length=" + std::to_string(payload.size()) + "\"}");
         auto val = JsonValue::parse(payload);
+        if (val.type() != JsonValue::Object) {
+            bridge_.PostToJS("log", "{\"message\":\"ERROR: payload is not an object, type=" + std::to_string(val.type()) + "\"}");
+            return;
+        }
         std::map<std::string, ProviderConfig> providers;
+        int savedCount = 0;
         for (auto &kv : val.object()) {
             ProviderConfig cfg;
             if (kv.second.has("apiKey"))  cfg.apiKey  = kv.second["apiKey"].string();
             if (kv.second.has("baseUrl")) cfg.baseUrl = kv.second["baseUrl"].string();
+            if (kv.second.has("models")) {
+                for (auto &m : kv.second["models"].array())
+                    cfg.models.push_back(m.string());
+            }
             providers[kv.first] = cfg;
             runner_.RegisterProvider(kv.first, cfg.apiKey, cfg.baseUrl);
+            if (!cfg.apiKey.empty()) savedCount++;
         }
-        storage_.SaveProviders(providers);
+        // Resolve save path for logging
+        std::wstring savePath = appDataPath_ + L"\\providers.json";
+        std::string pathA;
+        {
+            int pathLen = WideCharToMultiByte(CP_UTF8, 0, savePath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            pathA.resize(pathLen);
+            WideCharToMultiByte(CP_UTF8, 0, savePath.c_str(), -1, &pathA[0], pathLen, nullptr, nullptr);
+            if (!pathA.empty() && pathA.back() == '\0') pathA.pop_back();
+        }
+        if (providers.empty()) {
+            bridge_.PostToJS("log", "{\"message\":\"📂 No providers to save: " + PipelineRunner::JsonEscape(pathA) + " (not written)\"}");
+        } else {
+            bool saved = storage_.SaveProviders(providers);
+            if (saved) {
+                bridge_.PostToJS("log", "{\"message\":\"✅ Saved " + std::to_string(savedCount) + " provider(s) → " + PipelineRunner::JsonEscape(pathA) + "\"}");
+            } else {
+                bridge_.PostToJS("log", "{\"message\":\"❌ FAILED to write " + PipelineRunner::JsonEscape(pathA) + "\"}");
+            }
+        }
+    } else if (type == "test_provider_connection") {
+        auto val = JsonValue::parse(payload);
+        std::string provider = val.has("provider") ? val["provider"].string() : "";
+        std::string apiKey   = val.has("apiKey")   ? val["apiKey"].string()   : "";
+        std::string baseUrl  = val.has("baseUrl")  ? val["baseUrl"].string()  : "";
+        bridge_.PostToJS("log", "{\"message\":\"Testing " + provider + "...\"}");
+        // Run on background thread to avoid blocking UI
+        std::thread([this, provider, apiKey, baseUrl]() {
+            std::string result;
+            std::string providerName = provider;
+            if (!providerName.empty()) {
+                auto *p = AIProvider::Create(providerName, apiKey, baseUrl);
+                if (p) {
+                    result = p->TestConnection();
+                    delete p;
+                } else {
+                    result = "Unknown provider: " + providerName;
+                }
+            } else {
+                result = "No provider specified";
+            }
+            bridge_.PostToJS("log", "{\"message\":\"Test result for " + providerName + ": " +
+                (result.empty() ? "OK" : "FAILED") + "\"}");
+            std::string resJson = "{\"provider\":\"" + PipelineRunner::JsonEscape(providerName) + "\"";
+            if (result.empty()) {
+                resJson += ",\"success\":true,\"message\":\"Connection OK\"";
+            } else {
+                resJson += ",\"success\":false,\"message\":\"" + PipelineRunner::JsonEscape(result) + "\"";
+            }
+            resJson += "}";
+            bridge_.PostToJS("test_connection_result", resJson);
+        }).detach();
     }
 }
 
