@@ -69,3 +69,6 @@ bin/Release/
 
 # Visual Studio user files
 **/.vs/
+
+# WebView2 user data directory
+*.WebView2/
