@@ -36,8 +36,16 @@ else()
   message(WARNING "Failed to copy ${_full} -> ${plug_exe} (error ${_copy_ret})")
 endif()
 
-# Copy sibling DLLs and helper EXEs when the plugin ships its own runtime files
-if(dll_dir)
+  # Copy sibling DLLs and helper EXEs when the plugin ships its own runtime files
+  # Also copy frontend/ directory (used by Prompts and similar plugins)
+  if(EXISTS "${dll_dir}/frontend")
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} -E copy_directory "${dll_dir}/frontend" "${out_dir}/plugins/frontend"
+    )
+    message(STATUS "Copied frontend/ -> ${out_dir}/plugins/frontend")
+  endif()
+
+  if(dll_dir)
   file(GLOB _dlls "${dll_dir}/*.dll")
   foreach(_dll ${_dlls})
     get_filename_component(_dll_name "${_dll}" NAME)

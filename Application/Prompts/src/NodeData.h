@@ -42,10 +42,19 @@ struct ProviderConfig {
     std::vector<std::string> models;
 };
 
+struct FilterConfig {
+    std::string mode;                    // "auto" | "auto_pass" | "manual" | "manual_split"
+    std::string splitBy;                 // delimiter for manual_split
+    std::vector<std::string> actions;    // allowed actions e.g. ["approve", "reject"]
+};
+
 struct PipelineStep {
     std::string name;
-    std::string type;       // "ai" | "manual" | "command" | "tool" | "fetch" | "condition" | "history"
+    std::string type;       // "ai" | "manual" | "command" | "tool" | "fetch" | "condition"
+                            // | "transform" | "call_pipeline" | "foreach" | "parallel"
+                            // | "wait" | "history" | "wizard" | "filter" | "evaluate" | "chest"
     std::map<std::string, std::string> params;
+    FilterConfig filter;    // only used when type == "filter"
 };
 
 struct Pipeline {

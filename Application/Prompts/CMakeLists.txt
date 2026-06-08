@@ -40,12 +40,25 @@ if(MSVC)
     target_compile_options(Prompts PRIVATE /utf-8 /W4 /EHsc)
 endif()
 
-# Copy frontend files to output
+# Register frontend files as target dependencies (not compiled, just tracked)
+file(GLOB_RECURSE PROMTS_FRONTEND_DEPS
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.html"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.js"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.css"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/lang/*.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/wizards/*.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/lib/*.js"
+)
+set_source_files_properties(${PROMTS_FRONTEND_DEPS} PROPERTIES HEADER_FILE_ONLY TRUE)
+target_sources(Prompts PRIVATE ${PROMTS_FRONTEND_DEPS})
+
+# Copy frontend to output directories (source-based, always fresh)
+set(PROMTS_SRC_FRONT "${CMAKE_CURRENT_SOURCE_DIR}/frontend")
+set(PROMTS_ROOT_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../bin")
 add_custom_command(TARGET Prompts POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/frontend"
-    "$<TARGET_FILE_DIR:Prompts>/frontend"
-    COMMENT "Copying frontend files..."
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROMTS_SRC_FRONT}" "$<TARGET_FILE_DIR:Prompts>/frontend"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROMTS_SRC_FRONT}" "${PROMTS_ROOT_OUT}/$<CONFIG>/plugins/frontend"
+    COMMENT "Updating frontend to plugin dirs..."
 )
 add_custom_command(TARGET Prompts POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
@@ -90,3 +103,24 @@ add_prompts_test(test_prompts_optimizer tests/test_optimizer.cpp
     src/PipelineVersionManager.cpp src/PipelineOptimizer.cpp
     src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/AIProvider.cpp)
 target_link_libraries(test_prompts_optimizer PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_providers tests/test_providers.cpp src/AIProvider.cpp)
+target_include_directories(test_prompts_providers PRIVATE src)
+target_link_libraries(test_prompts_providers PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_versionmanager tests/test_pipelineversionmanager.cpp
+    src/PipelineVersionManager.cpp src/PipelineOptimizer.cpp
+    src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/AIProvider.cpp)
+target_link_libraries(test_prompts_versionmanager PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_isolation tests/test_project_isolation.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
+target_link_libraries(test_prompts_isolation PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
+
+add_prompts_test(test_prompts_checkpoint tests/test_checkpoint.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/PipelineRunner.cpp src/AIProvider.cpp)
+target_link_libraries(test_prompts_checkpoint PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_chest tests/test_chest.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
+target_link_libraries(test_prompts_chest PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
+
+add_prompts_test(test_prompts_stream tests/test_stream_model.cpp src/PipelineRunner.cpp src/Base64.cpp src/NodeData.cpp src/JsonParser.cpp src/AIProvider.cpp)
+target_link_libraries(test_prompts_stream PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
