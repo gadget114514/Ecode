@@ -40,12 +40,13 @@ if(MSVC)
     target_compile_options(Prompts PRIVATE /utf-8 /W4 /EHsc)
 endif()
 
-# Copy frontend files to output
+# Copy frontend to output on every build (remove first to ensure freshness)
 add_custom_command(TARGET Prompts POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_FILE_DIR:Prompts>/frontend"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/frontend"
     "$<TARGET_FILE_DIR:Prompts>/frontend"
-    COMMENT "Copying frontend files..."
+    COMMENT "Updating frontend files..."
 )
 add_custom_command(TARGET Prompts POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
