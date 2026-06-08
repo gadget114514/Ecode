@@ -29,6 +29,16 @@
         <span class="spacer"></span>
         <input type="text" id="search-box" placeholder="Search..." oninput="app.search(this.value)">
         <button onclick="app.toggleTestMode()" id="btn-test-mode">🧪 <span data-i18n="Test">Test</span></button>
+        <span class="separator">|</span>
+        <select id="project-selector" class="project-selector" onchange="app.switchProject(this.value)">
+            <option value="default">📁 default</option>
+        </select>
+        <button onclick="app.createProject()" data-hint="Create new project">➕</button>
+        <span class="separator">|</span>
+        <select id="view-mode-selector" class="view-mode-selector" onchange="app.switchViewMode(this.value)">
+            <option value="node">📄 Node</option>
+            <option value="pipeline">🔧 Pipeline</option>
+        </select>
         <button id="btn-setup" onclick="app.showSetupWizard()" data-hint="セットアップウィザード — 新しいプロジェクトをすぐに開始">🚀</button>
         <button id="btn-help" onclick="app.showWizard()" data-hint="使い方ガイドを表示 (F1)">❓</button>
     </div>
@@ -38,46 +48,25 @@
             <div class="pane-header" onclick="app.togglePane('tree-pane')">📂 <span data-i18n="Tree">Tree</span></div>
             <div id="tree-content" class="pane-content"></div>
         </div>
-        <div id="right-panes">
-            <div id="list-pane" class="pane">
-                <div class="pane-header">
-                    <span onclick="app.togglePane('list-pane')">📋 <span data-i18n="List">List</span></span>
-                    <span class="nav-buttons">
-                        <button onclick="app.navRoot()" title="Root">▲</button>
-                        <button onclick="app.navUp()" title="Up">◀ <span data-i18n="Up">Up</span></button>
-                        <button onclick="app.navDown()" title="Down">▶ <span data-i18n="Down">Down</span></button>
-                    </span>
+        <div id="stream-panes">
+            <div id="input-pane" class="pane">
+                <div class="pane-header" onclick="app.togglePane('input-pane')">
+                    📥 <span data-i18n="Input">Input</span>
+                    <span class="input-meta" id="input-meta"></span>
                 </div>
-                <div id="list-content" class="pane-content"></div>
+                <div id="input-content" class="pane-content stream-content"></div>
             </div>
-            <div id="editor-pane" class="pane">
-                <div class="pane-header" onclick="app.togglePane('editor-pane')">✏️ <span data-i18n="Editor">Editor</span></div>
-                <div id="editor-content" class="pane-content">
-                    <input type="text" id="node-title" placeholder="Title (base64 auto)">
-                    <div class="textarea-container">
-                        <textarea id="node-content" placeholder="Content..."></textarea>
-                        <button class="speak-btn" id="editor-speak-btn" onclick="app.toggleSpeak('node-content', 'editor-speak-btn')" title="音声読み上げ">🔊</button>
-                        <button class="voice-btn" id="editor-voice-btn" onclick="app.toggleVoiceInput('node-content', 'editor-voice-btn')" title="音声入力">🎙️</button>
-                    </div>
-                    <div id="editor-buttons">
-                        <button onclick="app.addChild()">➕ <span data-i18n="AddChild">Add</span></button>
-                        <button onclick="app.updateNode()">💾 <span data-i18n="Update">Update</span></button>
-                        <button onclick="app.removeNode()">🗑 <span data-i18n="Remove">Remove</span></button>
-                        <button onclick="app.copyContent()">📋 <span data-i18n="Copy">Copy</span></button>
-                    </div>
-                    <div id="mimetype-selector">
-                        <select onchange="app.changeMimetype(this.value)">
-                            <option value="text/plain">text/plain</option>
-                            <option value="text/html">text/html</option>
-                            <option value="application/rtf">application/rtf</option>
-                            <option value="image/png">image/png</option>
-                            <option value="image/jpeg">image/jpeg</option>
-                            <option value="image/webp">image/webp</option>
-                        </select>
-                    </div>
-                    <div id="attachments-area"></div>
-                    <div id="pipeline-meta-panel" style="display:none"></div>
+            <div id="prompt-pane" class="pane">
+                <div class="pane-header" onclick="app.togglePane('prompt-pane')">
+                    ⚙️ <span data-i18n="Prompt">Prompt/Params</span>
                 </div>
+                <div id="prompt-content" class="pane-content stream-content"></div>
+            </div>
+            <div id="output-pane" class="pane">
+                <div class="pane-header" onclick="app.togglePane('output-pane')">
+                    📤 <span data-i18n="Output">Output</span>
+                </div>
+                <div id="output-content" class="pane-content stream-content"></div>
             </div>
         </div>
     </div>
@@ -175,6 +164,35 @@
     </div>
 </div>
 
+<!-- Filter Modal -->
+<div id="filter-modal" class="modal">
+    <div class="modal-content filter-modal-content">
+        <span class="modal-close" onclick="app.closeFilter(); app.closeModal('filter-modal')">&times;</span>
+        <div id="filter-body" class="filter-body"></div>
+        <div class="filter-footer">
+            <button class="btn-primary" onclick="app.closeFilter(); app.closeModal('filter-modal')">Confirm</button>
+            <button onclick="app.closeModal('filter-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Recovery Modal -->
+<div id="recovery-modal" class="modal">
+    <div class="modal-content recovery-modal-content">
+        <span class="modal-close" onclick="app.closeModal('recovery-modal')">&times;</span>
+        <h2>📋 Incomplete Pipeline Runs</h2>
+        <div id="recovery-body" class="recovery-body"></div>
+    </div>
+</div>
+
+<!-- Input Source Modal -->
+<div id="input-source-modal" class="modal">
+    <div class="modal-content input-source-content">
+        <span class="modal-close" onclick="app.closeModal('input-source-modal')">&times;</span>
+        <div id="input-source-body" class="input-source-body"></div>
+    </div>
+</div>
+
 <!-- Manual Step Modal -->
 <div id="manual-modal" class="modal">
     <div class="modal-content manual-modal-content">
@@ -207,7 +225,27 @@
             </div>
         </div>
         <div id="config-tab-general" class="config-tab-panel" style="display:none">
-            <p style="color:#888" data-i18n="GeneralSettingsPlaceholder">General settings coming soon.</p>
+            <div class="settings-field-row">
+                <label data-i18n="HistoryRetention">History Retention (runs)</label>
+                <div class="settings-field-hint" data-i18n="HistoryRetentionDesc">Number of execution histories to keep per project.</div>
+                <div class="settings-field-control">
+                    <button onclick="app.adjustRetention(-10)" title="Decrease by 10">−10</button>
+                    <button onclick="app.adjustRetention(-1)" title="Decrease by 1">−1</button>
+                    <input type="number" id="config-history-retention" value="50" min="10" max="500" onchange="app.setHistoryRetention(this.value)">
+                    <button onclick="app.adjustRetention(1)" title="Increase by 1">+1</button>
+                    <button onclick="app.adjustRetention(10)" title="Increase by 10">+10</button>
+                </div>
+            </div>
+            <div class="settings-separator"></div>
+            <div class="settings-field-row">
+                <label data-i18n="ChestList">Named Chests</label>
+                <div id="config-chest-list" class="settings-chest-list"></div>
+            </div>
+            <div class="settings-separator"></div>
+            <div class="settings-field-row">
+                <label data-i18n="StorageChest">Storage Chest</label>
+                <button onclick="app.clearStorageChest()" class="btn-danger config-danger-btn" data-i18n="ClearStorageChest">Empty Storage Chest</button>
+            </div>
         </div>
     </div>
 </div>
@@ -311,6 +349,7 @@
                             <div class="pm-step-add-row">
                                 <select id="pm-step-type-select" class="pm-step-type-select">
                                     <option value="ai">🤖 AI Call</option>
+                                    <option value="wizard">🚀 Wizard</option>
                                     <option value="manual">📝 Manual Review</option>
                                     <option value="command">⚙️ CLI Command</option>
                                     <option value="tool">🔧 External Tool</option>

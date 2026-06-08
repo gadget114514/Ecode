@@ -1,0 +1,44 @@
+{
+  "id": "researcher",
+  "name": "Researcher Setup",
+  "description": "Configure Ecode for research, analysis, and note-taking",
+  "steps": [
+    {
+      "id": "language",
+      "prompt": "Step 1/5: Language (0:EN, 1:JA, 2:FR, 3:ES):",
+      "type": "choice",
+      "options": { "0": "en", "1": "ja", "2": "fr", "3": "es" },
+      "default": "0",
+      "action": "setLanguage"
+    },
+    {
+      "id": "domain",
+      "prompt": "Step 2/5: Research Domain (general, science, tech, medicine, humanities):",
+      "type": "text",
+      "default": "general"
+    },
+    {
+      "id": "ai_provider",
+      "prompt": "Step 3/5: AI Provider (gemini, openai, anthropic, ollama):",
+      "type": "text",
+      "default": "gemini"
+    },
+    {
+      "id": "api_key",
+      "prompt": "Step 4/5: API Key (leave empty for Ollama):",
+      "type": "password",
+      "default": ""
+    },
+    {
+      "id": "notes_dir",
+      "prompt": "Step 5/5: Research Notes Directory:",
+      "type": "text",
+      "default": "C:/research"
+    }
+  ],
+  "aiAgent": {
+    "name": "Research Assistant",
+    "systemPrompt": "You are an expert research assistant. Help analyze information, summarize findings, identify patterns, and explore topics in depth. Cite sources and note uncertainties. Think step by step."
+  },
+  "welcomeMessage": "# Research Environment Ready\n\n- Domain: {domain}\n- AI: {ai_provider} / {ai_model}\n- Notes: {notes_dir}\n\nPress Alt+A for AI Research Assistant\nHappy Researching!"
+}

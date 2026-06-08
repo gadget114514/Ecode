@@ -90,3 +90,24 @@ add_prompts_test(test_prompts_optimizer tests/test_optimizer.cpp
     src/PipelineVersionManager.cpp src/PipelineOptimizer.cpp
     src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/AIProvider.cpp)
 target_link_libraries(test_prompts_optimizer PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_providers tests/test_providers.cpp src/AIProvider.cpp)
+target_include_directories(test_prompts_providers PRIVATE src)
+target_link_libraries(test_prompts_providers PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_versionmanager tests/test_pipelineversionmanager.cpp
+    src/PipelineVersionManager.cpp src/PipelineOptimizer.cpp
+    src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/AIProvider.cpp)
+target_link_libraries(test_prompts_versionmanager PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_isolation tests/test_project_isolation.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
+target_link_libraries(test_prompts_isolation PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
+
+add_prompts_test(test_prompts_checkpoint tests/test_checkpoint.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/PipelineRunner.cpp src/AIProvider.cpp)
+target_link_libraries(test_prompts_checkpoint PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+
+add_prompts_test(test_prompts_chest tests/test_chest.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
+target_link_libraries(test_prompts_chest PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
+
+add_prompts_test(test_prompts_stream tests/test_stream_model.cpp src/PipelineRunner.cpp src/Base64.cpp src/NodeData.cpp src/JsonParser.cpp src/AIProvider.cpp)
+target_link_libraries(test_prompts_stream PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)

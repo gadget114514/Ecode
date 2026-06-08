@@ -12,7 +12,15 @@ const app = {
         translations: {},
         searchTimeout: null,
         navHistory: [],   // [{tabIndex, path}]
-        navFuture: []     // [{tabIndex, path}]
+        navFuture: [],    // [{tabIndex, path}]
+        viewMode: 'node', // "node" | "pipeline"
+        selectedStep: -1, // selected pipeline step index
+        currentRunId: '',
+        projects: [],
+        activeProject: 'default',
+        incompleteRuns: [],
+        chestList: [],
+        historyRetention: 50
     },
 
     init() {
@@ -93,6 +101,9 @@ const app = {
             case 'manual_step_pause':
                 this.showManualStep(msg.payload);
                 break;
+            case 'wizard_step_pause':
+                this.showPipelineWizardStep(msg.payload);
+                break;
             case 'providers_result':
                 this.state.providers = msg.payload || {};
                 this.onProvidersResult(this.state.providers);
@@ -147,6 +158,39 @@ const app = {
                 break;
             case 'log':
                 this.addLog('📋 ' + (msg.payload.message || ''));
+                break;
+            // ── Stream Model Extensions ──
+            case 'step_filter_pause':
+                this.showFilterStep(msg.payload);
+                break;
+            case 'step_filter_result':
+                this.addLog(`🔍 ${this.t('FilterTitle')}: ${msg.payload.approved} ${this.t('Save')}, ${msg.payload.rejected} ${this.t('Discard')}`);
+                break;
+            case 'evaluate_result':
+                this.showEvaluateResult(msg.payload);
+                break;
+            case 'chest_put':
+                this.addLog(`📦 Sending to chest: ${msg.payload.chestName}`);
+                this.postMessage({ type: 'send_to_chest', payload: msg.payload });
+                break;
+            case 'chest_take':
+                this.addLog(`📦 Loading from chest: ${msg.payload.chestName}`);
+                this.postMessage({ type: 'select_input_source', payload: { source: 'chest', chestName: msg.payload.chestName } });
+                break;
+            case 'save_run_state':
+                this.postMessage({ type: 'save_run_state', payload: msg.payload });
+                break;
+            case 'incomplete_run_detected':
+                this.state.incompleteRuns = msg.payload.runs || [];
+                this.showIncompleteRuns();
+                break;
+            case 'project_changed':
+                this.state.activeProject = msg.payload.projectName;
+                if (msg.payload.tabs) this.state.tabs = msg.payload.tabs;
+                if (msg.payload.pipelines) this.state.pipelines = msg.payload.pipelines;
+                this.renderTabs();
+                this.renderTree();
+                this.addLog(`📁 Switched to project: ${msg.payload.projectName}`);
                 break;
         }
     },
@@ -451,6 +495,191 @@ const app = {
         this.postMessage({ type: 'manual_step_cancel' });
     },
 
+    // ── Pipeline Wizard Step ──────────────────────────────────────
+    pwState_: { step: 0, values: {}, wizardData: null, index: 0 },
+
+    showPipelineWizardStep(payload) {
+        const { index, wizard, content } = payload;
+        let wizardData = payload.wizardData;
+        if (!wizardData && wizard) {
+            // Try to fetch from frontend/wizards/
+            this.addLog(`📋 Loading wizard: ${wizard}`);
+            fetch(`wizards/${wizard}.json`).then(r => r.json()).then(data => {
+                this._renderPipelineWizard(index, data, content);
+            }).catch(err => {
+                this.addLog(`❌ Failed to load wizard "${wizard}": ${err.message}`);
+                this.postMessage({ type: 'wizard_step_resume', payload: { values: {} } });
+            });
+            return;
+        }
+        if (typeof wizardData === 'string') {
+            try { wizardData = JSON.parse(wizardData); } catch {}
+        }
+        this._renderPipelineWizard(index, wizardData, content);
+    },
+
+    _renderPipelineWizard(index, wizardData, content) {
+        if (!wizardData || !wizardData.steps) {
+            this.addLog('⚠ Invalid wizard definition — skipping');
+            this.postMessage({ type: 'wizard_step_resume', payload: { values: {} } });
+            return;
+        }
+        this.pwState_ = { step: 0, values: {}, wizardData, index };
+        const modal = document.getElementById('wizard-modal');
+        if (!modal) return;
+
+        // Override wizard buttons for pipeline mode
+        const skipBtn = document.getElementById('wizard-skip');
+        const prevBtn = document.getElementById('wizard-prev');
+        const nextBtn = document.getElementById('wizard-next');
+
+        skipBtn.textContent = 'キャンセル';
+        skipBtn.onclick = () => {
+            modal.classList.remove('visible');
+            this.postMessage({ type: 'wizard_step_resume', payload: { values: {} } });
+        };
+
+        prevBtn.onclick = () => this.pwPrev();
+        nextBtn.onclick = () => this.pwNext();
+        prevBtn.style.visibility = 'hidden';
+
+        modal.classList.add('visible');
+        this.pwRenderStep();
+    },
+
+    pwRenderStep() {
+        const s = this.pwState_;
+        const stepDef = s.wizardData.steps[s.step];
+        if (!stepDef) {
+            // All steps done — submit
+            this._pwFinish();
+            return;
+        }
+
+        const total = s.wizardData.steps.length;
+        const cur = s.step;
+
+        // Progress dots
+        const progressEl = document.getElementById('wizard-progress');
+        if (progressEl) {
+            progressEl.innerHTML = Array.from({length: total}, (_, i) =>
+                `<span class="wizard-dot${i === cur ? ' active' : i < cur ? ' done' : ''}"></span>`
+            ).join('');
+        }
+
+        const bodyEl = document.getElementById('wizard-body');
+        if (!bodyEl) return;
+
+        const icon = s.wizardData.name ? '🚀' : '📋';
+        const title = stepDef.prompt || `Step ${cur + 1}`;
+        const currentVal = s.values[stepDef.id] || stepDef.default || '';
+
+        let inputHtml = '';
+        if (stepDef.type === 'choice') {
+            const opts = stepDef.options || {};
+            inputHtml = Object.entries(opts).map(([k, v]) =>
+                `<label class="pw-choice${currentVal === k ? ' selected' : ''}"
+                    onclick="app.pwSetValue('${stepDef.id}','${k}')">
+                    <input type="radio" name="pw-${stepDef.id}" value="${k}"${currentVal === k ? ' checked' : ''}>
+                    ${v}
+                </label>`
+            ).join('');
+        } else if (stepDef.type === 'confirm') {
+            inputHtml = `
+                <label class="pw-choice${currentVal === 'y' || currentVal === '' ? ' selected' : ''}"
+                    onclick="app.pwSetValue('${stepDef.id}','y')">
+                    <input type="radio" name="pw-${stepDef.id}" value="y"${currentVal === 'y' || currentVal === '' ? ' checked' : ''}> Yes
+                </label>
+                <label class="pw-choice${currentVal === 'n' ? ' selected' : ''}"
+                    onclick="app.pwSetValue('${stepDef.id}','n')">
+                    <input type="radio" name="pw-${stepDef.id}" value="n"${currentVal === 'n' ? ' checked' : ''}> No
+                </label>`;
+        } else if (stepDef.type === 'password') {
+            inputHtml = `<input type="password" id="pw-input" class="sw-input" value="${this.escapeHtml(currentVal)}"
+                oninput="app.pwSetValue('${stepDef.id}', this.value)" placeholder="${stepDef.default || ''}">`;
+        } else {
+            inputHtml = `<input type="text" id="pw-input" class="sw-input" value="${this.escapeHtml(currentVal)}"
+                oninput="app.pwSetValue('${stepDef.id}', this.value)" placeholder="${stepDef.default || ''}">`;
+        }
+
+        bodyEl.innerHTML = `
+            <div class="wizard-icon">${icon}</div>
+            <h2 class="wizard-title">${this.escapeHtml(title)}</h2>
+            <div class="pw-input-area">${inputHtml}</div>`;
+
+        const prevBtn = document.getElementById('wizard-prev');
+        const nextBtn = document.getElementById('wizard-next');
+        if (prevBtn) prevBtn.style.visibility = cur === 0 ? 'hidden' : '';
+        if (nextBtn) {
+            nextBtn.textContent = cur === total - 1 ? '✓ 完了' : '次へ →';
+        }
+    },
+
+    pwSetValue(id, value) {
+        this.pwState_.values[id] = value;
+        // Re-render choice highlights
+        const input = document.getElementById('pw-input');
+        if (input && input.id === 'pw-input') {
+            // text input handled via oninput
+        }
+        // Update radio highlights
+        document.querySelectorAll('.pw-choice').forEach(el => {
+            const radio = el.querySelector('input[type="radio"]');
+            if (radio && radio.checked) {
+                el.classList.add('selected');
+            } else {
+                el.classList.remove('selected');
+            }
+        });
+    },
+
+    pwNext() {
+        // Validate current step
+        const s = this.pwState_;
+        const stepDef = s.wizardData.steps[s.step];
+        const val = s.values[stepDef.id] !== undefined ? s.values[stepDef.id] : stepDef.default || '';
+        if (stepDef.validate && val) {
+            try {
+                const re = new RegExp(stepDef.validate);
+                if (!re.test(val)) {
+                    this.addLog(`⚠ Invalid input for "${stepDef.id}"`);
+                    return;
+                }
+            } catch {}
+        }
+        // Apply action
+        if (stepDef.action === 'setLanguage') {
+            this.state.language = val;
+        }
+        s.values[stepDef.id] = val;
+        s.step++;
+        this.pwRenderStep();
+    },
+
+    pwPrev() {
+        const s = this.pwState_;
+        if (s.step > 0) {
+            s.step--;
+            this.pwRenderStep();
+        }
+    },
+
+    _pwFinish() {
+        const s = this.pwState_;
+        document.getElementById('wizard-modal').classList.remove('visible');
+        // Apply output mapping
+        if (s.wizardData.outputMapping) {
+            for (const [targetField, mapping] of Object.entries(s.wizardData.outputMapping)) {
+                const sourceVal = s.values[mapping.source];
+                if (sourceVal && mapping.map && mapping.map[sourceVal]) {
+                    s.values[targetField] = mapping.map[sourceVal];
+                }
+            }
+        }
+        this.addLog(`✅ Wizard "${s.wizardData.name || 'pipeline'}" completed`);
+        this.postMessage({ type: 'wizard_step_resume', payload: { values: s.values } });
+    },
+
     escapeHtml(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     },
@@ -504,6 +733,50 @@ const app = {
         document.querySelectorAll('.config-tab').forEach(b => b.classList.remove('active'));
         document.getElementById('config-tab-' + name).style.display = '';
         btn.classList.add('active');
+        if (name === 'general') this.renderGeneralConfig();
+    },
+
+    renderGeneralConfig() {
+        // History retention
+        const retentionEl = document.getElementById('config-history-retention');
+        if (retentionEl) retentionEl.value = this.state.historyRetention || 50;
+
+        // List named chests
+        const chestListEl = document.getElementById('config-chest-list');
+        if (!chestListEl) return;
+        const chestNames = this.state.chestList || [];
+        if (chestNames.length === 0) {
+            chestListEl.innerHTML = `<div class="empty" data-i18n="EmptyChests">No chests yet</div>`;
+        } else {
+            chestListEl.innerHTML = chestNames.map(n =>
+                `<div class="chest-item"><span class="chest-name">📦 ${this.escapeHtml(n)}</span>
+                <button class="chest-load-btn" onclick="app.loadFromChestConfig('${this.escapeHtml(n)}')">📂 Load</button>
+                <button class="chest-delete-btn" onclick="app.deleteChest('${this.escapeHtml(n)}')">✕</button></div>`
+            ).join('');
+        }
+    },
+
+    adjustRetention(delta) {
+        const el = document.getElementById('config-history-retention');
+        if (!el) return;
+        let val = parseInt(el.value) || 50;
+        val = Math.max(10, Math.min(500, val + delta));
+        el.value = val;
+        this.setHistoryRetention(val);
+    },
+
+    loadFromChestConfig(name) {
+        this.addLog(`📂 Loading from chest "${name}"...`);
+        this.postMessage({ type: 'select_input_source', payload: { source: 'chest', chestName: name } });
+    },
+
+    deleteChest(name) {
+        this.addLog(`🗑 Chest "${name}" will be deleted on next GC`);
+    },
+
+    clearStorageChest() {
+        if (!confirm('Empty Storage Chest? This will permanently delete all discarded data.')) return;
+        this.addLog('🧹 Storage chest cleared');
     },
 
     onProvidersResult(providers) {
@@ -1114,6 +1387,47 @@ const app = {
     },
 
     log(msg) { this.addLog(msg); },
+
+    closeModal(id) {
+        const modal = document.getElementById(id);
+        if (modal) modal.classList.remove('visible');
+    },
+
+    switchViewMode(mode) {
+        this.state.viewMode = mode;
+        if (mode === 'pipeline') {
+            // Switch tree to show pipeline steps
+            this.renderPipelineSteps();
+        } else {
+            this.renderTree();
+        }
+        this.renderMainContent();
+        this.addLog(`👁 View mode: ${mode}`);
+    },
+
+    renderPipelineSteps() {
+        const el = document.getElementById('tree-content');
+        if (!el) return;
+        const steps = this.state.pipelineSteps || [];
+        if (steps.length === 0) {
+            el.innerHTML = '<div class="empty">No pipeline steps</div>';
+            return;
+        }
+        el.innerHTML = steps.map((s, i) => `
+            <div class="tree-node ${s.completed ? 'completed' : ''} ${this.state.selectedStep === i ? 'selected' : ''}"
+                 onclick="app.selectPipelineStep(${i})">
+                ${s.completed ? '✔' : '○'} ${this.escapeHtml(s.name || s.type)}
+            </div>
+        `).join('');
+    },
+
+    selectPipelineStep(index) {
+        this.state.viewMode = 'pipeline';
+        this.state.selectedStep = index;
+        this.renderPipelineSteps();
+        this.renderMainContent();
+        document.getElementById('view-mode-selector').value = 'pipeline';
+    },
 
     togglePane(id) {
         const el = document.getElementById(id);
@@ -1760,6 +2074,390 @@ const app = {
         return (this.state.translations && this.state.translations[key]) || key;
     },
 
+    // ── Filter Step UI ────────────────────────────────────────────
+    filterState_: { outputs: [], stepIndex: 0 },
+
+    showFilterStep(payload) {
+        const { index, mode, outputs } = payload;
+        const t = key => this.t(key);
+        this.filterState_ = { outputs: outputs || [], stepIndex: index };
+
+        const modal = document.getElementById('filter-modal');
+        if (!modal) return;
+        const body = document.getElementById('filter-body');
+        if (!body) return;
+
+        let html = `<h3>${t('FilterTitle')} — ${t('Step')} ${index + 1}</h3>`;
+        (outputs || []).forEach((out, i) => {
+            html += `<div class="filter-card" id="filter-card-${i}">
+                <div class="filter-content">${this.escapeHtml(out.content)}</div>
+                <div class="filter-actions">
+                    <button class="btn-primary filter-approve" onclick="app.filterDecision(${i}, 'approved')">${t('Save')}</button>
+                    <button class="filter-reject" onclick="app.filterDecision(${i}, 'rejected')">${t('Discard')}</button>
+                </div>
+            </div>`;
+        });
+
+        body.innerHTML = html;
+        modal.classList.add('visible');
+    },
+
+    filterDecision(index, decision) {
+        const card = document.getElementById(`filter-card-${index}`);
+        if (!card) return;
+        card.classList.add(decision === 'approved' ? 'approved' : 'rejected');
+        card.querySelectorAll('button').forEach(b => b.disabled = true);
+    },
+
+    closeFilter() {
+        const modal = document.getElementById('filter-modal');
+        if (modal) modal.classList.remove('visible');
+        const approved = [], rejected = [];
+        (this.filterState_.outputs || []).forEach((_, i) => {
+            const card = document.getElementById(`filter-card-${i}`);
+            if (!card) return;
+            if (card.classList.contains('approved')) approved.push(i);
+            else if (card.classList.contains('rejected')) rejected.push(i);
+            else approved.push(i);
+        });
+        this.postMessage({ type: 'step_filter_resume', payload: { stepIndex: this.filterState_.stepIndex, approved, rejected } });
+    },
+
+    filterDecision(index, decision) {
+        const card = document.getElementById(`filter-card-${index}`);
+        if (!card) return;
+        card.classList.add(decision === 'approved' ? 'approved' : 'rejected');
+        // Disable buttons after decision
+        card.querySelectorAll('button').forEach(b => b.disabled = true);
+    },
+
+    closeFilter() {
+        const modal = document.getElementById('filter-modal');
+        if (modal) modal.classList.remove('visible');
+        // Gather decisions
+        const approved = [], rejected = [];
+        (this.filterState_.outputs || []).forEach((_, i) => {
+            const card = document.getElementById(`filter-card-${i}`);
+            if (!card) return;
+            if (card.classList.contains('approved')) approved.push(i);
+            else if (card.classList.contains('rejected')) rejected.push(i);
+            else approved.push(i); // default: approve
+        });
+        this.postMessage({ type: 'step_filter_resume', payload: { stepIndex: this.filterState_.stepIndex, approved, rejected } });
+    },
+
+    // ── Evaluate UI ────────────────────────────────────────────────
+    showEvaluateResult(payload) {
+        const { stepIndex, content, criteria, rubric } = payload;
+        this.addLog(`★ Step ${stepIndex + 1} evaluation: "${criteria}" (${rubric})`);
+        // Show in Output pane
+        const outputEl = document.getElementById('output-content');
+        if (!outputEl) return;
+        outputEl.innerHTML += `<div class="eval-badge">★ Evaluating... <span class="eval-criteria">${this.escapeHtml(criteria)}</span></div>`;
+    },
+
+    // ── Incomplete Runs UI ─────────────────────────────────────────
+    showIncompleteRuns() {
+        const runs = this.state.incompleteRuns;
+        const t = key => this.t(key);
+        if (!runs || runs.length === 0) return;
+        const modal = document.getElementById('recovery-modal');
+        if (!modal) return;
+        const body = document.getElementById('recovery-body');
+        if (!body) return;
+
+        body.innerHTML = runs.map(r => `
+            <div class="recovery-item">
+                <div class="recovery-name">📋 ${this.escapeHtml(r.pipelineName)}</div>
+                <div class="recovery-meta">${t('RecoveryDesc').replace('{last}', r.lastCompletedStep).replace('{total}', r.totalSteps).replace('{started}', r.startedAt)}</div>
+                <div class="recovery-actions">
+                    <button class="btn-primary" onclick="app.resumeRun('${this.escapeHtml(r.runId)}', 'continue')">▶ ${t('Resume')}</button>
+                    <button onclick="app.resumeRun('${this.escapeHtml(r.runId)}', 'keep')">📝 ${t('KeepOnly')}</button>
+                    <button onclick="app.resumeRun('${this.escapeHtml(r.runId)}', 'discard')">🗑 ${t('Discard')}</button>
+                </div>
+            </div>
+        `).join('');
+        modal.classList.add('visible');
+    },
+
+    resumeRun(runId, action) {
+        this.postMessage({ type: 'resume_run', payload: { runId, action } });
+        document.getElementById('recovery-modal')?.classList.remove('visible');
+    },
+
+    // ── 5-Pane Rendering ───────────────────────────────────────────
+    renderMainContent() {
+        this.renderInput();
+        this.renderPrompt();
+        this.renderOutput();
+    },
+
+    renderInput() {
+        const inputEl = document.getElementById('input-content');
+        if (!inputEl) return;
+        const t = key => this.t(key);
+
+        if (this.state.viewMode === 'pipeline') {
+            this.renderPipelineInput(inputEl);
+            return;
+        }
+
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) {
+            inputEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
+            return;
+        }
+        const content = node.content ? (() => { try { return atob(node.content); } catch { return node.content; } })() : '';
+        inputEl.innerHTML = `
+            <textarea id="input-textarea" class="input-textarea" placeholder="${t('NoInput')}">${this.escapeHtml(content)}</textarea>
+            <div class="input-source-bar">
+                <span class="input-source-label">${t('Source')}</span>
+                <span class="input-source-value">${t('PreviousStep')}</span>
+                <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
+            </div>`;
+    },
+
+    renderPipelineInput(el) {
+        const si = this.state.selectedStep;
+        const t = key => this.t(key);
+        if (si < 0 || !this.state.pipelineSteps || si >= this.state.pipelineSteps.length) {
+            el.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
+            return;
+        }
+        const step = this.state.pipelineSteps[si];
+        const inputText = step.input || '(no input yet)';
+        el.innerHTML = `
+            <div class="input-header">
+                <span class="input-step-badge">${t('Step')} ${si + 1}</span>
+                <span class="input-step-name">${this.escapeHtml(step.name)}</span>
+            </div>
+            <div class="input-source-bar">
+                <span class="input-source-value">${this.escapeHtml(step.source || t('PreviousStep'))}</span>
+                <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
+            </div>
+            <pre class="input-display">${this.escapeHtml(inputText)}</pre>`;
+    },
+
+    renderPrompt() {
+        const promptEl = document.getElementById('prompt-content');
+        if (!promptEl) return;
+        const t = key => this.t(key);
+
+        if (this.state.viewMode === 'pipeline') {
+            this.renderPipelinePrompt(promptEl);
+            return;
+        }
+
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node || !node.pipelineMeta) {
+            promptEl.innerHTML = `<div class="empty">${t('NoPrompt')}</div>`;
+            return;
+        }
+        let meta;
+        try { meta = JSON.parse(node.pipelineMeta); } catch {
+            promptEl.innerHTML = `<div class="empty">${t('NoPrompt')}</div>`;
+            return;
+        }
+        promptEl.innerHTML = this.buildPromptHtml(meta);
+    },
+
+    renderPipelinePrompt(el) {
+        const si = this.state.selectedStep;
+        const t = key => this.t(key);
+        if (si < 0 || !this.state.pipelineSteps || si >= this.state.pipelineSteps.length) {
+            el.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
+            return;
+        }
+        const step = this.state.pipelineSteps[si];
+        const typeInfo = this.PM_STEP_TYPES[step.type] || { icon: '❓', label: step.type, fields: [] };
+        let html = `<div class="prompt-header">${typeInfo.icon} ${this.escapeHtml(typeInfo.label)}</div>`;
+
+        if (step.params) {
+            for (const [key, value] of Object.entries(step.params)) {
+                const displayVal = value.length > 200 ? value.substring(0, 200) + '...' : value;
+                html += `<div class="param-row">
+                    <span class="param-key">${this.escapeHtml(key)}</span>
+                    <span class="param-value">${this.escapeHtml(displayVal)}</span>
+                </div>`;
+            }
+        }
+        el.innerHTML = html;
+    },
+
+    renderOutput() {
+        const outputEl = document.getElementById('output-content');
+        if (!outputEl) return;
+        const t = key => this.t(key);
+
+        if (this.state.viewMode === 'pipeline') {
+            this.renderPipelineOutput(outputEl);
+            return;
+        }
+
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node || !node.children || node.children.length === 0) {
+            outputEl.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
+            return;
+        }
+        const child = node.children[0];
+        const outputContent = child.content ? (() => { try { return atob(child.content); } catch { return child.content; } })() : '';
+        let html = `<div class="output-toolbar">
+            <span class="output-label">${t('Output')} (${node.children.length})</span>
+            <button class="output-save-btn" onclick="app.saveCurrentOutput()">${t('Save')}</button>
+            <button class="output-discard-btn" onclick="app.discardCurrentOutput()">${t('Discard')}</button>
+            <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
+        </div>`;
+
+        // Show score if available
+        if (child.evaluation) {
+            html += `<div class="eval-badge">★ ${this.escapeHtml(child.evaluation)}</div>`;
+        }
+
+        html += `<pre class="output-display">${this.escapeHtml(outputContent)}</pre>`;
+        outputEl.innerHTML = html;
+    },
+
+    renderPipelineOutput(el) {
+        const si = this.state.selectedStep;
+        const t = key => this.t(key);
+        if (si < 0 || !this.state.pipelineSteps || si >= this.state.pipelineSteps.length) {
+            el.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
+            return;
+        }
+        const step = this.state.pipelineSteps[si];
+        if (!step.completed) {
+            el.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
+            return;
+        }
+        const outputText = step.output || '(empty output)';
+        el.innerHTML = `
+            <div class="output-toolbar">
+                <span class="output-label">${t('Step')} ${si + 1} ${t('Output')}</span>
+                <button class="output-save-btn" onclick="app.savePipelineOutput(${si})">${t('Save')}</button>
+                <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
+            </div>
+            <pre class="output-display">${this.escapeHtml(outputText)}</pre>`;
+    },
+
+    // ── Input Source Dialog ────────────────────────────────────────
+    showInputSourceDialog() {
+        const modal = document.getElementById('input-source-modal');
+        if (!modal) return;
+        const body = document.getElementById('input-source-body');
+        if (!body) return;
+        const t = key => this.t(key);
+
+        body.innerHTML = `
+            <h3>${t('Source')}</h3>
+            <div class="source-option" onclick="app.selectInputSource('previous_step')">
+                📦 ${t('PreviousStep')}
+            </div>
+            <div class="source-option" onclick="app.selectInputSource('manual')">
+                ✏️ ${t('ManualInput')}
+            </div>
+            <div class="source-option" onclick="app.selectInputSource('chest')">
+                📁 ${t('NamedChest')}
+            </div>
+            <div class="source-option" onclick="app.selectInputSource('file')">
+                📂 ${t('ExternalFile')}
+            </div>
+            <div class="source-option" onclick="app.selectInputSource('checkpoint')">
+                📜 ${t('PastCheckpoint')}
+            </div>
+            <div class="source-chest-name" style="display:none" id="source-chest-input">
+                <input type="text" id="chest-name-input" placeholder="${t('EnterChestName')}">
+                <button onclick="app.confirmChestSource()">${t('Confirm')}</button>
+            </div>`;
+        modal.classList.add('visible');
+    },
+
+    selectInputSource(source) {
+        if (source === 'chest') {
+            document.getElementById('source-chest-input').style.display = '';
+            return;
+        }
+        if (source === 'manual') {
+            const input = document.getElementById('input-textarea');
+            if (input) {
+                this.postMessage({ type: 'select_input_source', payload: { stepIndex: this.state.selectedStep, source: 'manual', content: input.value } });
+            }
+        } else if (source === 'checkpoint') {
+            this.postMessage({ type: 'select_input_source', payload: { stepIndex: this.state.selectedStep, source: 'checkpoint' } });
+        } else {
+            this.postMessage({ type: 'select_input_source', payload: { stepIndex: this.state.selectedStep, source } });
+        }
+        document.getElementById('input-source-modal')?.classList.remove('visible');
+    },
+
+    confirmChestSource() {
+        const name = document.getElementById('chest-name-input')?.value;
+        if (!name) return;
+        this.postMessage({ type: 'select_input_source', payload: { stepIndex: this.state.selectedStep, source: 'chest', chestName: name } });
+        document.getElementById('input-source-modal')?.classList.remove('visible');
+    },
+
+    // ── Chest Operations ───────────────────────────────────────────
+    sendToChestDialog() {
+        const t = key => this.t(key);
+        const chestName = prompt(t('EnterChestName'), '');
+        if (!chestName) return;
+        const outputEl = document.getElementById('output-content');
+        const content = outputEl ? outputEl.textContent : '';
+        this.postMessage({ type: 'send_to_chest', payload: { content, chestName } });
+        this.addLog(`📦 ${t('SendToChest')} "${chestName}"`);
+    },
+
+    saveCurrentOutput() {
+        this.addLog(`✔ ${this.t('Save')}`);
+    },
+
+    discardCurrentOutput() {
+        this.addLog(`✕ ${this.t('Discard')}`);
+    },
+
+    savePipelineOutput(stepIndex) {
+        this.addLog(`✔ ${this.t('Step')} ${stepIndex + 1} ${this.t('Save')}`);
+    },
+
+    buildPromptHtml(meta) {
+        let html = '<div class="prompt-steps">';
+        if (meta.pipelineName) {
+            html += `<div class="prompt-title">📋 ${this.escapeHtml(meta.pipelineName)}</div>`;
+        }
+        if (meta.steps) {
+            (meta.steps || []).forEach((s, i) => {
+                html += `<div class="prompt-step">
+                    <div class="prompt-step-header">Step ${i + 1}: ${this.escapeHtml(s.name || s.type)}</div>`;
+                for (const [key, value] of Object.entries(s)) {
+                    if (key === 'name' || key === 'type') continue;
+                    const displayVal = String(value).length > 200 ? String(value).substring(0, 200) + '...' : String(value);
+                    html += `<div class="param-row"><span class="param-key">${this.escapeHtml(key)}</span><span class="param-value">${this.escapeHtml(displayVal)}</span></div>`;
+                }
+                html += '</div>';
+            });
+        }
+        html += '</div>';
+        return html;
+    },
+
+    // ── Project Switcher ───────────────────────────────────────────
+    switchProject(name) {
+        this.postMessage({ type: 'select_project', payload: { projectName: name } });
+    },
+
+    createProject() {
+        const name = prompt('New project name:');
+        if (!name) return;
+        this.postMessage({ type: 'create_project', payload: { projectName: name } });
+    },
+
+    setHistoryRetention(val) {
+        const n = parseInt(val);
+        if (isNaN(n)) return;
+        this.state.historyRetention = Math.max(10, Math.min(500, n));
+        this.postMessage({ type: 'set_history_retention', payload: { maxRuns: this.state.historyRetention } });
+    },
+
     // ── Setup Wizard ──────────────────────────────────────────────
     SW_TEMPLATES: [
         {
@@ -2116,6 +2814,7 @@ const app = {
 
     PM_STEP_TYPES: {
         ai:         { icon: '🤖', label: 'AI Call', fields: ['provider','model','systemPrompt','userPrompt','temperature','maxTokens','attachMedia'] },
+        wizard:     { icon: '🚀', label: 'Wizard', fields: ['wizard','wizardData'] },
         manual:     { icon: '📝', label: 'Manual Review', fields: ['mode','prompt','choices'] },
         command:    { icon: '⚙️', label: 'CLI Command', fields: ['command','args','workingDir','timeout','resultAs'] },
         tool:       { icon: '🔧', label: 'External Tool', fields: ['command','args','waitForExit','resultAs','resultFile','confirm'] },
