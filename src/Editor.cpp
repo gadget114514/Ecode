@@ -349,11 +349,14 @@ void Editor::SwitchToBuffer(size_t index) {
     } else if (action == Dialogs::FileModifiedAction::OpenInNewBuffer) {
       size_t newIdx = OpenFile(buf->GetPath());
       if (newIdx != static_cast<size_t>(-1)) {
+        buf->UpdateFileTime();
         m_activeBufferIndex = newIdx;
         return;
       }
+    } else {
+      // Keep: user acknowledged the external change, suppress future prompts
+      buf->UpdateFileTime();
     }
-    // action == Keep: fall through to switch to the buffer as-is
   }
 
   m_activeBufferIndex = index;

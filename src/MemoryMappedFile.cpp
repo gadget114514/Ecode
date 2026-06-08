@@ -7,6 +7,8 @@ MemoryMappedFile::MemoryMappedFile()
 
 MemoryMappedFile::~MemoryMappedFile() { Close(); }
 
+static constexpr size_t kReadThreshold = 16 * 1024 * 1024; // 16MB
+
 bool MemoryMappedFile::Open(const std::wstring &filePath) {
   Close();
 
@@ -25,7 +27,22 @@ bool MemoryMappedFile::Open(const std::wstring &filePath) {
   m_fileSize = static_cast<size_t>(size.QuadPart);
 
   if (m_fileSize == 0) {
-    // Mapping zero-sized file is not allowed
+    CloseHandle(m_fileHandle);
+    m_fileHandle = INVALID_HANDLE_VALUE;
+    return true;
+  }
+
+  if (m_fileSize <= kReadThreshold) {
+    m_buffer.resize(m_fileSize);
+    DWORD bytesRead = 0;
+    if (!ReadFile(m_fileHandle, &m_buffer[0],
+                  static_cast<DWORD>(m_fileSize), &bytesRead, NULL)) {
+      Close();
+      return false;
+    }
+    CloseHandle(m_fileHandle);
+    m_fileHandle = INVALID_HANDLE_VALUE;
+    m_mappedView = &m_buffer[0];
     return true;
   }
 
@@ -35,6 +52,9 @@ bool MemoryMappedFile::Open(const std::wstring &filePath) {
     Close();
     return false;
   }
+
+  CloseHandle(m_fileHandle);
+  m_fileHandle = INVALID_HANDLE_VALUE;
 
   m_mappedView = MapViewOfFile(m_mappingHandle, FILE_MAP_READ, 0, 0, 0);
   if (m_mappedView == nullptr) {
@@ -46,11 +66,10 @@ bool MemoryMappedFile::Open(const std::wstring &filePath) {
 }
 
 void MemoryMappedFile::Close() {
-  if (m_mappedView) {
-    UnmapViewOfFile(m_mappedView);
-    m_mappedView = nullptr;
-  }
   if (m_mappingHandle) {
+    if (m_mappedView) {
+      UnmapViewOfFile(m_mappedView);
+    }
     CloseHandle(m_mappingHandle);
     m_mappingHandle = NULL;
   }
@@ -58,7 +77,10 @@ void MemoryMappedFile::Close() {
     CloseHandle(m_fileHandle);
     m_fileHandle = INVALID_HANDLE_VALUE;
   }
+  m_mappedView = nullptr;
   m_fileSize = 0;
+  m_buffer.clear();
+  m_buffer.shrink_to_fit();
 }
 
 const char *MemoryMappedFile::GetData() const {
@@ -68,5 +90,5 @@ const char *MemoryMappedFile::GetData() const {
 size_t MemoryMappedFile::GetSize() const { return m_fileSize; }
 
 bool MemoryMappedFile::IsOpen() const {
-  return m_fileHandle != INVALID_HANDLE_VALUE;
+  return m_mappedView != nullptr;
 }

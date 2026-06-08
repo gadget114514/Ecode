@@ -12,7 +12,7 @@
 <body>
 <div id="app">
     <div id="toolbar">
-        <button id="btn-hamburger" onclick="app.showHamburger(event)" data-hint="メニュー" style="display:none">☰</button>
+        <button id="btn-hamburger" onclick="app.showHamburger(event)" data-hint="メニュー">☰</button>
         <button id="btn-nav-back" onclick="app.navBack()" data-hint="前のノードに戻る (Alt+←)" disabled>←</button>
         <button id="btn-nav-fwd"  onclick="app.navForward()" data-hint="次のノードへ進む (Alt+→)" disabled>→</button>
         <span class="separator">|</span>
@@ -84,6 +84,8 @@
     </div>
     <!-- Log Context Menu -->
     <div id="log-context-menu" class="context-menu" style="display:none"></div>
+    <!-- Tree Context Menu -->
+    <div id="tree-context-menu" class="context-menu" style="display:none"></div>
 </div>
 <!-- Hint Tooltip -->
 <div id="hint-tooltip" class="hint-tooltip" style="display:none"></div>

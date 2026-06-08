@@ -21,4 +21,5 @@ private:
   HANDLE m_mappingHandle;
   void *m_mappedView;
   size_t m_fileSize;
+  std::string m_buffer;
 };
