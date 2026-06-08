@@ -1,4 +1,4 @@
-# Prompts Application Design
+﻿# Prompts Application Design
 
 ## Overview
 
@@ -2654,3 +2654,395 @@ OpenAI Codex CLI は `--approval-mode full-auto` でバッチ実行可能。
 | `tool` / `fetch` / `transform` / `foreach` / `parallel` / `wait` ステップ | 低 | 大 |
 | Trigger (schedule / file_watcher / webhook) | 低 | 大 |
 | Expert モード (Cytoscape.js) | 低 | 大 |
+
+
+---
+
+## パイプライン機能拡張 — Claude の提案
+
+> **用語注記**: ここで「拡張」はパイプラインの実行エンジン（ステップ種別・変数・トリガー等）に関する設計提案を指す。
+> AI agent の文脈・記憶・設定のライフサイクル管理は別概念「**AI Agent ハーネス**」として後節で定義する。
+
+### 追加ステップタイプ
+
+既存の Step Types テーブルへの追加候補。
+
+| Type | Description | block UI? |
+|------|-------------|-----------|
+| `"cache"` | 入力ハッシュで結果をキャッシュ。ヒット時はAI呼び出しをスキップ | No |
+| `"assert"` | 出力を検証し、条件不満足時にエラーまたは警告 | No |
+| `"set_var"` | 任意の値を名前付き変数に格納 → `{var.NAME}` で参照 | No |
+| `"notify"` | Windows トースト通知を送信（長時間バックグラウンド実行用） | No |
+
+---
+
+#### `"cache"` — 結果キャッシュステップ
+
+高コストな AI コールや外部 API の結果をキャッシュし、同一入力では再実行をスキップする。
+
+```json
+{
+  "type": "cache",
+  "key": "{content}",
+  "ttl": 3600,
+  "namespace": "translate_v1",
+  "onMiss": { "type": "ai", "provider": "openai", "model": "gpt-4.1", "userPrompt": "..." }
+}
+```
+
+| フィールド | 説明 | デフォルト |
+|-----------|------|---------|
+| `key` | キャッシュキー（プレースホルダー展開後に SHA-256 ハッシュ） | `{content}` |
+| `ttl` | TTL 秒数（0 = 永続） | 0 |
+| `namespace` | キャッシュ名前空間。プロンプト変更時にバージョンアップして無効化 | `"default"` |
+| `onMiss` | キャッシュミス時に実行するインラインステップ定義 | 必須 |
+
+保存先: `%APPDATA%/Ecode/Prompts/cache/<namespace>/<hash>.json`
+Config に "Clear Cache" ボタンを追加。
+
+---
+
+#### `"assert"` — バリデーション・テストステップ
+
+条件を満たさない場合にパイプラインを停止またはログ警告を出す。Test Mode と組み合わせてパイプラインの自動テストに使える。
+
+```json
+{
+  "type": "assert",
+  "expression": "{result}",
+  "operator": "contains",
+  "value": "翻訳:",
+  "message": "翻訳プレフィックスが見つかりません",
+  "onFail": "cancel"
+}
+```
+
+| `onFail` 値 | 動作 |
+|-------------|------|
+| `"cancel"` | パイプライン中断（`onError` と同じ扱い） |
+| `"warn"` | Messages ペインに黄色警告行を出して継続 |
+| `"goto_step"` | 指定 `index` のステップに戻る |
+
+`operator` は `condition` ステップと共通（`contains` / `equals` / `startsWith` / `regex` / `json_path`）。
+
+---
+
+#### `"set_var"` — 名前付き変数の格納
+
+ステップ出力や展開済みプレースホルダーを名前付き変数に格納する。後続ステップで `{var.NAME}` として参照可能。
+
+```json
+{
+  "type": "set_var",
+  "vars": {
+    "original": "{content}",
+    "translated": "{result}",
+    "run_date": "{date}"
+  }
+}
+```
+
+- `{var.NAME}` は同一パイプライン実行内でのみ有効（セッション変数）
+- 複数の `set_var` で同名キーを使うと上書き
+- 用途: 入力を保存して後続ステップで `{result}` が変わっても元の内容を参照できる。`{step.N.result}` より可読性が高い
+
+---
+
+#### `"notify"` — Windows 通知ステップ
+
+長時間パイプラインの途中で Windows トースト通知を送る。バックグラウンド実行時に有用。
+
+```json
+{
+  "type": "notify",
+  "title": "{pipeline.name} Checkpoint",
+  "message": "Step {step.current}/{step.total} 完了: {result}",
+  "sound": false
+}
+```
+
+Windows Action Center に表示。`winrt` Toast API または `ShellExecute` で実装（依存追加なし）。
+
+---
+
+### 変数プレースホルダー追加
+
+既存の `{content}` / `{result}` / `{step.N.result}` への追加候補。
+
+| 構文 | 内容 |
+|------|------|
+| `{date}` | 実行開始日（`YYYY-MM-DD` 形式） |
+| `{time}` | 実行開始時刻（`HH:mm:ss` 形式） |
+| `{node.title}` | 入力ノードのタイトル |
+| `{node.id}` | 入力ノードの内部 ID |
+| `{node.mimetype}` | 入力ノードの MIME タイプ |
+| `{pipeline.name}` | 実行中パイプライン名 |
+| `{step.current}` | 現在のステップ番号（1 始まり） |
+| `{step.total}` | パイプラインの総ステップ数 |
+| `{env.VAR_NAME}` | Windows 環境変数（例: `{env.USERNAME}`） |
+| `{var.NAME}` | `set_var` ステップで格納した名前付き変数 |
+
+`{date}` / `{time}` / `{node.*}` / `{pipeline.name}` / `{step.current}` / `{step.total}` はパイプライン実行開始時に確定し、全ステップで同じ値を保持する。
+`{env.VAR_NAME}` は `GetEnvironmentVariableW` で取得。存在しない変数名は空文字列に展開する。
+
+---
+
+### Command ステップへの stdin 対応
+
+`jq` / `sed` / `python -c` など、stdin からデータを受け取るコマンドへの対応。`stdin` フィールドを追加。
+
+```json
+{
+  "type": "command",
+  "command": "jq",
+  "args": [".data.text"],
+  "stdin": "{result}",
+  "resultAs": "text"
+}
+```
+
+`stdin` が指定された場合、展開後の文字列を UTF-8 でエンコードして子プロセスの stdin に書き込む。`{content_file}` との併用も可（stdin と args にそれぞれ異なるデータを渡せる）。
+
+---
+
+### Trigger 追加: `node_created`
+
+アプリ内イベントをトリガーにする。特定ノードの配下に子ノードが作成されたとき（貼り付け・DnD・別パイプラインの出力）にパイプラインを自動起動。
+
+```json
+{
+  "type": "node_created",
+  "parentNodeTitle": "受信トレイ",
+  "inputMimetype": "text/plain"
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `parentNodeTitle` | 監視する親ノードのタイトル（部分一致） |
+| `inputMimetype` | フィルタする MIME タイプ（省略時は全タイプ） |
+
+**用途例**:
+- `受信トレイ` ノード配下への貼り付けで自動要約パイプラインが走る
+- 別パイプラインの出力ノード作成がトリガーになり、パイプラインを連鎖できる（`node_created` trigger が `call_pipeline` の代替として機能）
+
+---
+
+### foreach ステップへの `aggregateAs` 追加
+
+現在は結果を改行連結するのみ。集約方式を選べるようにする。
+
+```json
+{
+  "type": "foreach",
+  "input": "{result}",
+  "itemVariable": "item",
+  "steps": [ { "type": "ai", "userPrompt": "Summarize: {item}" } ],
+  "concurrency": 3,
+  "aggregateAs": "json_array"
+}
+```
+
+| `aggregateAs` 値 | 動作 |
+|-----------------|------|
+| `"newline"` | 改行連結（現行デフォルト） |
+| `"json_array"` | JSON 配列 `["result1", "result2", ...]` |
+| `"numbered_list"` | `1. result1\n2. result2\n...` |
+| `"csv"` | カンマ区切り（RFC 4180 エスケープ） |
+
+`"json_array"` にしておくと後続の `condition` / `transform`（`json_path` engine）と組み合わせて要素アクセスが容易になる。
+
+---
+
+### Pipeline レベル: 入力バリデーション
+
+`inputSpec` フィールドをパイプライン定義に追加し、実行前に入力ノードを検証する。
+
+```json
+{
+  "name": "PDF 要約",
+  "inputSpec": {
+    "mimetypes": ["application/pdf"],
+    "minAttachments": 1,
+    "contentNotEmpty": true
+  },
+  "steps": [...]
+}
+```
+
+バリデーション失敗時は「このパイプラインは PDF ノードにのみ対応しています」とダイアログ表示して実行を中断。
+Context Menu の「▶ Run Pipeline」サブメニューでも `inputSpec` 不適合のパイプラインをグレーアウト表示できる。
+
+---
+
+## AI Agent ハーネス
+
+> **定義**: ここで「ハーネス」とは、AI agent が特定のタスクに専念するために必要な **文脈・記憶・スキル・設定のセット** を指す。
+> パイプライン（ステップの実行順序）とは別物。パイプラインは「何をどの順番で実行するか」を定義し、ハーネスは「その AI がどういう存在であるか」を定義する。
+
+### ハーネスの構成要素
+
+```json
+{
+  "name": "technical_translator",
+  "systemPrompt": "You are a professional technical translator specializing in software documentation.",
+  "memory": [
+    "ユーザーはヘビメタ好きで、ユーモアを好む",
+    "プロジェクト固有用語: 'ハーネス' = agent context bundle"
+  ],
+  "skills": ["search_web", "read_file"],
+  "config": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-6",
+    "temperature": 0.3
+  },
+  "baseline": "technical_translator_v1"
+}
+```
+
+| フィールド | 内容 |
+|-----------|------|
+| `systemPrompt` | agent の役割・制約・スタイルを定義するシステムプロンプト |
+| `memory[]` | 過去のやり取りや蓄積された事実。実行のたびに増える |
+| `skills[]` | この agent が利用できるツール・コマンドの識別子 |
+| `config` | デフォルトのモデル・プロバイダ・パラメータ |
+| `baseline` | リセット時に戻すスナップショット名 |
+
+### ライフサイクル: 保存 / 強化 / 再利用 / リセット
+
+```
+保存 (save)     ──→  harnesses/<name>.json に現在の状態をスナップショット
+強化 (enhance)  ──→  memory[] に追記、systemPrompt を更新、skills を追加
+再利用 (reuse)  ──→  別パイプライン実行や別ノードに同じハーネスをロード
+リセット (reset) ──→  baseline スナップショットに巻き戻し（memory をクリア）
+```
+
+### ストレージ
+
+```
+%APPDATA%/Ecode/Prompts/
+└── harnesses/
+    ├── technical_translator.json      ← 現在の状態（memory が蓄積される）
+    ├── technical_translator_v1.json   ← baseline スナップショット
+    └── code_reviewer.json
+```
+
+- **現在状態** (`<name>.json`): パイプライン実行のたびに memory が追記される生きたファイル
+- **ベースライン** (`<name>_<tag>.json`): `save` 操作で明示的に作成するスナップショット。`reset` の戻り先
+
+### パイプラインとの関係
+
+ハーネスはパイプラインの「ai」ステップに `harness` フィールドで指定する。
+
+```json
+{
+  "type": "ai",
+  "harness": "technical_translator",
+  "userPrompt": "以下を翻訳してください:\n\n{content}"
+}
+```
+
+- `harness` が指定された場合、そのハーネスの `systemPrompt` / `config` を使用
+- `systemPrompt` / `provider` / `model` の直接指定はハーネス設定を上書き（オーバーライド可）
+
+### ハーネス操作ステップ
+
+パイプライン内でハーネスのライフサイクルを操作するステップ型。
+
+#### `"harness_enhance"` — 強化ステップ
+
+パイプライン実行中に得た情報をハーネスの memory に追記する。
+
+```json
+{
+  "type": "harness_enhance",
+  "harness": "technical_translator",
+  "add_memory": "{result}",
+  "save_snapshot": false
+}
+```
+
+| フィールド | 説明 |
+|-----------|------|
+| `add_memory` | memory[] に追記する文字列（プレースホルダー展開後） |
+| `save_snapshot` | `true` にすると enhance 前の状態をベースラインとして保存 |
+
+#### `"harness_reset"` — リセットステップ
+
+ハーネスを baseline スナップショットに巻き戻す。蓄積された memory をクリアする。
+
+```json
+{
+  "type": "harness_reset",
+  "harness": "technical_translator",
+  "to": "technical_translator_v1"
+}
+```
+
+`to` を省略した場合、`baseline` フィールドが指す名前を使用。
+
+#### `"harness_save"` — 保存ステップ
+
+現在のハーネス状態を名前付きスナップショットとして保存する。
+
+```json
+{
+  "type": "harness_save",
+  "harness": "technical_translator",
+  "tag": "after_project_x"
+}
+```
+
+保存先: `harnesses/technical_translator_after_project_x.json`
+
+### Harness Manager UI
+
+Pipeline Manager と同様に、ハーネスの一覧・編集・スナップショット管理を行う専用パネル。
+
+```
+┌────────────────────────────────────────────────────┐
+│ Harnesses                              [+ New]     │
+├──────────────────┬─────────────────────────────────┤
+│ technical_trans  │  Name: [technical_translator   ]│
+│ code_reviewer    │                                 │
+│                  │  System Prompt:                 │
+│                  │  [You are a professional...   ] │
+│                  │                                 │
+│                  │  Memory (3 entries):            │
+│                  │  ┌───────────────────────────┐  │
+│                  │  │ ユーザーはヘビメタ好き     │  │
+│                  │  │ 用語: ハーネス = ...       │  │
+│                  │  │ [+ Add]  [✕ per item]     │  │
+│                  │  └───────────────────────────┘  │
+│                  │                                 │
+│                  │  Snapshots:                     │
+│                  │  [v1 (baseline)]  [after_prj_x] │
+│                  │  [📸 Save now]  [🔄 Reset to ▾] │
+│                  │                                 │
+│                  │  [💾 Save]  [🗑 Delete]         │
+└──────────────────┴─────────────────────────────────┘
+```
+
+### Bridge メッセージ
+
+| 方向 | type | payload | 説明 |
+|------|------|---------|------|
+| JS→C++ | `save_harness` | `{harness}` | ハーネス定義を保存 |
+| JS→C++ | `reset_harness` | `{name, to}` | ベースラインにリセット |
+| JS→C++ | `snapshot_harness` | `{name, tag}` | 現在状態をスナップショット保存 |
+| C++→JS | `harness_list` | `{harnesses[]}` | ハーネス一覧（起動時 + 保存後） |
+
+### CLAUDE.md / memory との対比（参考）
+
+Prompts アプリのハーネスは、Claude Code の設定ファイル群と概念的に対応する。
+
+| Prompts ハーネス | Claude Code 相当 | 内容 |
+|----------------|----------------|------|
+| `systemPrompt` | `CLAUDE.md` | agent の役割・ルール定義 |
+| `memory[]` | `memory/*.md` (auto memory) | 蓄積された事実・フィードバック |
+| `skills[]` | `.claude/skills/*.md` | 再利用可能なスキル定義 |
+| `config` | `settings.json` | モデル・権限・フック設定 |
+| snapshot (baseline) | git commit / branch | 状態のバージョン管理 |
+
+この対比を念頭に置くと、Prompts のハーネス設計の意図が明確になる:
+**「CLAUDE.md + memory が git で管理されるように、Prompts のハーネスもスナップショットで管理できる」**。

@@ -22,5 +22,3 @@
 #define ID_VIEW_FULLSCREEN   244
 #define ID_HELP_DOCS         250
 #define ID_HELP_ABOUT        251
-#define ID_HELP_WIZARD       252
-#define ID_HELP_SETUP_WIZARD 253

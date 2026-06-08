@@ -2,7 +2,6 @@
 #include "resource.h"
 #include "JsonParser.h"
 #include "Base64.h"
-#include "AIProvider.h"
 #include <shlobj.h>
 #include <commctrl.h>
 #include <commdlg.h>
@@ -13,7 +12,6 @@
 #include <wrl/client.h>
 #include <wrl/implements.h>
 #include <WebView2.h>
-#include <thread>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "ole32.lib")
@@ -23,15 +21,11 @@ using namespace Microsoft::WRL;
 
 #define WM_APP_WEBVIEW2_READY (WM_APP + 1)
 
-App::App()
-    : versionMgr_(storage_)
-    , optimizer_(storage_)
-{
+App::App() {
     runner_.SetBridgeCallback([this](const std::string &type, const std::string &json) {
         if (type == "pipeline_completed") {
             storage_.SaveHistory(json);
         }
-        bridge_.PostToJS("log", "{\"message\":\"🏃 PipelineRunner Callback: type=" + type + "\"}");
         bridge_.PostToJS(type, json);
     });
     bridge_.SetHandler([this](const std::string &type, const std::string &payload) {
@@ -182,12 +176,6 @@ void App::OnCommand(int id) {
             ShowWindow(hwnd_, SW_RESTORE);
         else
             ShowWindow(hwnd_, SW_MAXIMIZE);
-        break;
-    case ID_HELP_WIZARD:
-        bridge_.PostToJS("menu_command", "{\"action\":\"welcome_wizard\"}");
-        break;
-    case ID_HELP_SETUP_WIZARD:
-        bridge_.PostToJS("menu_command", "{\"action\":\"setup_wizard\"}");
         break;
     case ID_HELP_DOCS:
         ShellExecuteW(hwnd_, L"open", L"https://github.com/gadget114514/Ecode", nullptr, nullptr, SW_SHOW);
@@ -368,7 +356,7 @@ void App::InitWebView2() {
                             MsgHandler(App *a) : app(a) {}
                             HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2 *, ICoreWebView2WebMessageReceivedEventArgs *args) override {
                                 LPWSTR raw = nullptr;
-                                args->get_WebMessageAsJson(&raw);
+                                args->TryGetWebMessageAsString(&raw);
                                 if (raw) {
                                     int len = WideCharToMultiByte(CP_UTF8, 0, raw, -1, nullptr, 0, nullptr, nullptr);
                                     std::string s(len, 0);
@@ -377,7 +365,6 @@ void App::InitWebView2() {
 
                                     auto val = JsonValue::parse(s);
                                     std::string type = val["type"].string();
-                                    app->bridge_.PostToJS("log", "{\"message\":\"📥 WebMessage Received: type=" + type + "\"}");
                                     if (type == "init_complete") {
                                         app->SendFullInit();
                                     } else {
@@ -398,36 +385,6 @@ void App::InitWebView2() {
                         };
 
                         app->webview_->add_WebMessageReceived(Make<MsgHandler>(app).Get(), nullptr);
-
-                        // Handle permissions (allow microphone access for voice input/Web Speech API)
-                        struct PermissionHandler : RuntimeClass<RuntimeClassFlags<ClassicCom>, ICoreWebView2PermissionRequestedEventHandler> {
-                            App *app;
-                            PermissionHandler(App *a) : app(a) {}
-                            HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2 *, ICoreWebView2PermissionRequestedEventArgs *args) override {
-                                COREWEBVIEW2_PERMISSION_KIND kind;
-                                if (SUCCEEDED(args->get_PermissionKind(&kind))) {
-                                    if (kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE) {
-                                        args->put_State(COREWEBVIEW2_PERMISSION_STATE_ALLOW);
-                                    }
-                                }
-                                return S_OK;
-                            }
-                        };
-                        app->webview_->add_PermissionRequested(Make<PermissionHandler>(app).Get(), nullptr);
-
-                        // Notify JS when navigation is completed so frontend knows the host is ready
-                        struct NavCompletedHandler : RuntimeClass<RuntimeClassFlags<ClassicCom>, ICoreWebView2NavigationCompletedEventHandler> {
-                            App *app;
-                            NavCompletedHandler(App *a) : app(a) {}
-                            HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *args) override {
-                                BOOL isSuccess = FALSE;
-                                if (args) args->get_IsSuccess(&isSuccess);
-                                app->bridge_.PostToJS("log", "{\"message\":\"🌐 WebView2 Navigation Completed (success=" + std::to_string(isSuccess) + ")\"}");
-                                app->bridge_.PostToJS("ready", "{}");
-                                return S_OK;
-                            }
-                        };
-                        app->webview_->add_NavigationCompleted(Make<NavCompletedHandler>(app).Get(), nullptr);
 
                         // Set up virtual host mapping
                         ICoreWebView2_3 *wv3 = nullptr;
@@ -518,22 +475,16 @@ void App::SendFullInit() {
 
     // Load pipelines
     auto pipelines = storage_.LoadPipelines();
-    std::string pipelinesJson = Storage::SerializePipelines(pipelines);
-    // Strip outer {"pipelines":} wrapper, keep array only
-    auto pv = JsonValue::parse(pipelinesJson);
-    if (pv.has("pipelines")) {
-        pipelinesJson = pv["pipelines"].serialize();
-    } else {
-        pipelinesJson = "[]";
+    std::string pipelinesJson = "[";
+    bool firstPipe = true;
+    for (auto &p : pipelines) {
+        if (!firstPipe) pipelinesJson += ",";
+        firstPipe = false;
+        pipelinesJson += "{\"name\":\"" + PipelineRunner::JsonEscape(p.name) + "\""
+                       + ",\"outputMode\":\"" + p.outputMode + "\""
+                       + ",\"mode\":\"" + p.mode + "\"}";
     }
-
-    // Load and register API providers (resume saved keys)
-    {
-        auto providers = storage_.LoadProviders();
-        for (auto &kv : providers) {
-            runner_.RegisterProvider(kv.first, kv.second.apiKey, kv.second.baseUrl);
-        }
-    }
+    pipelinesJson += "]";
 
     // Recent files
     recentFiles_ = storage_.LoadRecentFiles();
@@ -569,34 +520,12 @@ void App::SendFullInit() {
     }
     storage_.GarbageCollectBlobs(referencedBlobs);
 
-    // Build providers JSON
-    std::string providersJson = "{";
-    {
-        bool firstProv = true;
-        auto providers = storage_.LoadProviders();
-        for (auto &kv : providers) {
-            if (!firstProv) providersJson += ",";
-            firstProv = false;
-            std::map<std::string, JsonValue> cfg;
-            cfg["apiKey"]  = JsonValue::fromString(kv.second.apiKey);
-            cfg["baseUrl"] = JsonValue::fromString(kv.second.baseUrl);
-            std::vector<JsonValue> models;
-            for (auto &m : kv.second.models)
-                models.push_back(JsonValue::fromString(m));
-            cfg["models"] = JsonValue::fromArray(models);
-            providersJson += "\"" + PipelineRunner::JsonEscape(kv.first) + "\":"
-                           + JsonValue::fromObject(cfg).serialize(false);
-        }
-    }
-    providersJson += "}";
-
     bridge_.PostToJS("init",
         "{\"language\":\"" + localization_.GetCurrentLanguage() + "\""
         ",\"embedded\":"  + (embedded_ ? "true" : "false") +
         ",\"tabs\":"      + tabsJson +
         ",\"nodes\":"     + nodesJson +
         ",\"pipelines\":" + pipelinesJson +
-        ",\"providers\":" + providersJson +
         ",\"recentFiles\":" + recentJson + "}");
 }
 
@@ -690,113 +619,30 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         SaveFileDialog();
     } else if (type == "get_providers") {
         auto providers = storage_.LoadProviders();
-        bridge_.PostToJS("log", "{\"message\":\"get_providers: " + std::to_string(providers.size()) + " providers loaded\"}");
-        std::map<std::string, JsonValue> obj;
+        std::string json = "{";
+        bool first = true;
         for (auto &kv : providers) {
-            std::map<std::string, JsonValue> cfg;
-            cfg["apiKey"]  = JsonValue::fromString(kv.second.apiKey);
-            cfg["baseUrl"] = JsonValue::fromString(kv.second.baseUrl);
-            obj[kv.first] = JsonValue::fromObject(cfg);
+            if (!first) json += ",";
+            first = false;
+            json += "\"" + kv.first + "\":{\"apiKey\":\"" + kv.second.apiKey + "\",\"baseUrl\":\"" + kv.second.baseUrl + "\"}";
         }
-        std::string json = JsonValue::fromObject(obj).serialize(false);
-        bridge_.PostToJS("log", "{\"message\":\"providers json: " + PipelineRunner::JsonEscape(json) + "\"}");
+        json += "}";
         bridge_.PostToJS("providers_result", json);
     } else if (type == "history_list") {
         HandleHistoryList();
     } else if (type == "history_detail") {
         HandleHistoryDetail(payload);
-    } else if (type == "evaluate_node") {
-        HandleEvaluateNode(payload);
-    } else if (type == "evaluate_history_step") {
-        HandleEvaluateHistoryStep(payload);
-    } else if (type == "evaluate_history_run") {
-        HandleEvaluateHistoryRun(payload);
-    } else if (type == "optimize_pipeline") {
-        HandleOptimizePipeline(payload);
-    } else if (type == "optimize_apply") {
-        HandleOptimizeApply(payload);
-    } else if (type == "optimize_undo") {
-        HandleOptimizeUndo(payload);
-    } else if (type == "optimize_redo") {
-        HandleOptimizeRedo(payload);
-    } else if (type == "optimize_checkout") {
-        HandleOptimizeCheckout(payload);
-    } else if (type == "optimize_reapply") {
-        HandleOptimizeReapply(payload);
-    } else if (type == "optimize_version_list") {
-        HandleOptimizeVersionList(payload);
     } else if (type == "save_providers") {
-        bridge_.PostToJS("log", "{\"message\":\"save_providers called, payload length=" + std::to_string(payload.size()) + "\"}");
         auto val = JsonValue::parse(payload);
-        if (val.type() != JsonValue::Object) {
-            bridge_.PostToJS("log", "{\"message\":\"ERROR: payload is not an object, type=" + std::to_string(val.type()) + "\"}");
-            return;
-        }
         std::map<std::string, ProviderConfig> providers;
-        int savedCount = 0;
         for (auto &kv : val.object()) {
             ProviderConfig cfg;
             if (kv.second.has("apiKey"))  cfg.apiKey  = kv.second["apiKey"].string();
             if (kv.second.has("baseUrl")) cfg.baseUrl = kv.second["baseUrl"].string();
-            if (kv.second.has("models")) {
-                for (auto &m : kv.second["models"].array())
-                    cfg.models.push_back(m.string());
-            }
             providers[kv.first] = cfg;
             runner_.RegisterProvider(kv.first, cfg.apiKey, cfg.baseUrl);
-            if (!cfg.apiKey.empty()) savedCount++;
         }
-        // Resolve save path for logging
-        std::wstring savePath = appDataPath_ + L"\\providers.json";
-        std::string pathA;
-        {
-            int pathLen = WideCharToMultiByte(CP_UTF8, 0, savePath.c_str(), -1, nullptr, 0, nullptr, nullptr);
-            pathA.resize(pathLen);
-            WideCharToMultiByte(CP_UTF8, 0, savePath.c_str(), -1, &pathA[0], pathLen, nullptr, nullptr);
-            if (!pathA.empty() && pathA.back() == '\0') pathA.pop_back();
-        }
-        if (providers.empty()) {
-            bridge_.PostToJS("log", "{\"message\":\"📂 No providers to save: " + PipelineRunner::JsonEscape(pathA) + " (not written)\"}");
-        } else {
-            bool saved = storage_.SaveProviders(providers);
-            if (saved) {
-                bridge_.PostToJS("log", "{\"message\":\"✅ Saved " + std::to_string(savedCount) + " provider(s) → " + PipelineRunner::JsonEscape(pathA) + "\"}");
-            } else {
-                bridge_.PostToJS("log", "{\"message\":\"❌ FAILED to write " + PipelineRunner::JsonEscape(pathA) + "\"}");
-            }
-        }
-    } else if (type == "test_provider_connection") {
-        auto val = JsonValue::parse(payload);
-        std::string provider = val.has("provider") ? val["provider"].string() : "";
-        std::string apiKey   = val.has("apiKey")   ? val["apiKey"].string()   : "";
-        std::string baseUrl  = val.has("baseUrl")  ? val["baseUrl"].string()  : "";
-        bridge_.PostToJS("log", "{\"message\":\"Testing " + provider + "...\"}");
-        // Run on background thread to avoid blocking UI
-        std::thread([this, provider, apiKey, baseUrl]() {
-            std::string result;
-            std::string providerName = provider;
-            if (!providerName.empty()) {
-                auto *p = AIProvider::Create(providerName, apiKey, baseUrl);
-                if (p) {
-                    result = p->TestConnection();
-                    delete p;
-                } else {
-                    result = "Unknown provider: " + providerName;
-                }
-            } else {
-                result = "No provider specified";
-            }
-            bridge_.PostToJS("log", "{\"message\":\"Test result for " + providerName + ": " +
-                (result.empty() ? "OK" : "FAILED") + "\"}");
-            std::string resJson = "{\"provider\":\"" + PipelineRunner::JsonEscape(providerName) + "\"";
-            if (result.empty()) {
-                resJson += ",\"success\":true,\"message\":\"Connection OK\"";
-            } else {
-                resJson += ",\"success\":false,\"message\":\"" + PipelineRunner::JsonEscape(result) + "\"";
-            }
-            resJson += "}";
-            bridge_.PostToJS("test_connection_result", resJson);
-        }).detach();
+        storage_.SaveProviders(providers);
     }
 }
 
@@ -892,18 +738,15 @@ void App::HandleHistoryList() {
         if (!val.has("pipelineName")) continue;
         if (!first) json += ",";
         first = false;
-        std::string id         = val.has("id")           ? val["id"].string()           : "";
-        std::string name       = val.has("pipelineName")  ? val["pipelineName"].string()  : "";
-        std::string at         = val.has("startedAt")     ? val["startedAt"].string()     :
-                                  (val.has("executedAt")  ? val["executedAt"].string()    : "");
-        std::string status     = val.has("status")        ? val["status"].string()        : "completed";
-        std::string evaluation = val.has("evaluation")    ? val["evaluation"].string()    : "";
+        std::string id       = val.has("id")          ? val["id"].string()          : "";
+        std::string name     = val.has("pipelineName") ? val["pipelineName"].string() : "";
+        std::string at       = val.has("executedAt")   ? val["executedAt"].string()   : "";
+        std::string status   = val.has("status")       ? val["status"].string()       : "completed";
         int stepCount = val.has("steps") ? (int)val["steps"].array().size() : 0;
         json += "{\"id\":\"" + PipelineRunner::JsonEscape(id) + "\""
               + ",\"pipelineName\":\"" + PipelineRunner::JsonEscape(name) + "\""
-              + ",\"startedAt\":\"" + PipelineRunner::JsonEscape(at) + "\""
+              + ",\"executedAt\":\"" + PipelineRunner::JsonEscape(at) + "\""
               + ",\"status\":\"" + PipelineRunner::JsonEscape(status) + "\""
-              + ",\"evaluation\":\"" + PipelineRunner::JsonEscape(evaluation) + "\""
               + ",\"stepCount\":" + std::to_string(stepCount) + "}";
     }
     json += "]";
@@ -918,379 +761,6 @@ void App::HandleHistoryDetail(const std::string &payload) {
     auto record = storage_.LoadHistoryRecord(L"run_" + wid + L".json");
     if (record.empty()) { bridge_.PostToJS("history_detail_result", "{}"); return; }
     bridge_.PostToJS("history_detail_result", record);
-}
-
-// --- Evaluation handlers ---
-
-void App::HandleEvaluateNode(const std::string &payload) {
-    auto val = JsonValue::parse(payload);
-    std::string nodeId     = val.has("nodeId")    ? val["nodeId"].string()    : "";
-    std::string tabFile    = val.has("tabFile")   ? val["tabFile"].string()   : "";
-    std::string evaluation = val.has("evaluation")? val["evaluation"].string(): "";
-    std::string note       = val.has("note")      ? val["note"].string()      : "";
-    if (nodeId.empty() || tabFile.empty()) return;
-
-    // Load tab, find node by id (nodes don't have explicit id; use title+position heuristic).
-    // For now, tab root and children are identified by nodeId as stringified index path "0.1.2"
-    // (frontend sends path as nodeId). We update the node at that path.
-    std::wstring wtab(tabFile.begin(), tabFile.end());
-    Node root = storage_.LoadTabData(storage_.DataPath(wtab));
-
-    // Walk path
-    std::function<Node*(Node*, const std::string&)> findNode =
-        [&](Node *n, const std::string &path) -> Node* {
-            if (path.empty()) return n;
-            size_t dot = path.find('.');
-            int idx = std::stoi(path.substr(0, dot == std::string::npos ? path.size() : dot));
-            if (idx < 0 || idx >= (int)n->children.size()) return nullptr;
-            std::string rest = dot == std::string::npos ? "" : path.substr(dot + 1);
-            return findNode(&n->children[idx], rest);
-        };
-
-    Node *target = findNode(&root, nodeId);
-    if (!target) {
-        bridge_.PostToJS("evaluation_saved", "{\"error\":\"node not found\"}");
-        return;
-    }
-
-    // Get current ISO timestamp
-    time_t t = time(nullptr);
-    struct tm tm_info;
-    gmtime_s(&tm_info, &t);
-    char buf[32];
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm_info);
-
-    target->evaluation     = evaluation;
-    target->evaluatedAt    = buf;
-    target->evaluationNote = note;
-    storage_.SaveTabData(storage_.DataPath(wtab), root);
-
-    std::map<std::string, JsonValue> resp;
-    resp["targetType"]  = JsonValue::fromString("node");
-    resp["id"]          = JsonValue::fromString(nodeId);
-    resp["evaluation"]  = JsonValue::fromString(evaluation);
-    bridge_.PostToJS("evaluation_saved", JsonValue::fromObject(resp).serialize());
-}
-
-void App::HandleEvaluateHistoryStep(const std::string &payload) {
-    auto val    = JsonValue::parse(payload);
-    std::string runId      = val.has("runId")      ? val["runId"].string()      : "";
-    int stepIdx            = val.has("stepIndex")  ? (int)val["stepIndex"].number() : -1;
-    std::string evaluation = val.has("evaluation") ? val["evaluation"].string() : "";
-    std::string note       = val.has("note")       ? val["note"].string()       : "";
-    if (runId.empty() || stepIdx < 0) return;
-
-    std::wstring wid(runId.begin(), runId.end());
-    std::wstring filename = L"run_" + wid + L".json";
-    std::string json = storage_.LoadHistoryRecord(filename);
-    if (json.empty()) return;
-
-    auto rec = JsonValue::parse(json);
-    // Rebuild object with modified step
-    std::map<std::string, JsonValue> obj;
-    for (auto &kv : rec.object()) obj[kv.first] = kv.second;
-    if (rec.has("steps")) {
-        std::vector<JsonValue> steps;
-        int i = 0;
-        for (auto &s : rec["steps"].array()) {
-            if (i == stepIdx) {
-                std::map<std::string, JsonValue> sobj;
-                for (auto &kv : s.object()) sobj[kv.first] = kv.second;
-                sobj["evaluation"]     = JsonValue::fromString(evaluation);
-                sobj["evaluationNote"] = JsonValue::fromString(note);
-                steps.push_back(JsonValue::fromObject(sobj));
-            } else {
-                steps.push_back(s);
-            }
-            i++;
-        }
-        obj["steps"] = JsonValue::fromArray(steps);
-    }
-    storage_.SaveHistory(JsonValue::fromObject(obj).serialize(true));
-
-    std::map<std::string, JsonValue> resp;
-    resp["targetType"] = JsonValue::fromString("step");
-    resp["id"]         = JsonValue::fromString(runId + "." + std::to_string(stepIdx));
-    resp["evaluation"] = JsonValue::fromString(evaluation);
-    bridge_.PostToJS("evaluation_saved", JsonValue::fromObject(resp).serialize());
-}
-
-void App::HandleEvaluateHistoryRun(const std::string &payload) {
-    auto val    = JsonValue::parse(payload);
-    std::string runId      = val.has("runId")      ? val["runId"].string()      : "";
-    std::string evaluation = val.has("evaluation") ? val["evaluation"].string() : "";
-    if (runId.empty()) return;
-
-    std::wstring wid(runId.begin(), runId.end());
-    storage_.UpdateHistoryEvaluation(L"run_" + wid + L".json", evaluation);
-
-    std::map<std::string, JsonValue> resp;
-    resp["targetType"] = JsonValue::fromString("run");
-    resp["id"]         = JsonValue::fromString(runId);
-    resp["evaluation"] = JsonValue::fromString(evaluation);
-    bridge_.PostToJS("evaluation_saved", JsonValue::fromObject(resp).serialize());
-}
-
-// --- Optimizer handlers ---
-
-static std::string VersionCursorToJson(const VersionCursor &cursor) {
-    std::map<std::string, JsonValue> obj;
-    obj["pipelineName"]  = JsonValue::fromString(cursor.pipelineName);
-    obj["currentVersion"]= JsonValue::fromDouble(cursor.currentVersion);
-    obj["headVersion"]   = JsonValue::fromDouble(cursor.headVersion);
-    std::vector<JsonValue> entries;
-    for (auto &e : cursor.entries) {
-        std::map<std::string, JsonValue> ej;
-        ej["version"]   = JsonValue::fromDouble(e.version);
-        ej["timestamp"] = JsonValue::fromString(e.timestamp);
-        ej["label"]     = JsonValue::fromString(e.label);
-        ej["sessionId"] = JsonValue::fromString(e.sessionId);
-        entries.push_back(JsonValue::fromObject(ej));
-    }
-    obj["entries"] = JsonValue::fromArray(entries);
-    return JsonValue::fromObject(obj).serialize();
-}
-
-static void PostVersionChanged(Bridge &bridge, const VersionCursor &cursor) {
-    std::map<std::string, JsonValue> obj;
-    obj["pipelineName"]  = JsonValue::fromString(cursor.pipelineName);
-    obj["version"]       = JsonValue::fromDouble(cursor.currentVersion);
-    obj["canUndo"]       = JsonValue::fromBool(cursor.currentVersion > 1);
-    obj["canRedo"]       = JsonValue::fromBool(cursor.currentVersion < cursor.headVersion);
-    bridge.PostToJS("optimize_version_changed", JsonValue::fromObject(obj).serialize());
-}
-
-void App::HandleOptimizePipeline(const std::string &payload) {
-    auto val        = JsonValue::parse(payload);
-    std::string name = val.has("pipelineName") ? val["pipelineName"].string() : "";
-    int historyLimit = val.has("historyLimit")  ? (int)val["historyLimit"].number()  : 10;
-    int maxEdits     = val.has("maxEditsPerStep")? (int)val["maxEditsPerStep"].number(): 3;
-    std::string prov  = val.has("provider")     ? val["provider"].string() : "";
-    std::string model = val.has("model")        ? val["model"].string()    : "";
-    if (name.empty() || prov.empty() || model.empty()) {
-        bridge_.PostToJS("optimize_error", "{\"message\":\"Missing pipelineName, provider, or model\"}");
-        return;
-    }
-
-    auto pipelines = storage_.LoadPipelines();
-    Pipeline pipeline;
-    bool found = false;
-    for (auto &p : pipelines) { if (p.name == name) { pipeline = p; found = true; break; } }
-    if (!found) {
-        bridge_.PostToJS("optimize_error", "{\"message\":\"Pipeline not found: " +
-                         PipelineRunner::JsonEscape(name) + "\"}");
-        return;
-    }
-
-    // Ensure base version exists
-    versionMgr_.EnsureBaseVersion(name, pipeline);
-
-    // Look up API credentials
-    auto providers = storage_.LoadProviders();
-    std::string apiKey, baseUrl;
-    if (providers.count(prov)) {
-        apiKey  = providers[prov].apiKey;
-        baseUrl = providers[prov].baseUrl;
-    }
-
-    // Active session for later apply
-    activeOptSession_ = std::make_unique<OptSession>();
-    activeOptSession_->pipelineName = name;
-    activeOptSession_->rejectedBuffer = optimizer_.LoadRejectedBuffer(name);
-
-    // Bridge callback (thread-safe: PostToJS queues a UI-thread message)
-    auto &bridge = bridge_;
-    auto &opt    = optimizer_;
-    auto &sess   = activeOptSession_;
-    optimizer_.StartSession(name, pipeline, historyLimit, maxEdits,
-                            prov, apiKey, baseUrl, model,
-                            [&bridge, &opt, &sess](const std::string &type, const std::string &json) {
-                                if (type == "optimize_proposals") {
-                                    // Store proposals in active session
-                                    auto v = JsonValue::parse(json);
-                                    if (v.has("sessionId") && sess)
-                                        sess->sessionId = v["sessionId"].string();
-                                    if (v.has("proposals") && sess) {
-                                        for (auto &p : v["proposals"].array()) {
-                                            OptEditProposal prop;
-                                            if (p.has("op"))        prop.op        = p["op"].string();
-                                            if (p.has("stepName"))  prop.stepName  = p["stepName"].string();
-                                            if (p.has("field"))     prop.field     = p["field"].string();
-                                            if (p.has("oldValue"))  prop.oldValue  = p["oldValue"].string();
-                                            if (p.has("newValue"))  prop.newValue  = p["newValue"].string();
-                                            if (p.has("rationale")) prop.rationale = p["rationale"].string();
-                                            sess->proposals.push_back(prop);
-                                        }
-                                    }
-                                }
-                                bridge.PostToJS(type, json);
-                            });
-}
-
-void App::HandleOptimizeApply(const std::string &payload) {
-    auto val = JsonValue::parse(payload);
-    std::string name      = val.has("pipelineName") ? val["pipelineName"].string() : "";
-    std::string sessionId = val.has("sessionId")    ? val["sessionId"].string()    : "";
-    if (name.empty() || !activeOptSession_ || activeOptSession_->pipelineName != name) {
-        bridge_.PostToJS("optimize_error", "{\"message\":\"No active optimization session\"}");
-        return;
-    }
-
-    std::vector<int> approved, rejected;
-    if (val.has("approved"))
-        for (auto &v : val["approved"].array()) approved.push_back((int)v.number());
-    if (val.has("rejected"))
-        for (auto &v : val["rejected"].array()) rejected.push_back((int)v.number());
-
-    auto pipelines = storage_.LoadPipelines();
-    Pipeline pipeline;
-    bool found = false;
-    int pipelineIdx = -1;
-    for (int i = 0; i < (int)pipelines.size(); i++) {
-        if (pipelines[i].name == name) { pipeline = pipelines[i]; found = true; pipelineIdx = i; break; }
-    }
-    if (!found) {
-        bridge_.PostToJS("optimize_error", "{\"message\":\"Pipeline not found\"}");
-        return;
-    }
-
-    Pipeline updated = PipelineOptimizer::ApplyApprovals(pipeline, approved, rejected, *activeOptSession_);
-
-    // Save rejected buffer
-    optimizer_.SaveRejectedBuffer(name, activeOptSession_->rejectedBuffer);
-
-    // Build label
-    std::string label = "Optimize (" + std::to_string(approved.size()) + " edits)";
-    std::vector<OptEditProposal> approvedProposals;
-    for (int idx : approved)
-        if (idx >= 0 && idx < (int)activeOptSession_->proposals.size())
-            approvedProposals.push_back(activeOptSession_->proposals[idx]);
-
-    int newVersion = versionMgr_.CommitVersion(name, updated, sessionId, label, approvedProposals);
-
-    // Update pipeline in storage
-    if (pipelineIdx >= 0) pipelines[pipelineIdx] = updated;
-    else pipelines.push_back(updated);
-    storage_.SavePipelines(pipelines);
-
-    // Clear active session
-    activeOptSession_.reset();
-
-    // Notify frontend
-    auto cursor = versionMgr_.GetCursor(name);
-    std::map<std::string, JsonValue> resp;
-    resp["pipelineName"]  = JsonValue::fromString(name);
-    resp["approvedCount"] = JsonValue::fromDouble((int)approved.size());
-    resp["rejectedCount"] = JsonValue::fromDouble((int)rejected.size());
-    resp["version"]       = JsonValue::fromDouble(newVersion);
-    bridge_.PostToJS("optimize_applied", JsonValue::fromObject(resp).serialize());
-    bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
-    PostVersionChanged(bridge_, cursor);
-}
-
-void App::HandleOptimizeUndo(const std::string &payload) {
-    auto val    = JsonValue::parse(payload);
-    std::string name = val.has("pipelineName") ? val["pipelineName"].string() : "";
-    if (name.empty()) return;
-
-    auto restored = versionMgr_.Undo(name);
-    if (!restored) {
-        bridge_.PostToJS("optimize_error", "{\"message\":\"Already at earliest version\"}");
-        return;
-    }
-
-    auto pipelines = storage_.LoadPipelines();
-    for (auto &p : pipelines) { if (p.name == name) { p = *restored; break; } }
-    storage_.SavePipelines(pipelines);
-
-    auto cursor = versionMgr_.GetCursor(name);
-    bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
-    PostVersionChanged(bridge_, cursor);
-}
-
-void App::HandleOptimizeRedo(const std::string &payload) {
-    auto val    = JsonValue::parse(payload);
-    std::string name = val.has("pipelineName") ? val["pipelineName"].string() : "";
-    if (name.empty()) return;
-
-    auto restored = versionMgr_.Redo(name);
-    if (!restored) {
-        bridge_.PostToJS("optimize_error", "{\"message\":\"Already at latest version\"}");
-        return;
-    }
-
-    auto pipelines = storage_.LoadPipelines();
-    for (auto &p : pipelines) { if (p.name == name) { p = *restored; break; } }
-    storage_.SavePipelines(pipelines);
-
-    auto cursor = versionMgr_.GetCursor(name);
-    bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
-    PostVersionChanged(bridge_, cursor);
-}
-
-void App::HandleOptimizeCheckout(const std::string &payload) {
-    auto val    = JsonValue::parse(payload);
-    std::string name = val.has("pipelineName") ? val["pipelineName"].string() : "";
-    int version      = val.has("version")       ? (int)val["version"].number()  : -1;
-    if (name.empty() || version < 1) return;
-
-    auto restored = versionMgr_.CheckoutVersion(name, version);
-    if (!restored) {
-        bridge_.PostToJS("optimize_error", "{\"message\":\"Version not found\"}");
-        return;
-    }
-
-    auto pipelines = storage_.LoadPipelines();
-    for (auto &p : pipelines) { if (p.name == name) { p = *restored; break; } }
-    storage_.SavePipelines(pipelines);
-
-    auto cursor = versionMgr_.GetCursor(name);
-    bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
-    PostVersionChanged(bridge_, cursor);
-}
-
-void App::HandleOptimizeReapply(const std::string &payload) {
-    auto val    = JsonValue::parse(payload);
-    std::string name = val.has("pipelineName") ? val["pipelineName"].string() : "";
-    int version      = val.has("version")       ? (int)val["version"].number()  : -1;
-    if (name.empty() || version < 1) return;
-
-    auto pipelines = storage_.LoadPipelines();
-    Pipeline current;
-    bool found = false;
-    int idx = -1;
-    for (int i = 0; i < (int)pipelines.size(); i++) {
-        if (pipelines[i].name == name) { current = pipelines[i]; found = true; idx = i; break; }
-    }
-    if (!found) {
-        bridge_.PostToJS("optimize_error", "{\"message\":\"Pipeline not found\"}");
-        return;
-    }
-
-    Pipeline updated = versionMgr_.ReapplyVersion(name, version, current);
-    if (idx >= 0) pipelines[idx] = updated;
-    storage_.SavePipelines(pipelines);
-
-    auto cursor = versionMgr_.GetCursor(name);
-    std::map<std::string, JsonValue> resp;
-    resp["pipelineName"]  = JsonValue::fromString(name);
-    resp["approvedCount"] = JsonValue::fromDouble(0);
-    resp["rejectedCount"] = JsonValue::fromDouble(0);
-    resp["version"]       = JsonValue::fromDouble(cursor.currentVersion);
-    bridge_.PostToJS("optimize_applied", JsonValue::fromObject(resp).serialize());
-    bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
-    PostVersionChanged(bridge_, cursor);
-}
-
-void App::HandleOptimizeVersionList(const std::string &payload) {
-    auto val    = JsonValue::parse(payload);
-    std::string name = val.has("pipelineName") ? val["pipelineName"].string() : "";
-    if (name.empty()) return;
-    auto cursor = versionMgr_.GetCursor(name);
-    std::map<std::string, JsonValue> resp;
-    resp["pipelineName"] = JsonValue::fromString(name);
-    resp["cursor"]       = JsonValue::parse(VersionCursorToJson(cursor));
-    bridge_.PostToJS("optimize_version_list_result", JsonValue::fromObject(resp).serialize());
 }
 
 int App::Run() {
