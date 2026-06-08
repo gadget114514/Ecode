@@ -461,3 +461,255 @@ void Storage::SaveOptimizerData(const std::wstring &relativePath, const std::str
 std::string Storage::LoadOptimizerData(const std::wstring &relativePath) {
     return ReadFileUtf8(basePath_ + L"\\" + relativePath);
 }
+
+// --- Wizards ---
+std::string Storage::LoadWizardData(const std::string &wizardName) {
+    // Try AppData/wizards/<name>.json first (user custom wizards)
+    std::wstring wizName(wizardName.begin(), wizardName.end());
+    std::wstring wizPath = basePath_ + L"\\wizards\\" + wizName + L".json";
+    std::string result = ReadFileUtf8(wizPath);
+    if (!result.empty()) return result;
+
+    // Try frontend/wizards/<name>.json (built-in wizards)
+    // The frontend directory is alongside the app binary:
+    // <exe_dir>/frontend/wizards/<name>.json
+    wchar_t exePath[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    std::wstring exeDir = exePath;
+    auto pos = exeDir.rfind(L'\\');
+    if (pos != std::wstring::npos) exeDir = exeDir.substr(0, pos);
+    wizPath = exeDir + L"\\frontend\\wizards\\" + wizName + L".json";
+    return ReadFileUtf8(wizPath);
+}
+
+// --- Project Path Resolution (security: reject traversal) ---
+std::wstring Storage::ResolveProjectPath(const std::wstring &relativePath) const {
+    std::wstring dataDir = basePath_ + L"\\data";
+    std::wstring fullPath = dataDir + L"\\" + relativePath;
+    wchar_t resolved[32768] = {};
+    GetFullPathNameW(fullPath.c_str(), 32768, resolved, nullptr);
+    std::wstring result(resolved);
+    // Reject if it escapes the data directory
+    std::wstring expectedPrefix = dataDir + L"\\";
+    if (result.substr(0, expectedPrefix.size()) != expectedPrefix) {
+        return L"";  // traversal attack
+    }
+    return result;
+}
+
+// --- Checkpoints ---
+void Storage::SaveCheckpoint(const std::string &runId, int stepIndex,
+                              const std::string &input, const std::string &output,
+                              const std::string &metaJson) {
+    std::wstring wRunId(runId.begin(), runId.end());
+    std::wstring dir = basePath_ + L"\\history\\" + wRunId + L"\\checkpoint_" + std::to_wstring(stepIndex);
+    EnsureDirectory(dir);
+    WriteFileUtf8(dir + L"\\input.json", input);
+    WriteFileUtf8(dir + L"\\output.json", output);
+    WriteFileUtf8(dir + L"\\meta.json", metaJson);
+}
+
+static std::string ReadCheckpointFile(const std::wstring &dir, const std::wstring &filename) {
+    return ReadFileUtf8(dir + L"\\" + filename);
+}
+
+std::string Storage::LoadCheckpointInput(const std::string &runId, int stepIndex) {
+    std::wstring wRunId(runId.begin(), runId.end());
+    return ReadFileUtf8(basePath_ + L"\\history\\" + wRunId + L"\\checkpoint_" + std::to_wstring(stepIndex) + L"\\input.json");
+}
+
+std::string Storage::LoadCheckpointOutput(const std::string &runId, int stepIndex) {
+    std::wstring wRunId(runId.begin(), runId.end());
+    return ReadFileUtf8(basePath_ + L"\\history\\" + wRunId + L"\\checkpoint_" + std::to_wstring(stepIndex) + L"\\output.json");
+}
+
+std::string Storage::LoadCheckpointMeta(const std::string &runId, int stepIndex) {
+    std::wstring wRunId(runId.begin(), runId.end());
+    return ReadFileUtf8(basePath_ + L"\\history\\" + wRunId + L"\\checkpoint_" + std::to_wstring(stepIndex) + L"\\meta.json");
+}
+
+// --- Run State ---
+void Storage::SaveRunState(const std::string &runId, const std::string &stateJson) {
+    std::wstring wRunId(runId.begin(), runId.end());
+    std::wstring dir = basePath_ + L"\\history\\" + wRunId;
+    EnsureDirectory(dir);
+    WriteFileUtf8(dir + L"\\state.json", stateJson);
+}
+
+std::string Storage::LoadRunState(const std::string &runId) {
+    std::wstring wRunId(runId.begin(), runId.end());
+    return ReadFileUtf8(basePath_ + L"\\history\\" + wRunId + L"\\state.json");
+}
+
+// --- Incomplete Run Detection ---
+std::vector<Storage::IncompleteRun> Storage::ScanIncompleteRuns() {
+    std::vector<IncompleteRun> result;
+    std::wstring historyDir = basePath_ + L"\\history";
+    std::wstring pattern = historyDir + L"\\*";
+    WIN32_FIND_DATAW ffd;
+    HANDLE hFind = FindFirstFileW(pattern.c_str(), &ffd);
+    if (hFind == INVALID_HANDLE_VALUE) return result;
+    do {
+        std::wstring name = ffd.cFileName;
+        if (name == L"." || name == L"..") continue;
+        if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        std::wstring stateFile = historyDir + L"\\" + name + L"\\state.json";
+        std::string state = ReadFileUtf8(stateFile);
+        if (state.empty()) continue;
+        auto val = JsonValue::parse(state);
+        if (!val.has("status")) continue;
+        std::string status = val["status"].string();
+        if (status != "running") continue;
+
+        IncompleteRun run;
+        run.runId = std::string(name.begin(), name.end());
+        if (val.has("pipelineName")) run.pipelineName = val["pipelineName"].string();
+        if (val.has("currentStep")) run.lastCompletedStep = (int)val["currentStep"].number();
+        if (val.has("totalSteps")) run.totalSteps = (int)val["totalSteps"].number();
+        if (val.has("startedAt")) run.startedAt = val["startedAt"].string();
+        run.status = "interrupted";
+        result.push_back(run);
+    } while (FindNextFileW(hFind, &ffd) != 0);
+    FindClose(hFind);
+    return result;
+}
+
+// Helper to clean up a directory recursively
+static void StorageCleanupDir(const std::wstring &dir) {
+    std::wstring pattern = dir + L"\\*";
+    WIN32_FIND_DATAW ffd;
+    HANDLE hFind = FindFirstFileW(pattern.c_str(), &ffd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring name = ffd.cFileName;
+            if (name == L"." || name == L"..") continue;
+            std::wstring full = dir + L"\\" + name;
+            if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                StorageCleanupDir(full);
+                RemoveDirectoryW(full.c_str());
+            } else {
+                DeleteFileW(full.c_str());
+            }
+        } while (FindNextFileW(hFind, &ffd) != 0);
+        FindClose(hFind);
+    }
+}
+
+void Storage::CloseRun(const std::string &runId) {
+    std::wstring wRunId(runId.begin(), runId.end());
+    std::wstring stateFile = basePath_ + L"\\history\\" + wRunId + L"\\state.json";
+    std::string state = ReadFileUtf8(stateFile);
+    if (state.empty()) return;
+    auto val = JsonValue::parse(state);
+    // Rebuild object with updated status
+    std::map<std::string, JsonValue> obj;
+    for (auto &kv : val.object()) obj[kv.first] = kv.second;
+    obj["status"] = JsonValue::fromString("completed");
+    WriteFileUtf8(stateFile, JsonValue::fromObject(obj).serialize(true));
+}
+
+void Storage::DiscardRun(const std::string &runId) {
+    std::wstring wRunId(runId.begin(), runId.end());
+    std::wstring runDir = basePath_ + L"\\history\\" + wRunId;
+    // Recursive delete
+    StorageCleanupDir(runDir);
+}
+
+// --- Named Chests ---
+static std::wstring ChestRootForBase(const std::wstring &basePath) {
+    // Chests are at the same level as projects/ — parent of basePath
+    std::wstring parent = basePath;
+    auto pos = parent.rfind(L'\\');
+    if (pos != std::wstring::npos) parent = parent.substr(0, pos);
+    pos = parent.rfind(L'\\');
+    if (pos != std::wstring::npos) parent = parent.substr(0, pos);
+    return parent + L"\\chests";
+}
+
+void Storage::SaveToNamedChest(const std::string &chestName, const std::string &content) {
+    std::wstring chestDir = ChestRootForBase(basePath_);
+    EnsureDirectory(chestDir);
+    std::wstring wName(chestName.begin(), chestName.end());
+    WriteFileUtf8(chestDir + L"\\chest_" + wName + L".json", content);
+}
+
+std::string Storage::LoadFromNamedChest(const std::string &chestName) {
+    std::wstring chestDir = ChestRootForBase(basePath_);
+    std::wstring wName(chestName.begin(), chestName.end());
+    return ReadFileUtf8(chestDir + L"\\chest_" + wName + L".json");
+}
+
+bool Storage::ChestExists(const std::string &chestName) const {
+    std::wstring chestDir = ChestRootForBase(basePath_);
+    std::wstring wName(chestName.begin(), chestName.end());
+    std::wstring path = chestDir + L"\\chest_" + wName + L".json";
+    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+std::vector<std::string> Storage::ListNamedChests() const {
+    std::vector<std::string> result;
+    std::wstring chestDir = ChestRootForBase(basePath_);
+    std::wstring pattern = chestDir + L"\\chest_*.json";
+    WIN32_FIND_DATAW ffd;
+    HANDLE hFind = FindFirstFileW(pattern.c_str(), &ffd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring name = ffd.cFileName;
+            if (name == L"." || name == L"..") continue;
+            // Extract chest name from "chest_<name>.json"
+            std::wstring chestName = name.substr(6); // strip "chest_"
+            auto dotPos = chestName.rfind(L'.');
+            if (dotPos != std::wstring::npos) chestName = chestName.substr(0, dotPos);
+            result.push_back(std::string(chestName.begin(), chestName.end()));
+        } while (FindNextFileW(hFind, &ffd) != 0);
+        FindClose(hFind);
+    }
+    return result;
+}
+
+// --- Storage Chest ---
+static std::wstring StorageChestDirForBase(const std::wstring &basePath) {
+    std::wstring parent = basePath;
+    auto pos = parent.rfind(L'\\');
+    if (pos != std::wstring::npos) parent = parent.substr(0, pos);
+    pos = parent.rfind(L'\\');
+    if (pos != std::wstring::npos) parent = parent.substr(0, pos);
+    return parent + L"\\storage_chest";
+}
+
+void Storage::MoveToStorageChest(const std::wstring &sourcePath, const std::string &storedName) {
+    std::wstring chestDir = StorageChestDirForBase(basePath_);
+    EnsureDirectory(chestDir);
+    std::wstring wName(storedName.begin(), storedName.end());
+    std::wstring destPath = chestDir + L"\\" + wName;
+    // Move the file
+    MoveFileExW(sourcePath.c_str(), destPath.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING);
+}
+
+std::vector<std::wstring> Storage::ListStorageChest() const {
+    std::vector<std::wstring> result;
+    std::wstring chestDir = StorageChestDirForBase(basePath_);
+    std::wstring pattern = chestDir + L"\\*";
+    WIN32_FIND_DATAW ffd;
+    HANDLE hFind = FindFirstFileW(pattern.c_str(), &ffd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring name = ffd.cFileName;
+            if (name == L"." || name == L"..") continue;
+            if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            result.push_back(chestDir + L"\\" + name);
+        } while (FindNextFileW(hFind, &ffd) != 0);
+        FindClose(hFind);
+    }
+    return result;
+}
+
+std::string Storage::LoadFromStorageChest(const std::wstring &filename) {
+    std::wstring chestDir = StorageChestDirForBase(basePath_);
+    return ReadFileUtf8(chestDir + L"\\" + filename);
+}
+
+// --- History Retention ---
+void Storage::SetMaxHistoryRuns(int maxRuns) {
+    maxHistoryRuns_ = (maxRuns < 10) ? 10 : (maxRuns > 500) ? 500 : maxRuns;
+}

@@ -79,9 +79,29 @@ public:
 
     void Cancel();
     bool IsRunning() const { return running_; }
+    const std::string &GetRunId() const { return runId_; }
 
     void ResumeManual(const std::string &content);
     void CancelManual();
+
+    // Wizard step support
+    void ResumeWizard(const std::string &valuesJson);
+    bool IsWaitingForWizard() const { return waitingForWizard_; }
+
+    // Filter step support
+    void ResumeFilter(const std::string &decisionJson);
+    bool IsWaitingForFilter() const { return waitingForFilter_; }
+
+    // Input source selection
+    void SetInputSource(const std::string &source, const std::string &content);
+    void SetExternalInput(const std::string &content);
+
+    // Checkpoint integration callback
+    using CheckpointCallback = std::function<void(const std::string& runId, int stepIndex,
+                                                    const std::string& input,
+                                                    const std::string& output,
+                                                    const std::string& meta)>;
+    void SetCheckpointCallback(CheckpointCallback cb);
 
     void RegisterProvider(const std::string &type, const std::string &apiKey, const std::string &baseUrl);
     static std::string JsonEscape(const std::string &s);
@@ -106,6 +126,24 @@ private:
 
     std::string runId_;
     std::string startedAt_;
+
+    // Wizard step state
+    bool waitingForWizard_{false};
+    std::map<std::string, std::string> wizardValues_;
+    int wizardResumeStep_{0};
+
+    // Filter step state
+    bool waitingForFilter_{false};
+    std::vector<int> filterApproved_;
+    std::vector<int> filterRejected_;
+
+    // Checkpoint callback
+    CheckpointCallback checkpointCb_;
+
+    // Input source override (for manual source selection)
+    bool inputSourceOverridden_{false};
+    std::string inputSourceContent_;
+    std::string inputSourceName_;
 
     // Parallel step state
     std::unique_ptr<ParallelState> parallelState_;

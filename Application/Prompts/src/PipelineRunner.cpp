@@ -96,9 +96,27 @@ void PipelineRunner::Run(const std::string &pipelineName,
 }
 
 void PipelineRunner::RunNextStep() {
+    // Save checkpoint for the step that just completed (if any)
+    if (currentStepIndex_ >= 0 && currentStepIndex_ < (int)historySteps_.size()) {
+        auto &hs = historySteps_[currentStepIndex_];
+        if (hs.status == "completed" || hs.status == "skipped") {
+            std::string meta = "{\"stepIndex\":" + std::to_string(hs.index) +
+                               ",\"stepName\":\"" + JsonEscape(hs.name) + "\"" +
+                               ",\"stepType\":\"" + JsonEscape(hs.type) + "\"" +
+                               ",\"status\":\"" + hs.status + "\"" +
+                               ",\"promptTokens\":" + std::to_string(hs.promptTokens) +
+                               ",\"completionTokens\":" + std::to_string(hs.completionTokens) +
+                               ",\"durationMs\":" + std::to_string((int)hs.durationMs) + "}";
+            if (checkpointCb_) {
+                checkpointCb_(runId_, currentStepIndex_, hs.input, hs.output, meta);
+            }
+        }
+    }
+
     if (cancelled_ || pendingSteps_.empty()) {
         running_ = false;
         if (!cancelled_) {
+            // Save final state
             PostBridge("pipeline_completed", BuildMetaJson());
         } else {
             PostBridge("pipeline_error", "{\"message\":\"Canceled\"}");
@@ -110,12 +128,29 @@ void PipelineRunner::RunNextStep() {
     auto step = pendingSteps_.front();
     pendingSteps_.pop_front();
 
-    // Propagate previous step output as input for this step
+    // Override input if external source was set
+    std::string resolvedInput = inputSourceOverridden_ ? inputSourceContent_ :
+                                (currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()
+                                 ? historySteps_[currentStepIndex_ - 1].output : inputContent_);
+    // Use resolved input
     if (currentStepIndex_ > 0 && currentStepIndex_ < (int)historySteps_.size()) {
-        historySteps_[currentStepIndex_].input =
-            (currentStepIndex_ - 1 < (int)historySteps_.size())
-            ? historySteps_[currentStepIndex_ - 1].output
-            : inputContent_;
+        historySteps_[currentStepIndex_].input = resolvedInput;
+    } else if (currentStepIndex_ == 0) {
+        // First step — input is from the original content or external source
+        if (inputSourceOverridden_) {
+            inputContent_ = inputSourceContent_;
+        }
+    }
+
+    // Save run state
+    if (checkpointCb_) {
+        std::string stateJson = "{\"status\":\"running\",\"currentStep\":" +
+                                std::to_string(currentStepIndex_) +
+                                ",\"totalSteps\":" + std::to_string(originalSteps_.size()) +
+                                ",\"pipelineName\":\"" + JsonEscape(pipelineName_) + "\"" +
+                                ",\"startedAt\":\"" + startedAt_ + "\"}";
+        // The callback will save the state
+        PostBridge("save_run_state", stateJson);
     }
 
     PostBridge("step_started", "{\"index\":" + std::to_string(currentStepIndex_) +
@@ -346,6 +381,129 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
         ExecuteNextParallelBranch();
         return;
 
+    } else if (type == "wizard") {
+        // Wizard step — collect user input via dialog
+        std::string wizardName = step.params.count("wizard") ? step.params.at("wizard") : "";
+        std::string wizardData = step.params.count("wizardData") ? step.params.at("wizardData") : "{}";
+
+        std::string content = currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()
+                              ? historySteps_[currentStepIndex_ - 1].output : inputContent_;
+
+        // Clear previous wizard values
+        wizardValues_.clear();
+        waitingForWizard_ = true;
+
+        PostBridge("wizard_step_pause",
+            "{\"index\":" + std::to_string(currentStepIndex_) +
+            ",\"wizard\":\"" + JsonEscape(wizardName) + "\"" +
+            ",\"wizardData\":" + wizardData +
+            ",\"content\":\"" + JsonEscape(content) + "\"}");
+        return; // wait for ResumeWizard()
+
+    } else if (type == "filter") {
+        // Filter step — ask human to approve/reject output
+        std::string content = currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()
+                              ? historySteps_[currentStepIndex_ - 1].output : inputContent_;
+        std::string mode = step.params.count("mode") ? step.params.at("mode") : "manual";
+        std::string splitBy = step.params.count("splitBy") ? step.params.at("splitBy") : "";
+
+        waitingForFilter_ = true;
+        filterApproved_.clear();
+        filterRejected_.clear();
+
+        std::string outputsJson;
+        if (!splitBy.empty() && !content.empty()) {
+            // Split output into blocks
+            std::vector<std::string> blocks;
+            size_t start = 0, end;
+            while ((end = content.find(splitBy, start)) != std::string::npos) {
+                blocks.push_back(content.substr(start, end - start));
+                start = end + splitBy.size();
+            }
+            blocks.push_back(content.substr(start));
+
+            outputsJson = "[";
+            for (size_t i = 0; i < blocks.size(); i++) {
+                if (i > 0) outputsJson += ",";
+                outputsJson += "{\"index\":" + std::to_string(i) +
+                               ",\"content\":\"" + JsonEscape(blocks[i]) + "\"}";
+            }
+            outputsJson += "]";
+        } else {
+            // Single output
+            outputsJson = "[{\"index\":0,\"content\":\"" + JsonEscape(content) + "\"}]";
+        }
+
+        if (mode == "auto") {
+            // Auto-approve, no pause
+            filterApproved_.push_back(0);
+            if (currentStepIndex_ < (int)historySteps_.size()) {
+                historySteps_[currentStepIndex_].status = "completed";
+            }
+            PostBridge("step_done", "{\"index\":" + std::to_string(currentStepIndex_) + "}");
+            RunNextStep();
+            return;
+        }
+
+        PostBridge("step_filter_pause",
+            "{\"index\":" + std::to_string(currentStepIndex_) +
+            ",\"mode\":\"" + mode + "\"" +
+            ",\"outputs\":" + outputsJson + "}");
+        return; // wait for ResumeFilter()
+
+    } else if (type == "evaluate") {
+        // Evaluate step — AI evaluates the previous step's output
+        std::string content = currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()
+                              ? historySteps_[currentStepIndex_ - 1].output : inputContent_;
+        std::string criteria = step.params.count("criteria") ? step.params.at("criteria") : "";
+        std::string rubric = step.params.count("rubric") ? step.params.at("rubric") : "1-10";
+
+        // Build evaluation response JSON (in production, this would call an AI)
+        // For now, pass the content to the frontend for display
+        PostBridge("evaluate_result",
+            "{\"stepIndex\":" + std::to_string(currentStepIndex_) +
+            ",\"content\":\"" + JsonEscape(content) + "\"" +
+            ",\"criteria\":\"" + JsonEscape(criteria) + "\"" +
+            ",\"rubric\":\"" + rubric + "\"}");
+
+        if (currentStepIndex_ < (int)historySteps_.size()) {
+            historySteps_[currentStepIndex_].status = "completed";
+            historySteps_[currentStepIndex_].output = content;
+        }
+        PostBridge("step_done", "{\"index\":" + std::to_string(currentStepIndex_) + "}");
+        RunNextStep();
+
+    } else if (type == "chest") {
+        // Chest step — put/take data from named chest
+        std::string chestName = step.params.count("chestName") ? step.params.at("chestName") : "";
+        std::string chestType = step.params.count("chestType") ? step.params.at("chestType") : "steel";
+        std::string mode = step.params.count("mode") ? step.params.at("mode") : "put";
+
+        if (chestName.empty()) {
+            HandleError("Chest step missing chestName");
+            return;
+        }
+
+        if (mode == "put") {
+            // Save current output to chest
+            std::string content = currentStepIndex_ > 0 && currentStepIndex_ - 1 < (int)historySteps_.size()
+                                  ? historySteps_[currentStepIndex_ - 1].output : inputContent_;
+            // Notify App to save via Storage (done by App in callback)
+            PostBridge("chest_put",
+                "{\"chestName\":\"" + JsonEscape(chestName) + "\"" +
+                ",\"content\":\"" + JsonEscape(content) + "\"}");
+        } else if (mode == "take") {
+            // Request to load from chest — App will resolve and call SetExternalInput
+            PostBridge("chest_take",
+                "{\"chestName\":\"" + JsonEscape(chestName) + "\"}");
+        }
+
+        if (currentStepIndex_ < (int)historySteps_.size()) {
+            historySteps_[currentStepIndex_].status = "completed";
+        }
+        PostBridge("step_done", "{\"index\":" + std::to_string(currentStepIndex_) + "}");
+        RunNextStep();
+
     } else if (type == "condition") {
         // Evaluate condition
         std::string expr = step.params.count("expression") ? step.params.at("expression") : "{result}";
@@ -392,6 +550,32 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
 void PipelineRunner::HandleError(const std::string &message) {
     running_ = false;
     PostBridge("pipeline_error", "{\"message\":\"" + message + "\"}");
+}
+
+void PipelineRunner::ResumeWizard(const std::string &valuesJson) {
+    if (!waitingForWizard_) return;
+    waitingForWizard_ = false;
+
+    // Parse wizard values
+    auto val = JsonValue::parse(valuesJson);
+    if (val.type() == JsonValue::Object) {
+        for (auto &kv : val.object()) {
+            wizardValues_[kv.first] = kv.second.serialize();
+            // Strip quotes from string values
+            if (kv.second.type() == JsonValue::String) {
+                wizardValues_[kv.first] = kv.second.string();
+            }
+        }
+    }
+
+    // Store result as JSON in history
+    if (currentStepIndex_ < (int)historySteps_.size()) {
+        historySteps_[currentStepIndex_].output = valuesJson;
+        historySteps_[currentStepIndex_].status = "completed";
+    }
+
+    PostBridge("step_done", "{\"index\":" + std::to_string(currentStepIndex_) + "}");
+    RunNextStep();
 }
 
 void PipelineRunner::Cancel() {
@@ -587,4 +771,50 @@ void PipelineRunner::CancelManual() {
 void PipelineRunner::AppendPipelineSteps(const std::string &pipelineName) {
     // Would need access to Storage to load pipeline by name
     (void)pipelineName;
+}
+
+void PipelineRunner::ResumeFilter(const std::string &decisionJson) {
+    if (!waitingForFilter_) return;
+    waitingForFilter_ = false;
+
+    auto val = JsonValue::parse(decisionJson);
+    if (val.has("approved")) {
+        for (auto &a : val["approved"].array())
+            filterApproved_.push_back((int)a.number());
+    }
+    if (val.has("rejected")) {
+        for (auto &r : val["rejected"].array())
+            filterRejected_.push_back((int)r.number());
+    }
+
+    // Store filter decision in history
+    if (currentStepIndex_ < (int)historySteps_.size()) {
+        historySteps_[currentStepIndex_].status = "completed";
+    }
+
+    PostBridge("step_filter_result",
+        "{\"approved\":" + std::to_string(filterApproved_.size()) +
+        ",\"rejected\":" + std::to_string(filterRejected_.size()) + "}");
+    PostBridge("step_done", "{\"index\":" + std::to_string(currentStepIndex_) + "}");
+    RunNextStep();
+}
+
+void PipelineRunner::SetInputSource(const std::string &source, const std::string &content) {
+    inputSourceOverridden_ = true;
+    inputSourceName_ = source;
+    inputSourceContent_ = content;
+    PostBridge("input_source_changed",
+        "{\"stepIndex\":" + std::to_string(currentStepIndex_) +
+        ",\"source\":\"" + JsonEscape(source) + "\"" +
+        ",\"content\":\"" + JsonEscape(content) + "\"}");
+}
+
+void PipelineRunner::SetExternalInput(const std::string &content) {
+    inputSourceOverridden_ = true;
+    inputSourceContent_ = content;
+    inputSourceName_ = "external";
+}
+
+void PipelineRunner::SetCheckpointCallback(CheckpointCallback cb) {
+    checkpointCb_ = cb;
 }

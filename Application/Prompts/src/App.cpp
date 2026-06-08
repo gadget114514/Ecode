@@ -667,6 +667,16 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
             auto pipelines = storage_.LoadPipelines();
             for (auto &p : pipelines) {
                 if (p.name == val["pipelineName"].string()) {
+                    // Pre-process steps: resolve wizard names to wizardData JSON
+                    for (auto &step : p.steps) {
+                        if (step.type == "wizard" && step.params.count("wizard") && !step.params.count("wizardData")) {
+                            std::string wizName = step.params["wizard"];
+                            std::string wizJson = storage_.LoadWizardData(wizName);
+                            if (!wizJson.empty()) {
+                                step.params["wizardData"] = wizJson;
+                            }
+                        }
+                    }
                     runner_.Run(p.name, p.steps, inputContent, {}, p.outputMode);
                     break;
                 }
@@ -674,6 +684,10 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         }
     } else if (type == "cancel_pipeline") {
         runner_.Cancel();
+    } else if (type == "wizard_step_resume") {
+        auto val = JsonValue::parse(payload);
+        std::string valuesJson = val.has("values") ? val["values"].serialize() : "{}";
+        runner_.ResumeWizard(valuesJson);
     } else if (type == "manual_step_resume") {
         auto val = JsonValue::parse(payload);
         std::string content = val.has("content") ? val["content"].string() : "";
@@ -797,6 +811,85 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
             resJson += "}";
             bridge_.PostToJS("test_connection_result", resJson);
         }).detach();
+    } else if (type == "step_filter_resume") {
+        runner_.ResumeFilter(payload);
+    } else if (type == "send_to_chest") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("chestName") && val.has("content")) {
+            storage_.SaveToNamedChest(val["chestName"].string(), val["content"].string());
+            bridge_.PostToJS("log", "{\"message\":\"📦 Saved to chest: " + val["chestName"].string() + "\"}");
+        }
+    } else if (type == "select_input_source") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("source")) {
+            std::string source = val["source"].string();
+            if (source == "chest" && val.has("chestName")) {
+                std::string chestContent = storage_.LoadFromNamedChest(val["chestName"].string());
+                runner_.SetExternalInput(chestContent);
+            } else if (source == "manual" && val.has("content")) {
+                runner_.SetExternalInput(val["content"].string());
+            } else if (source == "checkpoint") {
+                std::string cp = storage_.LoadCheckpointOutput(runner_.GetRunId(), 0);
+                if (!cp.empty()) runner_.SetExternalInput(cp);
+            } else {
+                runner_.SetExternalInput("");
+            }
+        }
+    } else if (type == "select_project") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("projectName")) {
+            std::string projectName = val["projectName"].string();
+            std::wstring wName(projectName.begin(), projectName.end());
+            std::wstring newPath = appDataPath_ + L"\\projects\\" + wName;
+            if (storage_.Init(newPath)) {
+                auto pipelines = storage_.LoadPipelines();
+                std::string pipelinesJson = storage_.SerializePipelines(pipelines);
+                bridge_.PostToJS("project_changed",
+                    "{\"projectName\":\"" + projectName + "\"" +
+                    ",\"pipelines\":" + pipelinesJson + "}");
+            }
+        }
+    } else if (type == "create_project") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("projectName")) {
+            std::string projectName = val["projectName"].string();
+            std::wstring wName(projectName.begin(), projectName.end());
+            std::wstring projPath = appDataPath_ + L"\\projects\\" + wName;
+            CreateDirectoryW((projPath + L"\\data").c_str(), nullptr);
+            CreateDirectoryW((projPath + L"\\blobs").c_str(), nullptr);
+            CreateDirectoryW((projPath + L"\\history").c_str(), nullptr);
+            if (storage_.Init(projPath)) {
+                bridge_.PostToJS("log", "{\"message\":\"📁 Created project: " + projectName + "\"}");
+                bridge_.PostToJS("project_changed",
+                    "{\"projectName\":\"" + projectName + "\",\"tabs\":[],\"pipelines\":[]}");
+            }
+        }
+    } else if (type == "save_run_state") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("currentStep")) {
+            std::string runId = runner_.GetRunId();
+            if (!runId.empty()) {
+                storage_.SaveRunState(runId, payload);
+            }
+        }
+    } else if (type == "resume_run") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("runId") && val.has("action")) {
+            std::string action = val["action"].string();
+            std::string runId = val["runId"].string();
+            if (action == "continue") {
+                bridge_.PostToJS("log", "{\"message\":\"▶ Resuming run: " + runId + "\"}");
+            } else if (action == "keep") {
+                storage_.CloseRun(runId);
+            } else if (action == "discard") {
+                storage_.DiscardRun(runId);
+            }
+        }
+    } else if (type == "set_history_retention") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("maxRuns")) {
+            storage_.SetMaxHistoryRuns((int)val["maxRuns"].number());
+        }
     }
 }
 
