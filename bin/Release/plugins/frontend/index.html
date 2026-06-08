@@ -22,9 +22,6 @@
         <button id="btn-saveas" onclick="app.saveFileAs()" data-hint="別名で保存 (Ctrl+Shift+S)">💾 <span data-i18n="SaveAs">Save As</span></button>
         <span class="separator">|</span>
         <button id="btn-pipeline" onclick="app.runPipeline()" data-hint="選択中のノードにパイプラインを実行 (F5)">▶ <span data-i18n="RunPipeline">Run</span></button>
-        <button id="btn-optimize" onclick="app.showOptimize()" data-hint="パイプラインをAIで最適化 (評価シグナルを使用)">✨ <span data-i18n="Optimize">Optimize</span></button>
-        <button id="btn-undo-opt" onclick="app.optimizeUndo()" data-hint="最適化を1つ元に戻す" disabled>⟲</button>
-        <button id="btn-redo-opt" onclick="app.optimizeRedo()" data-hint="最適化をやり直す" disabled>⟳</button>
         <button id="btn-config" onclick="app.showConfig()" data-hint="APIキー・プロバイダの設定">⚙ <span data-i18n="Config">Config</span></button>
         <span class="spacer"></span>
         <input type="text" id="search-box" placeholder="Search..." oninput="app.search(this.value)">
@@ -54,11 +51,7 @@
                 <div class="pane-header" onclick="app.togglePane('editor-pane')">✏️ <span data-i18n="Editor">Editor</span></div>
                 <div id="editor-content" class="pane-content">
                     <input type="text" id="node-title" placeholder="Title (base64 auto)">
-                    <div class="textarea-container">
-                        <textarea id="node-content" placeholder="Content..."></textarea>
-                        <button class="speak-btn" id="editor-speak-btn" onclick="app.toggleSpeak('node-content', 'editor-speak-btn')" title="音声読み上げ">🔊</button>
-                        <button class="voice-btn" id="editor-voice-btn" onclick="app.toggleVoiceInput('node-content', 'editor-voice-btn')" title="音声入力">🎙️</button>
-                    </div>
+                    <textarea id="node-content" placeholder="Content..."></textarea>
                     <div id="editor-buttons">
                         <button onclick="app.addChild()">➕ <span data-i18n="AddChild">Add</span></button>
                         <button onclick="app.updateNode()">💾 <span data-i18n="Update">Update</span></button>
@@ -82,17 +75,9 @@
         </div>
     </div>
     <div id="messages-pane" class="pane">
-        <div class="pane-header" onclick="app.togglePane('messages-pane')">
-            <span>📝 <span data-i18n="Messages">Messages</span></span>
-            <span class="messages-actions">
-                <button class="msg-action-btn" onclick="event.stopPropagation();app.copyAllLogs()" title="Copy all logs" data-hint="Copy all logs">📋</button>
-                <button class="msg-action-btn" onclick="event.stopPropagation();app.clearLogs()" title="Clear logs" data-hint="Clear logs">✕</button>
-            </span>
-        </div>
-        <div id="messages-content" oncontextmenu="event.preventDefault();app.showLogContextMenu(event)"></div>
+        <div class="pane-header" onclick="app.togglePane('messages-pane')">📝 <span data-i18n="Messages">Messages</span></div>
+        <div id="messages-content"></div>
     </div>
-    <!-- Log Context Menu -->
-    <div id="log-context-menu" class="context-menu" style="display:none"></div>
 </div>
 <!-- Hint Tooltip -->
 <div id="hint-tooltip" class="hint-tooltip" style="display:none"></div>
@@ -188,13 +173,11 @@
     </div>
 </div>
 
-<!-- Config Panel (non-modal floating) -->
-<div id="config-panel">
-    <div class="config-drag-handle" id="config-drag-handle">
-        <span>⚙ <span data-i18n="Config">Config</span></span>
-        <button onclick="app.closeConfig()">&times;</button>
-    </div>
-    <div class="config-body">
+<!-- Config Modal -->
+<div id="config-modal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="app.closeConfig()">&times;</span>
+        <h2 data-i18n="Config">Config</h2>
         <div class="config-tabs">
             <button class="config-tab active" onclick="app.switchConfigTab('providers', this)" data-i18n="Providers">Providers</button>
             <button class="config-tab" onclick="app.switchConfigTab('general', this)" data-i18n="General">General</button>
@@ -202,8 +185,8 @@
         <div id="config-tab-providers" class="config-tab-panel">
             <div class="provider-list" id="provider-list"></div>
             <div class="config-actions">
+                <button onclick="app.testConnection()" data-i18n="TestConnection">Test Connection</button>
                 <button onclick="app.saveProviders()" class="btn-primary" data-i18n="Save">Save</button>
-                <button onclick="app.closeConfig()" data-i18n="Close">Close</button>
             </div>
         </div>
         <div id="config-tab-general" class="config-tab-panel" style="display:none">
@@ -211,66 +194,6 @@
         </div>
     </div>
 </div>
-<!-- Optimize Modal -->
-<div id="optimize-modal" class="modal">
-    <div class="modal-content optimize-modal-content">
-        <div class="optimize-header">
-            <span>✨ <span data-i18n="OptimizeTitle">Optimize Pipeline</span></span>
-            <span class="modal-close" onclick="app.closeOptimize()">&times;</span>
-        </div>
-        <!-- Tab bar -->
-        <div class="optimize-tabs">
-            <button class="opt-tab active" onclick="app.switchOptTab('config',this)" data-i18n="OptTabConfig">設定</button>
-            <button class="opt-tab" onclick="app.switchOptTab('versions',this)" data-i18n="OptTabVersions">バージョン履歴</button>
-        </div>
-
-        <!-- Config view -->
-        <div id="optimize-config-view" class="opt-tab-panel">
-            <div id="optimize-eval-summary" class="opt-eval-summary" style="display:none"></div>
-            <div class="opt-field-row">
-                <label data-i18n="OptPipelineLabel">パイプライン</label>
-                <select id="opt-pipeline-select"></select>
-            </div>
-            <div class="opt-field-row">
-                <label data-i18n="OptHistoryLimit">解析する履歴数</label>
-                <input type="number" id="opt-history-limit" value="10" min="1" max="50" style="width:80px">
-            </div>
-            <div class="opt-field-row">
-                <label data-i18n="OptMaxEdits">1ステップあたりの最大編集数</label>
-                <input type="number" id="opt-max-edits" value="3" min="1" max="10" style="width:80px">
-            </div>
-            <div class="opt-field-row">
-                <label data-i18n="OptProviderLabel">Optimizer プロバイダ / モデル</label>
-                <select id="opt-provider-select"></select>
-                <select id="opt-model-select" style="margin-left:6px;flex:1"></select>
-            </div>
-            <div class="optimize-actions">
-                <button id="btn-run-optimize" onclick="app.runOptimize()" class="btn-primary" data-i18n="OptAnalyze">解析して提案を生成</button>
-            </div>
-        </div>
-
-        <!-- Loading view -->
-        <div id="optimize-loading-view" class="opt-tab-panel" style="display:none">
-            <div class="opt-spinner"></div>
-            <div id="optimize-progress-text" class="opt-progress-text"></div>
-        </div>
-
-        <!-- Proposals view -->
-        <div id="optimize-proposals-view" class="opt-tab-panel" style="display:none">
-            <div id="optimize-proposals-list" class="opt-proposals-list"></div>
-            <div class="optimize-actions">
-                <button onclick="app.applyOptimize()" class="btn-primary" data-i18n="OptApplyApproved">承認した提案を適用</button>
-                <button onclick="app.discardOptimize()" data-i18n="OptDiscard">破棄</button>
-            </div>
-        </div>
-
-        <!-- Versions view -->
-        <div id="optimize-versions-view" class="opt-tab-panel" style="display:none">
-            <div id="optimize-versions-list" class="opt-versions-list"></div>
-        </div>
-    </div>
-</div>
-
 <!-- History Modal -->
 <div id="history-modal" class="modal">
     <div class="modal-content history-modal-content">
@@ -282,102 +205,6 @@
         <div id="history-detail-view" style="display:none"></div>
     </div>
 </div>
-<!-- Pipeline Manager Modal -->
-<div id="pipeline-manager-modal" class="modal">
-    <div class="modal-content pm-content">
-        <span class="modal-close" onclick="app.closePipelineManager()">&times;</span>
-        <h2 data-i18n="PipelineManager">Pipeline Manager</h2>
-        <div class="pm-layout">
-            <div class="pm-sidebar">
-                <div class="pm-sidebar-header">
-                    <span data-i18n="Pipelines">Pipelines</span>
-                    <button onclick="app.pmNewPipeline()" class="pm-new-btn" title="New Pipeline">+</button>
-                </div>
-                <div id="pm-pipeline-list" class="pm-pipeline-list"></div>
-            </div>
-            <div class="pm-main">
-                <div id="pm-editor" style="display:none">
-                    <div class="pm-toolbar">
-                        <input type="text" id="pm-name" class="pm-name-input" placeholder="Pipeline name" oninput="app.pmDirty()">
-                        <div class="pm-mode-tabs">
-                            <button class="pm-mode-tab active" onclick="app.pmSwitchMode('basic',this)" data-i18n="Basic">Basic</button>
-                            <button class="pm-mode-tab" onclick="app.pmSwitchMode('expert',this)" data-i18n="Expert">Expert</button>
-                        </div>
-                    </div>
-                    <div class="pm-body" id="pm-body-basic">
-                        <div class="pm-steps-col">
-                            <div class="pm-section-title" data-i18n="Steps">Steps</div>
-                            <div id="pm-step-list" class="pm-step-list"></div>
-                            <div class="pm-step-add-row">
-                                <select id="pm-step-type-select" class="pm-step-type-select">
-                                    <option value="ai">🤖 AI Call</option>
-                                    <option value="manual">📝 Manual Review</option>
-                                    <option value="command">⚙️ CLI Command</option>
-                                    <option value="tool">🔧 External Tool</option>
-                                    <option value="fetch">🌐 HTTP Fetch</option>
-                                    <option value="condition">🔀 Condition</option>
-                                    <option value="transform">🔄 Transform</option>
-                                    <option value="call_pipeline">📦 Call Pipeline</option>
-                                    <option value="foreach">🔁 Foreach</option>
-                                    <option value="parallel">⚡ Parallel</option>
-                                    <option value="wait">⏱️ Wait</option>
-                                    <option value="history">📜 History</option>
-                                </select>
-                                <button onclick="app.pmAddStep()" data-i18n="Add">Add</button>
-                            </div>
-                        </div>
-                        <div class="pm-flow-col">
-                            <div class="pm-section-title" data-i18n="FlowPreview">Flow Preview</div>
-                            <div id="pm-mermaid" class="pm-mermaid"></div>
-                        </div>
-                    </div>
-                    <div class="pm-body" id="pm-body-expert" style="display:none">
-                        <p style="color:#888;text-align:center;padding:40px" data-i18n="ExpertModeComingSoon">Expert mode (Cytoscape.js) coming soon.</p>
-                    </div>
-                    <div class="pm-footer">
-                        <div class="pm-settings-row">
-                            <label data-i18n="Output">Output:</label>
-                            <select id="pm-output-mode" onchange="app.pmDirty()">
-                                <option value="child">child</option>
-                                <option value="sibling">sibling</option>
-                                <option value="replace">replace</option>
-                            </select>
-                            <label data-i18n="OutputNaming">Naming:</label>
-                            <input type="text" id="pm-output-naming" value="{pipeline_name}_{timestamp}" oninput="app.pmDirty()">
-                            <label data-i18n="Retry">Retry:</label>
-                            <input type="number" id="pm-retry-count" value="3" min="0" style="width:50px" oninput="app.pmDirty()">
-                            <span data-i18n="Times">×</span>
-                            <input type="number" id="pm-retry-delay" value="2000" min="0" style="width:70px" oninput="app.pmDirty()">
-                            <span>ms</span>
-                        </div>
-                        <div class="pm-actions">
-                            <button onclick="app.pmRunNow()" class="btn-primary" data-i18n="RunNow">▶ Run Now</button>
-                            <button onclick="app.pmSave()" data-i18n="Save">💾 Save</button>
-                            <button onclick="app.pmDelete()" class="btn-danger" data-i18n="Delete">🗑 Delete</button>
-                        </div>
-                    </div>
-                </div>
-                <div id="pm-empty" class="pm-empty">
-                    <p data-i18n="SelectPipeline">Select a pipeline or create a new one</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Step Edit Modal -->
-<div id="pm-step-edit-modal" class="modal">
-    <div class="modal-content pm-step-edit-content">
-        <span class="modal-close" onclick="app.pmCloseStepEdit()">&times;</span>
-        <h3 id="pm-step-edit-title" data-i18n="EditStep">Edit Step</h3>
-        <div id="pm-step-edit-form" class="pm-step-edit-form"></div>
-        <div class="pm-step-edit-actions">
-            <button onclick="app.pmSaveStepEdit()" class="btn-primary" data-i18n="Save">Save</button>
-            <button onclick="app.pmCloseStepEdit()" data-i18n="Cancel">Cancel</button>
-        </div>
-    </div>
-</div>
-
 <script src="app.js"></script>
 </body>
 </html>
