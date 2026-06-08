@@ -520,6 +520,7 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .input-step-badge { background: #4a9eff; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: 10px; }
 .input-step-name { font-weight: bold; color: #ddd; font-size: 12px; }
 .input-meta { font-size: 10px; color: #666; margin-left: auto; }
+.pane-meta { font-size: 10px; color: #666; margin-left: auto; padding: 0 4px; }
 
 /* Prompt/Params pane */
 .prompt-title { font-weight: bold; color: #ddd; font-size: 13px; margin-bottom: 8px; }
@@ -528,6 +529,18 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .param-row { display: flex; gap: 6px; margin-bottom: 2px; font-size: 11px; }
 .param-key { color: #7ab0ff; min-width: 80px; flex-shrink: 0; }
 .param-value { color: #ccc; word-break: break-all; }
+.param-textarea { flex: 1; background: #1a1a1a; border: 1px solid #555; border-radius: 3px; color: #ccc; padding: 4px 6px; font-family: 'Consolas', monospace; font-size: 11px; resize: vertical; min-height: 40px; }
+.param-textarea:focus { outline: none; border-color: #4a9eff; }
+.param-input { flex: 1; background: #1a1a1a; border: 1px solid #555; border-radius: 3px; color: #ccc; padding: 2px 6px; font-size: 11px; min-width: 0; }
+.param-input:focus { outline: none; border-color: #4a9eff; }
+.prompt-pipeline-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.prompt-pipeline-item { background: #1e1e1e; border: 1px solid #333; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 12px; color: #ccc; }
+.prompt-pipeline-item:hover { background: #2d2d2d; border-color: #4a9eff; }
+.prompt-header { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.prompt-edit-btn { background: #3d3d3d; border: 1px solid #555; border-radius: 3px; color: #aaa; padding: 1px 6px; cursor: pointer; font-size: 11px; margin-left: auto; }
+.prompt-edit-btn:hover { background: #4a4a4a; color: #ccc; }
+.prompt-apply-btn { width: 100%; background: #1a4a1a; border: 1px solid #2a6e2a; border-radius: 3px; color: #4f4; padding: 4px 12px; cursor: pointer; font-size: 11px; margin-top: 6px; }
+.prompt-apply-btn:hover { filter: brightness(1.15); }
 
 /* Output pane */
 .output-toolbar { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
@@ -568,6 +581,12 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .source-option:hover { background: #3d3d3d; border-color: #555; }
 .source-chest-name { margin-top: 8px; display: flex; gap: 6px; }
 .source-chest-name input { flex: 1; background: #1a1a1a; border: 1px solid #555; border-radius: 3px; color: #ccc; padding: 5px 8px; }
+
+/* Mode menu */
+.mode-menu { position: fixed; z-index: 8000; background: #252525; border: 1px solid #444; border-radius: 6px; min-width: 140px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); padding: 4px 0; }
+.mode-menu-item { display: flex; align-items: center; gap: 6px; padding: 6px 14px; cursor: pointer; font-size: 12px; color: #ccc; }
+.mode-menu-item:hover { background: #094771; color: #fff; }
+.mode-menu-item.active { color: #4a9eff; font-weight: bold; }
 
 /* Project selector */
 .project-selector, .view-mode-selector { background: #3d3d3d; border: 1px solid #555; border-radius: 3px; color: #ccc; padding: 2px 6px; font-size: 12px; cursor: pointer; }
