@@ -1,0 +1,68 @@
+{
+  "id": "data_scientist",
+  "name": "Data Scientist Setup",
+  "description": "Configure Ecode for data analysis, ML, and visualization",
+  "steps": [
+    {
+      "id": "language",
+      "prompt": "Step 1/7: Language (0:EN, 1:JA):",
+      "type": "choice",
+      "options": { "0": "en", "1": "ja" },
+      "default": "0",
+      "action": "setLanguage"
+    },
+    {
+      "id": "tool",
+      "prompt": "Step 2/7: Primary Tool (python, julia, r, matlab):",
+      "type": "text",
+      "default": "python",
+      "validate": "^(python|julia|r|matlab)$"
+    },
+    {
+      "id": "ai_provider",
+      "prompt": "Step 3/7: AI Provider (gemini, openai, anthropic, ollama):",
+      "type": "text",
+      "default": "gemini"
+    },
+    {
+      "id": "ai_model",
+      "prompt": "Step 4/7: AI Model (leave empty for default):",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "api_key",
+      "prompt": "Step 5/7: API Key (leave empty for Ollama):",
+      "type": "password",
+      "default": ""
+    },
+    {
+      "id": "jupyter_mode",
+      "prompt": "Step 6/7: Enable Jupyter-like Scratch Buffers?:",
+      "type": "confirm",
+      "default": "y"
+    },
+    {
+      "id": "stats_tools",
+      "prompt": "Step 7/7: Enable Statistical Analysis Tools?:",
+      "type": "confirm",
+      "default": "y"
+    }
+  ],
+  "outputMapping": {
+    "lspPath": {
+      "source": "tool",
+      "map": {
+        "python": "pyright-langserver --stdio",
+        "julia": "julia-language-server",
+        "r": "languageserver",
+        "matlab": ""
+      }
+    }
+  },
+  "aiAgent": {
+    "name": "Data Scientist",
+    "systemPrompt": "You are an expert data scientist. Help with data analysis, statistical modeling, machine learning, and creating insightful visualizations. Explain statistical concepts clearly and suggest appropriate methodologies."
+  },
+  "welcomeMessage": "# Data Science Environment Ready\n\n- Tool: {tool}\n- LSP: {lspPath}\n- AI: {ai_provider} / {ai_model}\n- Jupyter Mode: {jupyter_mode}\n- Stats Tools: {stats_tools}\n\nPress Alt+A for AI Data Science Assistant\nHappy Analyzing!"
+}

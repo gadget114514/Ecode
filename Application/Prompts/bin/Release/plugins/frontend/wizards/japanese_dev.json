@@ -1,0 +1,70 @@
+{
+  "id": "japanese_dev",
+  "name": "Japanese Developer Setup",
+  "description": "日本語開発環境のセットアップ — Configure for Japanese language development",
+  "steps": [
+    {
+      "id": "language",
+      "prompt": "Step 1/7: Language / 言語 (0:日本語, 1:English):",
+      "type": "choice",
+      "options": { "0": "ja", "1": "en" },
+      "default": "0",
+      "action": "setLanguage"
+    },
+    {
+      "id": "primary_lang",
+      "prompt": "Step 2/7: 開発言語 (js, ts, python, rust, cpp, go):",
+      "type": "text",
+      "default": "ts",
+      "validate": "^(js|ts|python|rust|cpp|go)$"
+    },
+    {
+      "id": "ai_provider",
+      "prompt": "Step 3/7: AI Provider / AI プロバイダ (gemini, openai, anthropic, ollama):",
+      "type": "text",
+      "default": "gemini"
+    },
+    {
+      "id": "ai_model",
+      "prompt": "Step 4/7: AI Model / AI モデル (leave empty for default / デフォルト推奨):",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "api_key",
+      "prompt": "Step 5/7: API Key / API キー (leave empty for Ollama / Ollamaの場合は空欄):",
+      "type": "password",
+      "default": ""
+    },
+    {
+      "id": "project_dir",
+      "prompt": "Step 6/7: Project Directory / プロジェクトディレクトリ:",
+      "type": "text",
+      "default": "C:/dev"
+    },
+    {
+      "id": "git_enabled",
+      "prompt": "Step 7/7: Enable Git Integration? / Git 統合を有効にしますか?:",
+      "type": "confirm",
+      "default": "y"
+    }
+  ],
+  "outputMapping": {
+    "lspPath": {
+      "source": "primary_lang",
+      "map": {
+        "js": "typescript-language-server --stdio",
+        "ts": "typescript-language-server --stdio",
+        "python": "pyright-langserver --stdio",
+        "rust": "rust-analyzer",
+        "cpp": "clangd",
+        "go": "gopls"
+      }
+    }
+  },
+  "aiAgent": {
+    "name": "Japanese Developer",
+    "systemPrompt": "あなたはシニアソフトウェアエンジニアです。コードの作成、デバッグ、リファクタリングを日本語で支援します。ベストプラクティスに従い、最適化を提案してください。"
+  },
+  "welcomeMessage": "# 日本語開発環境のセットアップが完了しました\n\n- 言語: {primary_lang}\n- LSP: {lspPath}\n- AI: {ai_provider} / {ai_model}\n- プロジェクト: {project_dir}\n- Git: {git_enabled}\n\nAlt+A で AI 補完、Alt+I で AI コンソールを開けます。\n良いコーディングを！"
+}
