@@ -40,9 +40,20 @@ if(MSVC)
     target_compile_options(Prompts PRIVATE /utf-8 /W4 /EHsc)
 endif()
 
-# Copy frontend to output on every build (remove first to ensure freshness)
+# Register frontend files as target dependencies (not compiled, just tracked)
+file(GLOB_RECURSE PROMTS_FRONTEND_DEPS
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.html"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.js"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.css"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/lang/*.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/wizards/*.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/frontend/lib/*.js"
+)
+set_source_files_properties(${PROMTS_FRONTEND_DEPS} PROPERTIES HEADER_FILE_ONLY TRUE)
+target_sources(Prompts PRIVATE ${PROMTS_FRONTEND_DEPS})
+
+# Copy frontend to output directory on every build
 add_custom_command(TARGET Prompts POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_FILE_DIR:Prompts>/frontend"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/frontend"
     "$<TARGET_FILE_DIR:Prompts>/frontend"
