@@ -1473,7 +1473,8 @@ const app = {
     },
 
     // ── Wizard ────────────────────────────────────────────────────
-    WIZARD_STEPS: [
+    get WIZARD_STEPS() {
+        return [
         {
             icon: '🤖',
             title: 'Prompts へようこそ',
@@ -1532,7 +1533,8 @@ const app = {
                 { icon: '💾', text: '成果物ノードにはパイプライン情報が自動記録されます。' }
             ]
         }
-    ],
+        ];
+    },
 
     wizardStep_: 0,
 
