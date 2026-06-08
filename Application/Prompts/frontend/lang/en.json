@@ -22,5 +22,29 @@
   "CopyrightTitle":"Copyright & Licenses",
   "CopyrightBody":"Prompts — Part of the Ecode project.\n\nThird-party libraries:\n• marked.js — MIT License\n• mark.js — MIT License\n• mermaid.js — MIT License\n• cytoscape.js — MIT License\n• Microsoft WebView2 SDK — BSD 3-Clause\n• Mbed TLS — Apache 2.0 / GPL 2.0+",
   "Providers":"Providers","General":"General","TestConnection":"Test Connection",
-  "Providers":"Providers","GeneralSettingsPlaceholder":"General settings coming soon."
+  "GeneralSettingsPlaceholder":"General settings coming soon.",
+
+  "Input":"Input","Output":"Output","Prompt":"Prompt/Params",
+  "NoInput":"No input","NoOutput":"No output yet. Run a pipeline to generate output.",
+  "NoPrompt":"No pipeline metadata","EmptyNode":"Select a node",
+
+  "Save":"✔ Save","Discard":"✕ Discard","SendToChest":"📦 Chest",
+  "FilterTitle":"Filter","Confirm":"Confirm",
+  "Source":"Source:","Change":"Change","PreviousStep":"previous step output",
+  "ManualInput":"Manual input","NamedChest":"Named chest","ExternalFile":"External file",
+  "PastCheckpoint":"Past checkpoint","EnterChestName":"Enter chest name",
+
+  "IncompleteRuns":"Incomplete Pipeline Runs",
+  "Resume":"Resume","KeepOnly":"Keep Only","Discard":"Discard",
+  "RecoveryDesc":"Step {last}/{total} completed — {started}",
+
+  "Project":"Project","CreateProject":"Create Project",
+  "ViewMode":"View Mode","NodeView":"Node","PipelineView":"Pipeline",
+
+  "Step":"Step","HistoryRetention":"History Retention (runs)",
+  "HistoryRetentionDesc":"Number of execution histories to keep per project. Excess runs are moved to Storage Chest.",
+  "Min":"Min","Max":"Max",
+
+  "ChestList":"Named Chests","EmptyChests":"No chests yet",
+  "StorageChest":"Storage Chest","ClearStorageChest":"Empty Storage Chest"
 }
