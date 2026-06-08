@@ -379,6 +379,7 @@ void App::InitWebView2() {
                                     std::string type = val["type"].string();
                                     app->bridge_.PostToJS("log", "{\"message\":\"📥 WebMessage Received: type=" + type + "\"}");
                                     if (type == "init_complete") {
+                                        app->bridge_.PostToJS("log", "{\"message\":\"[TRACE] init_complete received from JS, calling SendFullInit\"}");
                                         app->SendFullInit();
                                     } else {
                                         // payload may be an object or string — serialize to JSON string
@@ -421,9 +422,17 @@ void App::InitWebView2() {
                             NavCompletedHandler(App *a) : app(a) {}
                             HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *args) override {
                                 BOOL isSuccess = FALSE;
-                                if (args) args->get_IsSuccess(&isSuccess);
-                                app->bridge_.PostToJS("log", "{\"message\":\"🌐 WebView2 Navigation Completed (success=" + std::to_string(isSuccess) + ")\"}");
-                                app->bridge_.PostToJS("ready", "{}");
+                                COREWEBVIEW2_WEB_ERROR_STATUS errStatus;
+                                if (args) {
+                                    args->get_IsSuccess(&isSuccess);
+                                    args->get_WebErrorStatus(&errStatus);
+                                }
+                                app->bridge_.PostToJS("log", "{\"message\":\"[TRACE] NavigationCompleted: success=" + std::to_string(isSuccess) + " errorStatus=" + std::to_string((int)errStatus) + "\"}");
+                                if (isSuccess) {
+                                    app->bridge_.PostToJS("ready", "{}");
+                                } else {
+                                    app->bridge_.PostToJS("log", "{\"message\":\"⚠ Navigation FAILED — init flow will not complete\"}");
+                                }
                                 return S_OK;
                             }
                         };
@@ -483,6 +492,8 @@ void App::ShowFallbackUI() {
 }
 
 void App::SendFullInit() {
+    bridge_.PostToJS("log", "{\"message\":\"[TRACE] SendFullInit: loading session...\"}");
+
     // Load session
     auto session = storage_.LoadSession();
 
@@ -590,6 +601,7 @@ void App::SendFullInit() {
     }
     providersJson += "}";
 
+    bridge_.PostToJS("log", "{\"message\":\"[TRACE] SendFullInit: posting init message...\"}");
     bridge_.PostToJS("init",
         "{\"language\":\"" + localization_.GetCurrentLanguage() + "\""
         ",\"embedded\":"  + (embedded_ ? "true" : "false") +
@@ -598,6 +610,7 @@ void App::SendFullInit() {
         ",\"pipelines\":" + pipelinesJson +
         ",\"providers\":" + providersJson +
         ",\"recentFiles\":" + recentJson + "}");
+    bridge_.PostToJS("log", "{\"message\":\"[TRACE] SendFullInit: init posted\"}");
 }
 
 Node App::NodeFromJson(const JsonValue &val) {
