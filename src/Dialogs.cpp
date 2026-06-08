@@ -1398,6 +1398,32 @@ INT_PTR CALLBACK CliSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam,
         }
       }
       return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CLI_MOVEUP) {
+      HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR && sel > 0) {
+        auto entries = SettingsManager::Instance().GetCliEntries();
+        std::swap(entries[sel], entries[sel - 1]);
+        SettingsManager::Instance().SetCliEntries(entries);
+        SettingsManager::Instance().Save();
+        RefreshCliList(hDlg);
+        SendMessage(hList, LB_SETCURSEL, sel - 1, 0);
+      }
+      return (INT_PTR)TRUE;
+    } else if (LOWORD(wParam) == IDC_CLI_MOVEDOWN) {
+      HWND hList = GetDlgItem(hDlg, IDC_CLI_LIST);
+      int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
+      if (sel != LB_ERR) {
+        auto entries = SettingsManager::Instance().GetCliEntries();
+        if (sel >= 0 && sel < (int)entries.size() - 1) {
+          std::swap(entries[sel], entries[sel + 1]);
+          SettingsManager::Instance().SetCliEntries(entries);
+          SettingsManager::Instance().Save();
+          RefreshCliList(hDlg);
+          SendMessage(hList, LB_SETCURSEL, sel + 1, 0);
+        }
+      }
+      return (INT_PTR)TRUE;
     } else if (LOWORD(wParam) == IDC_CLI_RUN) {
       wchar_t cmd[1024], folder[MAX_PATH], lbl[256];
       GetDlgItemTextW(hDlg, IDC_CLI_CMD, cmd, 1024);
