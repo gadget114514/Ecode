@@ -52,12 +52,13 @@ file(GLOB_RECURSE PROMTS_FRONTEND_DEPS
 set_source_files_properties(${PROMTS_FRONTEND_DEPS} PROPERTIES HEADER_FILE_ONLY TRUE)
 target_sources(Prompts PRIVATE ${PROMTS_FRONTEND_DEPS})
 
-# Copy frontend to output directory on every build
+# Copy frontend to output directories (source-based, always fresh)
+set(PROMTS_SRC_FRONT "${CMAKE_CURRENT_SOURCE_DIR}/frontend")
+set(PROMTS_ROOT_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../bin")
 add_custom_command(TARGET Prompts POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/frontend"
-    "$<TARGET_FILE_DIR:Prompts>/frontend"
-    COMMENT "Updating frontend files..."
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROMTS_SRC_FRONT}" "$<TARGET_FILE_DIR:Prompts>/frontend"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROMTS_SRC_FRONT}" "${PROMTS_ROOT_OUT}/$<CONFIG>/plugins/frontend"
+    COMMENT "Updating frontend to plugin dirs..."
 )
 add_custom_command(TARGET Prompts POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
