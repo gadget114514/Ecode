@@ -1397,34 +1397,6 @@ const app = {
         if (modal) modal.classList.remove('visible');
     },
 
-    showModeMenu(event) {
-        const t = key => this.t(key);
-        const existing = document.getElementById('mode-menu');
-        if (existing) { existing.remove(); return; }
-        event.stopPropagation();
-
-        const menu = document.createElement('div');
-        menu.id = 'mode-menu';
-        menu.className = 'mode-menu';
-        menu.innerHTML = `
-            <div class="mode-menu-item ${this.state.viewMode === 'node' ? 'active' : ''}" onclick="app.switchViewMode('node');this.closest('.mode-menu').remove()">
-                📄 ${t('NodeView')}
-            </div>
-            <div class="mode-menu-item ${this.state.viewMode === 'pipeline' ? 'active' : ''}" onclick="app.switchViewMode('pipeline');this.closest('.mode-menu').remove()">
-                🔧 ${t('PipelineView')}
-            </div>`;
-
-        const rect = event.target.getBoundingClientRect();
-        menu.style.top = (rect.bottom + 2) + 'px';
-        menu.style.left = rect.left + 'px';
-        document.body.appendChild(menu);
-
-        setTimeout(() => document.addEventListener('click', function close() {
-            menu.remove();
-            document.removeEventListener('click', close);
-        }, { once: true }), 0);
-    },
-
     switchViewMode(mode) {
         this.state.viewMode = mode;
         if (mode === 'pipeline') {
@@ -1481,29 +1453,6 @@ const app = {
             tips: [
                 { icon: '🔁', text: '同じパイプラインを別の素材に繰り返し適用できます。' },
                 { icon: '📂', text: 'データはローカルの JSON ファイルに保存されます。' }
-            ]
-        },
-        {
-            icon: '🔲',
-            title: this.t('LangCode') === 'ja' ? '4ペインレイアウトの見方' : '4-Pane Layout Guide',
-            body: this.t('LangCode') === 'ja'
-                ? '<p>画面は <b>Tree | Input | Prompt/Params | Output</b> の4ペイン構成です。</p>' +
-                  '<p>📂 <b>Tree</b>: ノード一覧。クリックで選択すると各ペインが連動します。</p>' +
-                  '<p>📥 <b>Input</b>: 選択したノードの中身（素材）を表示・編集します。</p>' +
-                  '<p>⚙️ <b>Prompt/Params</b>: 選択したパイプラインstepの設定を表示・編集します。</p>' +
-                  '<p>📤 <b>Output</b>: 生成された成果物を表示・保存します。</p>'
-                : '<p>The screen has 4 panes: <b>Tree | Input | Prompt/Params | Output</b>.</p>' +
-                  '<p>📂 <b>Tree</b>: Node tree. Click a node to view its details.</p>' +
-                  '<p>📥 <b>Input</b>: Shows the node content (material). Editable.</p>' +
-                  '<p>⚙️ <b>Prompt/Params</b>: Shows pipeline step settings. Editable.</p>' +
-                  '<p>📤 <b>Output</b>: Shows generated results. Save or send to chest.</p>',
-            tips: [
-                { icon: '🔄', text: this.t('LangCode') === 'ja'
-                    ? '各ペインのヘッダーにあるモード表示（📄 Node / 🔧 Step）をクリックすると、Node View と Pipeline View を切り替えられます。'
-                    : 'Click the mode badge (📄 Node / 🔧 Step) in any pane header to switch between views.' },
-                { icon: '✏️', text: this.t('LangCode') === 'ja'
-                    ? 'Prompt/Params ペインのテキストボックスは直接編集可能。変更後は 💾 Apply Changes を押してください。'
-                    : 'Edit prompts directly in the Prompt/Params pane. Click 💾 Apply Changes to save.' }
             ]
         },
         {
@@ -2242,24 +2191,6 @@ const app = {
 
     // ── 5-Pane Rendering ───────────────────────────────────────────
     renderMainContent() {
-        const t = key => this.t(key);
-        const modeText = (this.state.viewMode === 'pipeline' && this.state.selectedStep >= 0)
-            ? `🔧 ${t('Step')} ${this.state.selectedStep + 1} ▾`
-            : `📄 ${t('NodeView')} ▾`;
-
-        ['input-meta', 'prompt-meta', 'output-meta'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.textContent = modeText;
-                el.style.cursor = 'pointer';
-                el.title = t('ViewMode');
-                el.onclick = (e) => {
-                    e.stopPropagation();
-                    this.showModeMenu(e);
-                };
-            }
-        });
-
         this.renderInput();
         this.renderPrompt();
         this.renderOutput();
@@ -2323,22 +2254,7 @@ const app = {
 
         const node = this.getNodeByPath(this.state.currentNodePath);
         if (!node || !node.pipelineMeta) {
-            // Show available pipelines to attach
-            const pipelines = this.state.pipelines || [];
-            let html = `<div class="prompt-header">⚙️ ${t('Prompt')}</div>`;
-            html += `<div class="empty" style="padding:8px">${t('NoPrompt')}</div>`;
-            if (pipelines.length > 0) {
-                html += `<div class="prompt-pipeline-list">`;
-                pipelines.forEach((p, i) => {
-                    html += `<div class="prompt-pipeline-item" onclick="app.runPipeline('${this.escapeHtml(p.name)}')">
-                        ▶ ${this.escapeHtml(p.name)}
-                    </div>`;
-                });
-                html += `</div>`;
-            } else {
-                html += `<div class="empty" style="padding:4px;font-size:10px">No pipelines defined. Open ⚡ Pipelines to create one.</div>`;
-            }
-            promptEl.innerHTML = html;
+            promptEl.innerHTML = `<div class="empty">${t('NoPrompt')}</div>`;
             return;
         }
         let meta;
@@ -2346,64 +2262,7 @@ const app = {
             promptEl.innerHTML = `<div class="empty">${t('NoPrompt')}</div>`;
             return;
         }
-        // Editable metadata fields
-        let html = `<div class="prompt-header">📋 ${this.escapeHtml(meta.pipelineName || 'Pipeline')}
-            <button class="prompt-edit-btn" onclick="app.editNodePipelineMeta()">✏ ${t('EditStep')}</button>
-        </div>`;
-        if (meta.steps) {
-            (meta.steps || []).forEach((s, i) => {
-                html += `<div class="prompt-step">
-                    <div class="prompt-step-header">Step ${i + 1}: ${this.escapeHtml(s.name || s.type)}</div>`;
-                for (const [key, value] of Object.entries(s)) {
-                    if (key === 'name' || key === 'type') continue;
-                    const val = String(value);
-                    html += `<div class="param-row">
-                        <span class="param-key">${this.escapeHtml(key)}</span>
-                        <input class="param-input" data-step="${i}" data-key="${this.escapeHtml(key)}" value="${this.escapeHtml(val.length > 200 ? val.substring(0, 200) : val)}">
-                    </div>`;
-                }
-                html += '</div>';
-            });
-        }
-        html += `<button class="prompt-apply-btn" onclick="app.saveNodePipelineMeta()" style="display:none">💾 ${t('ApplyChanges')}</button>`;
-        promptEl.innerHTML = html;
-
-        // Show apply on changes
-        promptEl.querySelectorAll('.param-input').forEach(inp => {
-            inp.oninput = () => { document.querySelector('.prompt-apply-btn').style.display = ''; };
-        });
-    },
-
-    editNodePipelineMeta() {
-        const node = this.getNodeByPath(this.state.currentNodePath);
-        if (!node) return;
-        this.showPipelineManager();
-    },
-
-    saveNodePipelineMeta() {
-        const node = this.getNodeByPath(this.state.currentNodePath);
-        if (!node || !node.pipelineMeta) return;
-        let meta;
-        try { meta = JSON.parse(node.pipelineMeta); } catch { return; }
-        const el = document.getElementById('prompt-content');
-        if (!el) return;
-
-        // Read inputs back into meta
-        el.querySelectorAll('.param-input').forEach(inp => {
-            const stepIdx = parseInt(inp.dataset.step);
-            const key = inp.dataset.key;
-            if (meta.steps && meta.steps[stepIdx]) {
-                meta.steps[stepIdx][key] = inp.value;
-            }
-        });
-
-        node.pipelineMeta = JSON.stringify(meta);
-        const tab = this.state.tabs[this.state.activeTab];
-        if (tab && tab.file) {
-            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
-        }
-        document.querySelector('.prompt-apply-btn').style.display = 'none';
-        this.addLog('💾 Node pipeline meta updated');
+        promptEl.innerHTML = this.buildPromptHtml(meta);
     },
 
     renderPipelinePrompt(el) {
@@ -2421,15 +2280,21 @@ const app = {
         </div>`;
 
         if (step.params) {
+            // Show editable textareas for key params (systemPrompt, userPrompt)
+            const editableKeys = ['systemPrompt', 'userPrompt', 'prompt', 'command'];
             for (const [key, value] of Object.entries(step.params)) {
-                const isLong = value.length > 80;
-                html += `<div class="param-row">
-                    <span class="param-key">${this.escapeHtml(key)}</span>
-                    ${isLong
-                        ? `<textarea class="param-textarea" data-param="${this.escapeHtml(key)}" data-step="${si}">${this.escapeHtml(value)}</textarea>`
-                        : `<input class="param-input" data-param="${this.escapeHtml(key)}" data-step="${si}" value="${this.escapeHtml(value)}">`
-                    }
-                </div>`;
+                if (editableKeys.includes(key)) {
+                    html += `<div class="param-row">
+                        <span class="param-key">${this.escapeHtml(key)}</span>
+                        <textarea class="param-textarea" data-param="${this.escapeHtml(key)}" data-step="${si}">${this.escapeHtml(value)}</textarea>
+                    </div>`;
+                } else {
+                    const displayVal = value.length > 200 ? value.substring(0, 200) + '...' : value;
+                    html += `<div class="param-row">
+                        <span class="param-key">${this.escapeHtml(key)}</span>
+                        <span class="param-value">${this.escapeHtml(displayVal)}</span>
+                    </div>`;
+                }
             }
         }
         html += `<button class="prompt-apply-btn" onclick="app.applyPromptEdits(${si})" style="display:none">💾 ${t('ApplyChanges')}</button>`;
@@ -2445,15 +2310,18 @@ const app = {
 
     applyPromptEdits(stepIndex) {
         const el = document.getElementById('prompt-content');
-        if (!el || !this.state.pipelineSteps || !this.state.pipelineSteps[stepIndex]) return;
-        const step = this.state.pipelineSteps[stepIndex];
-        // Collect from both textareas and inputs
-        el.querySelectorAll('.param-textarea, .param-input').forEach(field => {
-            const key = field.dataset.param;
-            if (key) step.params[key] = field.value;
+        if (!el) return;
+        const textareas = el.querySelectorAll('.param-textarea');
+        textareas.forEach(ta => {
+            const key = ta.dataset.param;
+            const value = ta.value;
+            // Update in-memory pipeline step params
+            if (this.state.pipelineSteps && this.state.pipelineSteps[stepIndex]) {
+                this.state.pipelineSteps[stepIndex].params[key] = value;
+            }
         });
         document.querySelector('.prompt-apply-btn').style.display = 'none';
-        this.addLog(`✏ Step ${stepIndex + 1} params updated`);
+        this.addLog(`✏ Step ${stepIndex + 1} params updated in session`);
         this.postMessage({ type: 'save_pipeline', payload: { name: this.state.pipelines?.[0]?.name || '', steps: this.state.pipelineSteps } });
     },
 

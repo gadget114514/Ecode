@@ -1,0 +1,50 @@
+{
+  "AppName":"プロンプト","New":"新規","Open":"開く","Save":"保存","SaveAs":"名前を付けて保存",
+  "Config":"設定","RunPipeline":"パイプライン実行","Search":"検索",
+  "Tree":"ツリー","List":"リスト","Editor":"エディタ","Messages":"メッセージ",
+  "AddChild":"子ノード追加","Update":"更新","Remove":"削除","Copy":"コピー",
+  "Copied":"コピーしました！","Cancel":"キャンセル","Pipeline":"パイプライン","History":"履歴",
+  "Settings":"設定","Language":"言語","Up":"上へ","Down":"下へ","Test":"テスト","Root":"ルート",
+  "Menu":"メニュー",
+  "MenuFile":"ファイル","MenuEdit":"編集","MenuSettings":"設定","MenuHelp":"ヘルプ",
+  "MenuNewTab":"新しいタブ","MenuOpen":"開く...","MenuSave":"保存","MenuSaveAs":"名前を付けて保存...",
+  "MenuImportZip":"ZIPからインポート...","MenuExportNode":"ノードをエクスポート...",
+  "MenuWelcomeWizard":"ようこそガイド","MenuSetupWizard":"セットアップウィザード...",
+  "MenuUndo":"元に戻す","MenuRedo":"やり直し","MenuCut":"切り取り","MenuCopyText":"コピー","MenuPaste":"貼り付け","MenuSelectAll":"すべて選択",
+  "MenuSettingsItem":"設定...","MenuLanguage":"言語",
+  "MenuAbout":"Prompts について","MenuCopyright":"著作権・ライセンス",
+  "MenuKeyboardShortcuts":"キーボードショートカット",
+  "SettingsTitle":"設定","SettingsLanguageLabel":"表示言語",
+  "SettingsSave":"保存","SettingsClose":"閉じる",
+  "AboutTitle":"Prompts について",
+  "AboutDesc":"AIプロンプトとパイプラインを管理・実行するツールです。",
+  "AboutVersion":"バージョン",
+  "CopyrightTitle":"著作権・ライセンス",
+  "CopyrightBody":"Prompts — Ecode プロジェクトの一部です。\n\nサードパーティライブラリ:\n• marked.js — MIT ライセンス\n• mark.js — MIT ライセンス\n• mermaid.js — MIT ライセンス\n• cytoscape.js — MIT ライセンス\n• Microsoft WebView2 SDK — BSD 3条項\n• Mbed TLS — Apache 2.0 / GPL 2.0+",
+  "Providers":"プロバイダ","General":"一般","TestConnection":"接続テスト",
+  "GeneralSettingsPlaceholder":"一般設定は近日実装予定です。",
+
+  "Input":"入力","Output":"出力","Prompt":"プロンプト/パラメータ",
+  "NoInput":"入力がありません","NoOutput":"まだ出力がありません。パイプラインを実行してください。",
+  "NoPrompt":"パイプラインメタデータがありません","EmptyNode":"ノードを選択してください",
+
+  "Save":"✔ 保存","Discard":"✕ 破棄","SendToChest":"📦 チェストに送る",
+  "FilterTitle":"フィルター","Confirm":"確認",
+  "Source":"ソース:","Change":"変更","PreviousStep":"前ステップの出力",
+  "ManualInput":"手動入力","NamedChest":"名前付きチェスト","ExternalFile":"外部ファイル",
+  "PastCheckpoint":"過去のチェックポイント","EnterChestName":"チェスト名を入力",
+
+  "IncompleteRuns":"未完了のパイプライン実行",
+  "Resume":"再開","KeepOnly":"結果だけ残す","Discard":"破棄",
+  "RecoveryDesc":"Step {last}/{total} 完了 — {started}",
+
+  "Project":"プロジェクト","CreateProject":"プロジェクトを作成",
+  "ViewMode":"表示モード","NodeView":"ノード","PipelineView":"パイプライン",
+
+  "Step":"ステップ","HistoryRetention":"履歴保持数（実行回数）",
+  "HistoryRetentionDesc":"プロジェクトごとに保持する実行履歴の数。超過分は貯蔵チェストに自動退避されます。",
+  "Min":"最小","Max":"最大",
+
+  "ApplyChanges":"変更を適用","EditStep":"編集","ChestList":"名前付きチェスト","EmptyChests":"まだチェストがありません",
+  "StorageChest":"貯蔵チェスト","ClearStorageChest":"貯蔵チェストを空にする"
+}
