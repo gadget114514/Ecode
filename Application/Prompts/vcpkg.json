@@ -1,7 +1,0 @@
-{
-  "name": "prompts",
-  "version": "1.0.0",
-  "dependencies": [
-    "webview2"
-  ]
-}
