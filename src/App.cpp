@@ -22,6 +22,7 @@
 using namespace Microsoft::WRL;
 
 #define WM_APP_WEBVIEW2_READY (WM_APP + 1)
+#define WM_RELOAD_SESSION (WM_APP + 2)
 
 App::App()
     : versionMgr_(storage_)
@@ -112,6 +113,9 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_APP_WEBVIEW2_READY:
         if (wParam == 0) ShowFallbackUI();
         return 0;
+    case WM_RELOAD_SESSION:
+        SendFullInit();
+        return 0;
     default:
         return DefWindowProc(hwnd_, msg, wParam, lParam);
     }
@@ -166,6 +170,12 @@ void App::OnCommand(int id) {
         break;
     case ID_PROVIDERS_TEST:
         bridge_.PostToJS("menu_command", "{\"action\":\"test_connection\"}");
+        break;
+    case ID_RECIPE_MANAGER:
+        bridge_.PostToJS("menu_command", "{\"action\":\"recipe_manager\"}");
+        break;
+    case ID_RECIPE_CONFIGURE:
+        bridge_.PostToJS("menu_command", "{\"action\":\"config\"}");
         break;
     case ID_VIEW_TREE:
     case ID_VIEW_LIST:
@@ -356,6 +366,14 @@ void App::InitWebView2() {
                         controller->put_Bounds(rc);
                         app->bridge_.SetWebView((IUnknown*)app->webview_);
 
+                        // Set HTTP log callback (logs request/response to JS message log)
+                        {
+                            App *appPtr = app;
+                            SetHttpLogCallback([appPtr](const std::string &html) {
+                                appPtr->bridge_.PostToJS("log", "{\"message\":\"" + PipelineRunner::JsonEscape(html) + "\"}");
+                            });
+                        }
+
                         // Use virtual host mapping instead of file://
                         wchar_t exePath[MAX_PATH];
                         GetModuleFileNameW(nullptr, exePath, MAX_PATH);
@@ -422,7 +440,7 @@ void App::InitWebView2() {
                             NavCompletedHandler(App *a) : app(a) {}
                             HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *args) override {
                                 BOOL isSuccess = FALSE;
-                                COREWEBVIEW2_WEB_ERROR_STATUS errStatus;
+                                COREWEBVIEW2_WEB_ERROR_STATUS errStatus = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
                                 if (args) {
                                     args->get_IsSuccess(&isSuccess);
                                     args->get_WebErrorStatus(&errStatus);
@@ -505,7 +523,7 @@ void App::SendFullInit() {
         storage_.EnsureDirectory(storage_.DataPath(L""));
         Node emptyRoot;
         emptyRoot.mimetype = "text/plain";
-        storage_.SaveTabData(storage_.DataPath(L"general.json"), emptyRoot);
+        storage_.SaveTabData(L"general.json", emptyRoot);
         session.tabs.push_back(tab);
         storage_.SaveSession(session);
     }
@@ -520,7 +538,7 @@ void App::SendFullInit() {
         tabsJson += "{\"name\":\"" + PipelineRunner::JsonEscape(tab.name) + "\""
                   + ",\"file\":\"" + PipelineRunner::JsonEscape(tab.file) + "\"}";
         std::wstring wfile(tab.file.begin(), tab.file.end());
-        Node root = storage_.LoadTabData(storage_.DataPath(wfile));
+        Node root = storage_.LoadTabData(wfile);
         nodesJson += "\"" + PipelineRunner::JsonEscape(tab.file) + "\":"
                    + Storage::SerializeNode(root);
     }
@@ -540,8 +558,11 @@ void App::SendFullInit() {
 
     // Load and register API providers (resume saved keys)
     {
+        bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::SendFullInit: Loading providers to register...\"}");
         auto providers = storage_.LoadProviders();
+        bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::SendFullInit: Loaded " + std::to_string(providers.size()) + " providers\"}");
         for (auto &kv : providers) {
+            bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::SendFullInit: Registering " + kv.first + " with key='" + kv.second.apiKey + "' url='" + kv.second.baseUrl + "'\"}");
             runner_.RegisterProvider(kv.first, kv.second.apiKey, kv.second.baseUrl);
         }
     }
@@ -575,7 +596,7 @@ void App::SendFullInit() {
     };
     for (auto &tab : session.tabs) {
         std::wstring wfile(tab.file.begin(), tab.file.end());
-        Node root = storage_.LoadTabData(storage_.DataPath(wfile));
+        Node root = storage_.LoadTabData(wfile);
         collectRefs(root, collectRefs);
     }
     storage_.GarbageCollectBlobs(referencedBlobs);
@@ -584,6 +605,7 @@ void App::SendFullInit() {
     std::string providersJson = "{";
     {
         bool firstProv = true;
+        bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::SendFullInit: Loading providers for JS payload...\"}");
         auto providers = storage_.LoadProviders();
         for (auto &kv : providers) {
             if (!firstProv) providersJson += ",";
@@ -597,9 +619,41 @@ void App::SendFullInit() {
             cfg["models"] = JsonValue::fromArray(models);
             providersJson += "\"" + PipelineRunner::JsonEscape(kv.first) + "\":"
                            + JsonValue::fromObject(cfg).serialize(false);
+            bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::SendFullInit: Adding to JS payload -> " + kv.first + " key='" + kv.second.apiKey + "'\"}");
         }
     }
     providersJson += "}";
+
+    // Load general config and chest list
+    auto generalCfg = storage_.LoadGeneralConfig();
+    auto chestNames = storage_.ListNamedChests();
+    std::string chestListJson = "[";
+    for (size_t i = 0; i < chestNames.size(); i++) {
+        if (i > 0) chestListJson += ",";
+        chestListJson += "\"" + PipelineRunner::JsonEscape(chestNames[i]) + "\"";
+    }
+    chestListJson += "]";
+    std::string configJson = "{\"historyRetention\":" + std::to_string(generalCfg.historyRetention)
+                           + ",\"chestList\":" + chestListJson
+                           + ",\"defaultProvider\":\"" + PipelineRunner::JsonEscape(generalCfg.defaultProvider) + "\""
+                           + ",\"defaultModel\":\"" + PipelineRunner::JsonEscape(generalCfg.defaultModel) + "\"}";
+
+    // Load recipes
+    auto recipes = storage_.LoadRecipes();
+    std::string recipesJson = "[";
+    for (size_t i = 0; i < recipes.size(); i++) {
+        if (i > 0) recipesJson += ",";
+        std::map<std::string, JsonValue> obj;
+        obj["type"] = JsonValue::fromString(recipes[i].type);
+        obj["name"] = JsonValue::fromString(recipes[i].name);
+        obj["provider"] = JsonValue::fromString(recipes[i].provider);
+        obj["model"] = JsonValue::fromString(recipes[i].model);
+        obj["temperature"] = JsonValue::fromDouble(recipes[i].temperature);
+        obj["systemPrompt"] = JsonValue::fromString(recipes[i].systemPrompt);
+        obj["command"] = JsonValue::fromString(recipes[i].command);
+        recipesJson += JsonValue::fromObject(obj).serialize(false);
+    }
+    recipesJson += "]";
 
     bridge_.PostToJS("log", "{\"message\":\"[TRACE] SendFullInit: posting init message...\"}");
     bridge_.PostToJS("init",
@@ -609,7 +663,9 @@ void App::SendFullInit() {
         ",\"nodes\":"     + nodesJson +
         ",\"pipelines\":" + pipelinesJson +
         ",\"providers\":" + providersJson +
-        ",\"recentFiles\":" + recentJson + "}");
+        ",\"recentFiles\":" + recentJson +
+        ",\"config\":"    + configJson +
+        ",\"recipes\":"   + recipesJson + "}");
     bridge_.PostToJS("log", "{\"message\":\"[TRACE] SendFullInit: init posted\"}");
 }
 
@@ -640,7 +696,27 @@ Node App::NodeFromJson(const JsonValue &val) {
 
 void App::HandleBridgeMessage(const std::string &type, const std::string &payload) {
     (void)payload;
-    if (type == "save_node") {
+    if (type == "get_file_tree") {
+        std::string json = storage_.GetFileTreeJson();
+        bridge_.PostToJS("file_tree_result", "{\"tree\":" + json + "}");
+    } else if (type == "load_file_data") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("path")) {
+            std::string path = val["path"].string();
+            std::wstring wpath(path.begin(), path.end());
+            std::wstring resolved = storage_.DataPath(wpath);
+            wchar_t fullPath[32768] = {};
+            if (GetFullPathNameW(resolved.c_str(), 32768, fullPath, nullptr)) {
+                std::wstring expected = storage_.GetBasePath() + L"\\data\\";
+                if (std::wstring(fullPath).substr(0, expected.size()) == expected) {
+                    Node root = storage_.LoadTabData(wpath);
+                    std::string nodeJson = Storage::SerializeNode(root);
+                    std::string escPath = PipelineRunner::JsonEscape(path);
+                    bridge_.PostToJS("file_data_result", "{\"path\":\"" + escPath + "\",\"root\":" + nodeJson + "}");
+                }
+            }
+        }
+    } else if (type == "save_node") {
         auto val = JsonValue::parse(payload);
         if (val.has("tabFile") && val.has("root")) {
             std::string tabFile = val["tabFile"].string();
@@ -652,7 +728,7 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
             std::wstring expected = storage_.GetBasePath() + L"\\data\\";
             if (std::wstring(fullPath).substr(0, expected.size()) != expected) return;
             Node root = NodeFromJson(val["root"]);
-            storage_.SaveTabData(fullPath, root);
+            storage_.SaveTabData(wTabFile, root);
         }
     } else if (type == "set_language") {
         auto val = JsonValue::parse(payload);
@@ -695,6 +771,31 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
                 }
             }
         }
+    } else if (type == "run_prompt_process") {
+        auto val = JsonValue::parse(payload);
+        if (val.has("content")) {
+            std::string content = val["content"].string();
+            std::string prompt = val.has("userPrompt") ? val["userPrompt"].string() : "{content}";
+            std::string provider = val.has("provider") ? val["provider"].string() : "openai";
+            std::string model = val.has("model") ? val["model"].string() : "gpt-4.1";
+            std::string systemPrompt = val.has("systemPrompt") ? val["systemPrompt"].string() : "";
+            double temp = val.has("temperature") ? val["temperature"].number() : 0.7;
+
+            inputNodeId_ = val.has("nodeId") ? val["nodeId"].string() : "";
+            inputTabFile_ = val.has("tabFile") ? val["tabFile"].string() : "";
+
+            PipelineStep step;
+            step.name = "Process Prompt";
+            step.type = "ai";
+            step.params["provider"] = provider;
+            step.params["model"] = model;
+            step.params["systemPrompt"] = systemPrompt;
+            step.params["userPrompt"] = prompt;
+            step.params["temperature"] = std::to_string(temp);
+
+            std::vector<PipelineStep> steps = { step };
+            runner_.Run("Process Prompt", steps, content, {}, "child");
+        }
     } else if (type == "cancel_pipeline") {
         runner_.Cancel();
     } else if (type == "wizard_step_resume") {
@@ -723,6 +824,10 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
             std::map<std::string, JsonValue> cfg;
             cfg["apiKey"]  = JsonValue::fromString(kv.second.apiKey);
             cfg["baseUrl"] = JsonValue::fromString(kv.second.baseUrl);
+            std::vector<JsonValue> models;
+            for (auto &m : kv.second.models)
+                models.push_back(JsonValue::fromString(m));
+            cfg["models"] = JsonValue::fromArray(models);
             obj[kv.first] = JsonValue::fromObject(cfg);
         }
         std::string json = JsonValue::fromObject(obj).serialize(false);
@@ -753,10 +858,10 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
     } else if (type == "optimize_version_list") {
         HandleOptimizeVersionList(payload);
     } else if (type == "save_providers") {
-        bridge_.PostToJS("log", "{\"message\":\"save_providers called, payload length=" + std::to_string(payload.size()) + "\"}");
+        bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::HandleBridgeMessage: save_providers called, payload=" + PipelineRunner::JsonEscape(payload) + "\"}");
         auto val = JsonValue::parse(payload);
         if (val.type() != JsonValue::Object) {
-            bridge_.PostToJS("log", "{\"message\":\"ERROR: payload is not an object, type=" + std::to_string(val.type()) + "\"}");
+            bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::HandleBridgeMessage: ERROR: save_providers payload is not an object\"}");
             return;
         }
         std::map<std::string, ProviderConfig> providers;
@@ -771,6 +876,7 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
             }
             providers[kv.first] = cfg;
             runner_.RegisterProvider(kv.first, cfg.apiKey, cfg.baseUrl);
+            bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::HandleBridgeMessage: Registering " + kv.first + " with key='" + cfg.apiKey + "' url='" + cfg.baseUrl + "'\"}");
             if (!cfg.apiKey.empty()) savedCount++;
         }
         // Resolve save path for logging
@@ -783,13 +889,15 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
             if (!pathA.empty() && pathA.back() == '\0') pathA.pop_back();
         }
         if (providers.empty()) {
-            bridge_.PostToJS("log", "{\"message\":\"📂 No providers to save: " + PipelineRunner::JsonEscape(pathA) + " (not written)\"}");
+            bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::HandleBridgeMessage: 📂 No providers to save (not written)\"}");
         } else {
             bool saved = storage_.SaveProviders(providers);
             if (saved) {
-                bridge_.PostToJS("log", "{\"message\":\"✅ Saved " + std::to_string(savedCount) + " provider(s) → " + PipelineRunner::JsonEscape(pathA) + "\"}");
+                bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::HandleBridgeMessage: ✅ Saved " + std::to_string(savedCount) + " provider(s) → " + PipelineRunner::JsonEscape(pathA) + "\"}");
+                HWND hwndEcode = FindWindowW(L"EcodeWindowClass", nullptr);
+                if (hwndEcode) PostMessageW(hwndEcode, WM_APP + 3, 0, 0);
             } else {
-                bridge_.PostToJS("log", "{\"message\":\"❌ FAILED to write " + PipelineRunner::JsonEscape(pathA) + "\"}");
+                bridge_.PostToJS("log", "{\"message\":\"[TRACE] App::HandleBridgeMessage: ❌ FAILED to write " + PipelineRunner::JsonEscape(pathA) + "\"}");
             }
         }
     } else if (type == "test_provider_connection") {
@@ -826,6 +934,32 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         }).detach();
     } else if (type == "step_filter_resume") {
         runner_.ResumeFilter(payload);
+    } else if (type == "fetch_models") {
+        auto val = JsonValue::parse(payload);
+        std::string provider = val.has("provider") ? val["provider"].string() : "";
+        if (!provider.empty()) {
+            // Look up provider config from saved providers
+            auto providers = storage_.LoadProviders();
+            std::string apiKey, baseUrl;
+            if (providers.count(provider)) {
+                apiKey = providers[provider].apiKey;
+                baseUrl = providers[provider].baseUrl;
+            }
+            auto *p = AIProvider::Create(provider, apiKey, baseUrl);
+            std::string modelsJson = "[]";
+            if (p) {
+                auto models = p->ListModels();
+                std::string arr = "[";
+                for (size_t i = 0; i < models.size(); i++) {
+                    if (i > 0) arr += ",";
+                    arr += "\"" + PipelineRunner::JsonEscape(models[i]) + "\"";
+                }
+                arr += "]";
+                modelsJson = arr;
+                delete p;
+            }
+            bridge_.PostToJS("model_list", "{\"provider\":\"" + PipelineRunner::JsonEscape(provider) + "\",\"models\":" + modelsJson + "}");
+        }
     } else if (type == "send_to_chest") {
         auto val = JsonValue::parse(payload);
         if (val.has("chestName") && val.has("content")) {
@@ -902,7 +1036,44 @@ void App::HandleBridgeMessage(const std::string &type, const std::string &payloa
         auto val = JsonValue::parse(payload);
         if (val.has("maxRuns")) {
             storage_.SetMaxHistoryRuns((int)val["maxRuns"].number());
+            Storage::GeneralConfig cfg;
+            cfg.historyRetention = storage_.GetMaxHistoryRuns();
+            storage_.SaveGeneralConfig(cfg);
+            HWND hwndEcode = FindWindowW(L"EcodeWindowClass", nullptr);
+            if (hwndEcode) PostMessageW(hwndEcode, WM_APP + 3, 0, 0);
         }
+    } else if (type == "save_config") {
+        auto val = JsonValue::parse(payload);
+        Storage::GeneralConfig cfg;
+        if (val.has("historyRetention"))
+            cfg.historyRetention = (int)val["historyRetention"].number();
+        if (val.has("defaultProvider"))
+            cfg.defaultProvider = val["defaultProvider"].string();
+        if (val.has("defaultModel"))
+            cfg.defaultModel = val["defaultModel"].string();
+        storage_.SaveGeneralConfig(cfg);
+        HWND hwndEcode = FindWindowW(L"EcodeWindowClass", nullptr);
+        if (hwndEcode) PostMessageW(hwndEcode, WM_APP + 3, 0, 0);
+    } else if (type == "save_recipes") {
+        bridge_.PostToJS("log", "{\"message\":\"[TRACE] save_recipes called, payload length=" + std::to_string(payload.size()) + "\"}");
+        auto val = JsonValue::parse(payload);
+        std::vector<Storage::Recipe> recipes;
+        if (val.type() == JsonValue::Array) {
+            for (auto &item : val.array()) {
+                Storage::Recipe r;
+                if (item.has("type")) r.type = item["type"].string();
+                if (item.has("name")) r.name = item["name"].string();
+                if (item.has("provider")) r.provider = item["provider"].string();
+                if (item.has("model")) r.model = item["model"].string();
+                if (item.has("temperature")) r.temperature = item["temperature"].number();
+                if (item.has("systemPrompt")) r.systemPrompt = item["systemPrompt"].string();
+                if (item.has("command")) r.command = item["command"].string();
+                if (!r.name.empty()) recipes.push_back(r);
+            }
+        }
+        storage_.SaveRecipes(recipes);
+        HWND hwndEcode = FindWindowW(L"EcodeWindowClass", nullptr);
+        if (hwndEcode) PostMessageW(hwndEcode, WM_APP + 3, 0, 0);
     }
 }
 
@@ -968,6 +1139,8 @@ void App::HandleSavePipeline(const std::string &payload) {
         pipelines.push_back(p);
     }
     storage_.SavePipelines(pipelines);
+    HWND hwndEcode = FindWindowW(L"EcodeWindowClass", nullptr);
+    if (hwndEcode) PostMessageW(hwndEcode, WM_APP + 3, 0, 0);
     bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
 }
 
@@ -981,6 +1154,8 @@ void App::HandleDeletePipeline(const std::string &payload) {
     if (it != pipelines.end()) {
         pipelines.erase(it, pipelines.end());
         storage_.SavePipelines(pipelines);
+        HWND hwndEcode = FindWindowW(L"EcodeWindowClass", nullptr);
+        if (hwndEcode) PostMessageW(hwndEcode, WM_APP + 3, 0, 0);
         bridge_.PostToJS("pipeline_list", "{\"pipelines\":" + Storage::SerializePipelines(pipelines) + "}");
     }
 }

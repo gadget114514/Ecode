@@ -5,8 +5,16 @@
 #include <winhttp.h>
 #include <sstream>
 #include <thread>
+#include <functional>
 
 #pragma comment(lib, "winhttp.lib")
+
+// Global HTTP log callback (set by App to log request/response to JS)
+static std::function<void(const std::string&)> g_HttpLogCallback = nullptr;
+
+void SetHttpLogCallback(std::function<void(const std::string&)> cb) {
+    g_HttpLogCallback = cb;
+}
 
 // Forward declarations
 static std::string WinHttpRequest(const std::string &url, const std::string &method,
@@ -66,8 +74,11 @@ public:
                 std::string body = BuildOpenAIBody(req);
                 std::string url = baseUrl_ + "/v1/chat/completions";
                 std::string headers = "Content-Type: application/json\r\nAuthorization: Bearer " + apiKey_ + "\r\n";
-                // ... streaming implementation
-            } catch (...) {}
+                // Streaming not implemented for OpenAI — use Call instead
+                onError("Streaming not implemented for OpenAI provider");
+            } catch (...) {
+                onError("Exception in OpenAI streaming");
+            }
         }).detach();
     }
 };
@@ -343,15 +354,63 @@ static std::string WinHttpRequest(const std::string &url, const std::string &met
     
     // Send request
     std::string result;
+    bool success = false;
     if (WinHttpSendRequest(hRequest, nullptr, 0, (LPVOID)body.data(), (DWORD)body.size(),
                            (DWORD)body.size(), 0) &&
         WinHttpReceiveResponse(hRequest, nullptr)) {
+        success = true;
         DWORD bytesRead = 0;
         char buf[4096];
         while (WinHttpReadData(hRequest, buf, sizeof(buf) - 1, &bytesRead) && bytesRead > 0) {
             buf[bytesRead] = 0;
             result += buf;
         }
+    }
+    
+    // Get status code
+    DWORD statusCode = 0;
+    DWORD statusSize = sizeof(statusCode);
+    if (!success) {
+        statusCode = 0;
+    } else {
+        WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                            nullptr, &statusCode, &statusSize, nullptr);
+    }
+    
+    // Log request/response via callback
+    if (g_HttpLogCallback) {
+        // Build collapsed HTTP log
+        std::string logEntry;
+        logEntry += "<details><summary>🌐 <b>" + method + " " + url + "</b> → " + std::to_string(statusCode) + "</summary>";
+        logEntry += "<pre style=\"font-size:10px;margin:4px 0;padding:4px;background:#1a1a1a;border-radius:3px;max-height:200px;overflow-y:auto;white-space:pre-wrap\">";
+        logEntry += "──── Request ────\n";
+        logEntry += method + " " + url + "\n";
+        if (!headers.empty()) {
+            // Log only Content-Type and Authorization header (mask key)
+            std::string h = headers;
+            size_t authPos = h.find("Authorization");
+            if (authPos != std::string::npos) {
+                size_t valStart = h.find(':', authPos);
+                size_t valEnd = h.find('\n', authPos);
+                if (valEnd == std::string::npos) valEnd = h.find('\r', authPos);
+                if (valEnd == std::string::npos) valEnd = h.length();
+                std::string masked = h.substr(valStart + 1, valEnd - valStart - 1);
+                if (masked.length() > 12)
+                    masked = masked.substr(0, 4) + "..." + masked.substr(masked.length() - 4);
+                h = h.substr(0, valStart + 1) + masked + h.substr(valEnd);
+            }
+            logEntry += h + "\n";
+        }
+        if (!body.empty()) {
+            logEntry += "\n" + body.substr(0, 2000) + (body.length() > 2000 ? "\n... (truncated)" : "") + "\n";
+        }
+        logEntry += "\n──── Response ────\n";
+        logEntry += "Status: " + std::to_string(statusCode) + "\n";
+        if (!result.empty()) {
+            logEntry += result.substr(0, 2000) + (result.length() > 2000 ? "\n... (truncated)" : "") + "\n";
+        }
+        logEntry += "</pre></details>";
+        g_HttpLogCallback(logEntry);
     }
     
     WinHttpCloseHandle(hRequest);

@@ -11,10 +11,24 @@
 
 namespace fs = std::filesystem;
 
+static std::string WideToUtf8(const std::wstring &wstr) {
+    if (wstr.empty()) return "";
+    int len = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    std::string str(len, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &str[0], len, nullptr, nullptr);
+    if (!str.empty() && str.back() == '\0') {
+        str.pop_back();
+    }
+    return str;
+}
+
 Storage::Storage() {}
 
 bool Storage::Init(const std::wstring &appDataPath) {
     basePath_ = appDataPath;
+    if (globalPath_.empty()) {
+        globalPath_ = appDataPath;
+    }
     if (!EnsureDirectory(basePath_)) return false;
     EnsureDirectory(basePath_ + L"\\data");
     EnsureDirectory(basePath_ + L"\\blobs");
@@ -324,11 +338,25 @@ std::string Storage::LoadHistoryRecord(const std::wstring &filename) {
     return ReadFileUtf8(basePath_ + L"\\history\\" + filename);
 }
 
-// --- Providers ---
 std::map<std::string, ProviderConfig> Storage::LoadProviders() {
     std::map<std::string, ProviderConfig> providers;
-    auto json = ReadFileUtf8(basePath_ + L"\\providers.json");
-    if (json.empty()) return providers;
+    std::wstring filePath = (globalPath_.empty() ? basePath_ : globalPath_) + L"\\providers.json";
+    OutputDebugStringW((L"[TRACE] Storage::LoadProviders: loading from " + filePath + L"\n").c_str());
+    printf("[TRACE] Storage::LoadProviders: loading from %S\n", filePath.c_str());
+    fflush(stdout);
+
+    auto json = ReadFileUtf8(filePath);
+    if (json.empty()) {
+        OutputDebugStringA("[TRACE] Storage::LoadProviders: file is empty or missing\n");
+        printf("[TRACE] Storage::LoadProviders: file is empty or missing\n");
+        fflush(stdout);
+        return providers;
+    }
+    
+    OutputDebugStringA(("[TRACE] Storage::LoadProviders: raw json: " + json + "\n").c_str());
+    printf("[TRACE] Storage::LoadProviders: raw json: %s\n", json.c_str());
+    fflush(stdout);
+
     auto val = JsonValue::parse(json);
     for (auto &kv : val.object()) {
         ProviderConfig cfg;
@@ -339,12 +367,16 @@ std::map<std::string, ProviderConfig> Storage::LoadProviders() {
                 cfg.models.push_back(m.string());
         }
         providers[kv.first] = cfg;
+        OutputDebugStringA(("[TRACE] Storage::LoadProviders: loaded provider '" + kv.first + "' with key='" + cfg.apiKey + "'\n").c_str());
+        printf("[TRACE] Storage::LoadProviders: loaded provider '%s' with key='%s'\n", kv.first.c_str(), cfg.apiKey.c_str());
+        fflush(stdout);
     }
     return providers;
 }
 
 bool Storage::SaveProviders(const std::map<std::string, ProviderConfig> &providers) {
-    EnsureDirectory(basePath_);
+    std::wstring parentPath = globalPath_.empty() ? basePath_ : globalPath_;
+    EnsureDirectory(parentPath);
     std::map<std::string, JsonValue> obj;
     for (auto &kv : providers) {
         std::map<std::string, JsonValue> cfg;
@@ -355,9 +387,17 @@ bool Storage::SaveProviders(const std::map<std::string, ProviderConfig> &provide
             models.push_back(JsonValue::fromString(m));
         cfg["models"] = JsonValue::fromArray(models);
         obj[kv.first] = JsonValue::fromObject(cfg);
+        
+        OutputDebugStringA(("[TRACE] Storage::SaveProviders: saving provider '" + kv.first + "' with key='" + kv.second.apiKey + "'\n").c_str());
+        printf("[TRACE] Storage::SaveProviders: saving provider '%s' with key='%s'\n", kv.first.c_str(), kv.second.apiKey.c_str());
+        fflush(stdout);
     }
-    std::wstring filePath = basePath_ + L"\\providers.json";
-    return WriteFileUtf8(filePath, JsonValue::fromObject(obj).serialize(true));
+    std::wstring filePath = parentPath + L"\\providers.json";
+    std::string serialized = JsonValue::fromObject(obj).serialize(true);
+    OutputDebugStringW((L"[TRACE] Storage::SaveProviders: writing to " + filePath + L"\n").c_str());
+    printf("[TRACE] Storage::SaveProviders: writing to %S\n", filePath.c_str());
+    fflush(stdout);
+    return WriteFileUtf8(filePath, serialized);
 }
 
 // --- Pipelines ---
@@ -562,7 +602,7 @@ std::vector<Storage::IncompleteRun> Storage::ScanIncompleteRuns() {
         if (status != "running") continue;
 
         IncompleteRun run;
-        run.runId = std::string(name.begin(), name.end());
+        run.runId = WideToUtf8(name);
         if (val.has("pipelineName")) run.pipelineName = val["pipelineName"].string();
         if (val.has("currentStep")) run.lastCompletedStep = (int)val["currentStep"].number();
         if (val.has("totalSteps")) run.totalSteps = (int)val["totalSteps"].number();
@@ -660,7 +700,7 @@ std::vector<std::string> Storage::ListNamedChests() const {
             std::wstring chestName = name.substr(6); // strip "chest_"
             auto dotPos = chestName.rfind(L'.');
             if (dotPos != std::wstring::npos) chestName = chestName.substr(0, dotPos);
-            result.push_back(std::string(chestName.begin(), chestName.end()));
+            result.push_back(WideToUtf8(chestName));
         } while (FindNextFileW(hFind, &ffd) != 0);
         FindClose(hFind);
     }
@@ -712,4 +752,156 @@ std::string Storage::LoadFromStorageChest(const std::wstring &filename) {
 // --- History Retention ---
 void Storage::SetMaxHistoryRuns(int maxRuns) {
     maxHistoryRuns_ = (maxRuns < 10) ? 10 : (maxRuns > 500) ? 500 : maxRuns;
+}
+
+// --- General Config ---
+Storage::GeneralConfig Storage::LoadGeneralConfig() {
+    GeneralConfig cfg;
+    std::wstring filePath = (globalPath_.empty() ? basePath_ : globalPath_) + L"\\config.json";
+    auto json = ReadFileUtf8(filePath);
+    if (json.empty()) return cfg;
+    auto val = JsonValue::parse(json);
+    if (val.has("historyRetention"))
+        cfg.historyRetention = (int)val["historyRetention"].number();
+    if (val.has("defaultProvider"))
+        cfg.defaultProvider = val["defaultProvider"].string();
+    if (val.has("defaultModel"))
+        cfg.defaultModel = val["defaultModel"].string();
+    return cfg;
+}
+
+bool Storage::SaveGeneralConfig(const GeneralConfig &cfg) {
+    std::wstring parentPath = globalPath_.empty() ? basePath_ : globalPath_;
+    EnsureDirectory(parentPath);
+    std::map<std::string, JsonValue> obj;
+    obj["historyRetention"] = JsonValue::fromDouble((double)cfg.historyRetention);
+    if (!cfg.defaultProvider.empty())
+        obj["defaultProvider"] = JsonValue::fromString(cfg.defaultProvider);
+    if (!cfg.defaultModel.empty())
+        obj["defaultModel"] = JsonValue::fromString(cfg.defaultModel);
+    std::wstring filePath = parentPath + L"\\config.json";
+    return WriteFileUtf8(filePath, JsonValue::fromObject(obj).serialize(true));
+}
+
+// --- Recipes ---
+std::vector<Storage::Recipe> Storage::LoadRecipes() {
+    std::vector<Recipe> recipes;
+    std::wstring filePath = (globalPath_.empty() ? basePath_ : globalPath_) + L"\\recipes.json";
+    OutputDebugStringW((L"[TRACE] Storage::LoadRecipes: loading from " + filePath + L"\n").c_str());
+    printf("[TRACE] Storage::LoadRecipes: loading from %S\n", filePath.c_str());
+    fflush(stdout);
+
+    auto json = ReadFileUtf8(filePath);
+    if (json.empty()) {
+        OutputDebugStringA("[TRACE] Storage::LoadRecipes: file is empty or missing\n");
+        printf("[TRACE] Storage::LoadRecipes: file is empty or missing\n");
+        fflush(stdout);
+        return recipes;
+    }
+
+    OutputDebugStringA(("[TRACE] Storage::LoadRecipes: raw json: " + json + "\n").c_str());
+    printf("[TRACE] Storage::LoadRecipes: raw json: %s\n", json.c_str());
+    fflush(stdout);
+
+    auto val = JsonValue::parse(json);
+    if (val.type() != JsonValue::Array) {
+        OutputDebugStringA("[TRACE] Storage::LoadRecipes: parsed JSON is not an Array!\n");
+        printf("[TRACE] Storage::LoadRecipes: parsed JSON is not an Array!\n");
+        fflush(stdout);
+        return recipes;
+    }
+
+    for (auto &item : val.array()) {
+        Recipe r;
+        if (item.has("type")) r.type = item["type"].string();
+        if (item.has("name")) r.name = item["name"].string();
+        if (item.has("provider")) r.provider = item["provider"].string();
+        if (item.has("model")) r.model = item["model"].string();
+        if (item.has("temperature")) r.temperature = item["temperature"].number();
+        if (item.has("systemPrompt")) r.systemPrompt = item["systemPrompt"].string();
+        if (item.has("command")) r.command = item["command"].string();
+        if (!r.name.empty()) {
+            recipes.push_back(r);
+            OutputDebugStringA(("[TRACE] Storage::LoadRecipes: loaded recipe '" + r.name + "'\n").c_str());
+            printf("[TRACE] Storage::LoadRecipes: loaded recipe '%s'\n", r.name.c_str());
+            fflush(stdout);
+        }
+    }
+    return recipes;
+}
+
+bool Storage::SaveRecipes(const std::vector<Recipe> &recipes) {
+    std::wstring parentPath = globalPath_.empty() ? basePath_ : globalPath_;
+    EnsureDirectory(parentPath);
+    std::vector<JsonValue> arr;
+    for (auto &r : recipes) {
+        std::map<std::string, JsonValue> obj;
+        obj["type"] = JsonValue::fromString(r.type);
+        obj["name"] = JsonValue::fromString(r.name);
+        obj["provider"] = JsonValue::fromString(r.provider);
+        obj["model"] = JsonValue::fromString(r.model);
+        obj["temperature"] = JsonValue::fromDouble(r.temperature);
+        obj["systemPrompt"] = JsonValue::fromString(r.systemPrompt);
+        obj["command"] = JsonValue::fromString(r.command);
+        arr.push_back(JsonValue::fromObject(obj));
+
+        OutputDebugStringA(("[TRACE] Storage::SaveRecipes: saving recipe '" + r.name + "'\n").c_str());
+        printf("[TRACE] Storage::SaveRecipes: saving recipe '%s'\n", r.name.c_str());
+        fflush(stdout);
+    }
+    std::wstring filePath = parentPath + L"\\recipes.json";
+    std::string serialized = JsonValue::fromArray(arr).serialize(true);
+
+    OutputDebugStringW((L"[TRACE] Storage::SaveRecipes: writing to " + filePath + L"\n").c_str());
+    printf("[TRACE] Storage::SaveRecipes: writing to %S\n", filePath.c_str());
+    fflush(stdout);
+
+    return WriteFileUtf8(filePath, serialized);
+}
+
+std::string Storage::GetFileTreeJson() const {
+    fs::path dataDir(basePath_ + L"\\data");
+    if (!fs::exists(dataDir) || !fs::is_directory(dataDir)) {
+        return "[]";
+    }
+    
+    std::vector<JsonValue> rootList;
+    std::function<JsonValue(const fs::path&)> scan = [&](const fs::path &dir) -> JsonValue {
+        std::map<std::string, JsonValue> obj;
+        obj["name"] = JsonValue::fromString(WideToUtf8(dir.filename().wstring()));
+        obj["type"] = JsonValue::fromString("directory");
+        
+        std::vector<JsonValue> children;
+        for (const auto &entry : fs::directory_iterator(dir)) {
+            if (entry.is_directory()) {
+                children.push_back(scan(entry.path()));
+            } else if (entry.is_regular_file()) {
+                std::map<std::string, JsonValue> fileObj;
+                fileObj["name"] = JsonValue::fromString(WideToUtf8(entry.path().filename().wstring()));
+                fileObj["type"] = JsonValue::fromString("file");
+                
+                auto rel = fs::relative(entry.path(), dataDir);
+                fileObj["path"] = JsonValue::fromString(WideToUtf8(rel.wstring()));
+                children.push_back(JsonValue::fromObject(fileObj));
+            }
+        }
+        obj["children"] = JsonValue::fromArray(children);
+        return JsonValue::fromObject(obj);
+    };
+    
+    for (const auto &entry : fs::directory_iterator(dataDir)) {
+        if (entry.is_directory()) {
+            rootList.push_back(scan(entry.path()));
+        } else if (entry.is_regular_file()) {
+            std::map<std::string, JsonValue> fileObj;
+            fileObj["name"] = JsonValue::fromString(WideToUtf8(entry.path().filename().wstring()));
+            fileObj["type"] = JsonValue::fromString("file");
+            
+            auto rel = fs::relative(entry.path(), dataDir);
+            fileObj["path"] = JsonValue::fromString(WideToUtf8(rel.wstring()));
+            rootList.push_back(JsonValue::fromObject(fileObj));
+        }
+    }
+    
+    return JsonValue::fromArray(rootList).serialize(false);
 }

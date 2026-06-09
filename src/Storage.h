@@ -27,6 +27,7 @@ public:
     
     // Get all tab file paths from tabs directory
     std::vector<std::wstring> GetTabFiles();
+    std::string GetFileTreeJson() const;
     
     // Path accessors
     std::wstring DataPath(const std::wstring &relativePath) const;
@@ -95,6 +96,30 @@ public:
     // History retention config (default 50, min 10, max 500)
     void SetMaxHistoryRuns(int maxRuns);
     int GetMaxHistoryRuns() const { return maxHistoryRuns_; }
+    
+    // General config persistence
+    struct GeneralConfig {
+        int historyRetention = 50;
+        std::string defaultProvider = "openai";
+        std::string defaultModel;
+    };
+    GeneralConfig LoadGeneralConfig();
+    bool SaveGeneralConfig(const GeneralConfig &cfg);
+    
+    // Recipes
+    struct Recipe {
+        std::string type = "ai";     // "ai" or "command"
+        std::string name;
+        // AI fields
+        std::string provider;
+        std::string model;
+        double temperature = 0.7;
+        std::string systemPrompt;
+        // Command field
+        std::string command;
+    };
+    std::vector<Recipe> LoadRecipes();
+    bool SaveRecipes(const std::vector<Recipe> &recipes);
 
     // Project isolation — resolve a file path within the current project, rejecting traversal
     std::wstring ResolveProjectPath(const std::wstring &relativePath) const;
@@ -110,6 +135,7 @@ public:
 
 private:
     std::wstring basePath_;
+    std::wstring globalPath_;
     int maxHistoryRuns_ = 50;
     std::wstring GetUserDataPath() const;
 };
