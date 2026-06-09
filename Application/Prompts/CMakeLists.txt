@@ -1,47 +1,56 @@
 cmake_minimum_required(VERSION 3.15)
-project(Prompts LANGUAGES CXX)
+project(Prompts LANGUAGES NONE)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# ── Electron app (Node.js / npm) ──────────────────────────────
+set(ELECTRON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/electron")
 
-add_executable(Prompts WIN32
-    src/main.cpp
-    src/App.cpp
-    src/Bridge.cpp
-    src/NodeData.cpp
-    src/Storage.cpp
-    src/JsonParser.cpp
-    src/Base64.cpp
-    src/PipelineRunner.cpp
-    src/PipelineVersionManager.cpp
-    src/PipelineOptimizer.cpp
-    src/AIProvider.cpp
-    src/PromptsLocalization.cpp
-    resources/resource.rc
+find_program(NPM_EXECUTABLE npm REQUIRED)
+
+# npm install — run once; re-runs if package.json changes
+add_custom_command(
+    OUTPUT  "${ELECTRON_DIR}/node_modules/.package-lock.json"
+    COMMAND "${NPM_EXECUTABLE}" install
+    WORKING_DIRECTORY "${ELECTRON_DIR}"
+    DEPENDS "${ELECTRON_DIR}/package.json"
+    COMMENT "npm install (Prompts Electron)"
 )
 
-target_include_directories(Prompts PRIVATE src resources ${CMAKE_CURRENT_SOURCE_DIR}/packages/wv2/build/native/include)
-target_link_libraries(Prompts PRIVATE
-    comctl32
-    shlwapi
-    user32
-    kernel32
-    winhttp
-    ole32
-    oleaut32
-    ws2_32
-    "${CMAKE_CURRENT_SOURCE_DIR}/packages/wv2/build/native/x64/WebView2Loader.dll.lib"
+add_custom_target(prompts_install
+    DEPENDS "${ELECTRON_DIR}/node_modules/.package-lock.json"
 )
 
-target_compile_definitions(Prompts PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+# Start the Electron app (development)
+add_custom_target(prompts_start
+    COMMAND "${NPM_EXECUTABLE}" start
+    WORKING_DIRECTORY "${ELECTRON_DIR}"
+    DEPENDS prompts_install
+    COMMENT "Starting Prompts (Electron)"
+    USES_TERMINAL
+)
 
-if(MSVC)
-    target_compile_options(Prompts PRIVATE /utf-8 /W4 /EHsc)
-endif()
+# Run unit tests (node --test)
+add_custom_target(prompts_test
+    COMMAND "${NPM_EXECUTABLE}" test
+    WORKING_DIRECTORY "${ELECTRON_DIR}"
+    DEPENDS prompts_install
+    COMMENT "Running Prompts tests"
+    USES_TERMINAL
+)
 
-# Register frontend files as target dependencies (not compiled, just tracked)
-file(GLOB_RECURSE PROMTS_FRONTEND_DEPS
+# Package with electron-builder
+add_custom_target(prompts_build
+    COMMAND "${NPM_EXECUTABLE}" run build
+    WORKING_DIRECTORY "${ELECTRON_DIR}"
+    DEPENDS prompts_install
+    COMMENT "Building Prompts installer (Electron)"
+    USES_TERMINAL
+)
+
+# Default build target installs npm dependencies
+add_custom_target(Prompts ALL DEPENDS prompts_install)
+
+# ── Frontend sources (IDE visibility only) ────────────────────
+file(GLOB_RECURSE PROMPTS_FRONTEND_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.html"
     "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.js"
     "${CMAKE_CURRENT_SOURCE_DIR}/frontend/*.css"
@@ -49,65 +58,14 @@ file(GLOB_RECURSE PROMTS_FRONTEND_DEPS
     "${CMAKE_CURRENT_SOURCE_DIR}/frontend/wizards/*.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/frontend/lib/*.js"
 )
-set_source_files_properties(${PROMTS_FRONTEND_DEPS} PROPERTIES HEADER_FILE_ONLY TRUE)
-target_sources(Prompts PRIVATE ${PROMTS_FRONTEND_DEPS})
 
-# ── Post-build: skip copy (done manually) ──
-
-set_target_properties(Prompts PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin/$<CONFIG>/plugins"
+file(GLOB_RECURSE PROMPTS_ELECTRON_SOURCES
+    "${ELECTRON_DIR}/main.js"
+    "${ELECTRON_DIR}/preload.js"
+    "${ELECTRON_DIR}/package.json"
 )
 
-# Test executables
-set(PROMPTS_TEST_COMMON_LIBS comctl32 shlwapi user32 kernel32 shell32 ole32 oleaut32)
-
-if(MSVC)
-    set(PROMPTS_TEST_COMMON_FLAGS /utf-8 /W4 /EHsc)
-endif()
-
-function(add_prompts_test name)
-    add_executable(${name} EXCLUDE_FROM_ALL ${ARGN})
-    if(MSVC)
-        target_compile_options(${name} PRIVATE ${PROMPTS_TEST_COMMON_FLAGS})
-    endif()
-endfunction()
-
-add_prompts_test(test_prompts_base64 tests/test_base64.cpp src/Base64.cpp)
-
-add_prompts_test(test_prompts_jsonparser tests/test_jsonparser.cpp src/JsonParser.cpp)
-
-add_prompts_test(test_prompts_localization tests/test_localization.cpp src/PromptsLocalization.cpp)
-
-add_prompts_test(test_prompts_nodedata tests/test_nodedata.cpp src/NodeData.cpp)
-
-add_prompts_test(test_prompts_storage tests/test_storage.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
-target_link_libraries(test_prompts_storage PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
-
-add_prompts_test(test_prompts_pipelinerunner tests/test_pipelinerunner.cpp src/PipelineRunner.cpp src/Base64.cpp src/NodeData.cpp src/JsonParser.cpp src/AIProvider.cpp)
-target_link_libraries(test_prompts_pipelinerunner PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
-
-add_prompts_test(test_prompts_optimizer tests/test_optimizer.cpp
-    src/PipelineVersionManager.cpp src/PipelineOptimizer.cpp
-    src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/AIProvider.cpp)
-target_link_libraries(test_prompts_optimizer PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
-
-add_prompts_test(test_prompts_providers tests/test_providers.cpp src/AIProvider.cpp)
-target_include_directories(test_prompts_providers PRIVATE src)
-target_link_libraries(test_prompts_providers PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
-
-add_prompts_test(test_prompts_versionmanager tests/test_pipelineversionmanager.cpp
-    src/PipelineVersionManager.cpp src/PipelineOptimizer.cpp
-    src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/AIProvider.cpp)
-target_link_libraries(test_prompts_versionmanager PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
-
-add_prompts_test(test_prompts_isolation tests/test_project_isolation.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
-target_link_libraries(test_prompts_isolation PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
-
-add_prompts_test(test_prompts_checkpoint tests/test_checkpoint.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp src/PipelineRunner.cpp src/AIProvider.cpp)
-target_link_libraries(test_prompts_checkpoint PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
-
-add_prompts_test(test_prompts_chest tests/test_chest.cpp src/Storage.cpp src/JsonParser.cpp src/Base64.cpp src/NodeData.cpp)
-target_link_libraries(test_prompts_chest PRIVATE ${PROMPTS_TEST_COMMON_LIBS})
-
-add_prompts_test(test_prompts_stream tests/test_stream_model.cpp src/PipelineRunner.cpp src/Base64.cpp src/NodeData.cpp src/JsonParser.cpp src/AIProvider.cpp)
-target_link_libraries(test_prompts_stream PRIVATE ${PROMPTS_TEST_COMMON_LIBS} winhttp)
+add_custom_target(prompts_sources SOURCES
+    ${PROMPTS_FRONTEND_SOURCES}
+    ${PROMPTS_ELECTRON_SOURCES}
+)
