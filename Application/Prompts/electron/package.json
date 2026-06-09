@@ -1,0 +1,35 @@
+{
+  "name": "prompts-electron",
+  "version": "1.0.0",
+  "description": "Prompts - AI Pipeline Editor",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64",
+    "test": "node --test test.js"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.ecode.prompts",
+    "productName": "Prompts",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "../frontend/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "../resources/app.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

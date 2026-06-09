@@ -28,6 +28,15 @@ add_custom_target(prompts_start
     USES_TERMINAL
 )
 
+# Run unit tests (node --test)
+add_custom_target(prompts_test
+    COMMAND "${NPM_EXECUTABLE}" test
+    WORKING_DIRECTORY "${ELECTRON_DIR}"
+    DEPENDS prompts_install
+    COMMENT "Running Prompts tests"
+    USES_TERMINAL
+)
+
 # Package with electron-builder
 add_custom_target(prompts_build
     COMMAND "${NPM_EXECUTABLE}" run build
