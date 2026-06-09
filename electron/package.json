@@ -20,16 +20,16 @@
     },
     "files": [
       "main.js",
-      "preload.js",
-      "../frontend/**/*"
+      "preload.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend",
+        "to": "frontend"
+      }
     ],
     "win": {
-      "target": "nsis",
-      "icon": "../resources/app.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "target": "dir"
     }
   }
 }
