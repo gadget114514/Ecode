@@ -5,21 +5,38 @@ BUILD_TYPE="${1:-Release}"
 TARGET="$2"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-# Build Prompts plugin first (triggers its POST_BUILD to copy frontend)
-echo "Building Prompts plugin..."
+# ── Prompts (Electron) ────────────────────────────────────────
+echo "Building Prompts (Electron)..."
 PROMPTS_DIR="$ROOT/Application/Prompts"
-PROMPTS_BUILD_DIR="$PROMPTS_DIR/build"
+ELECTRON_DIR="$PROMPTS_DIR/electron"
 
-mkdir -p "$PROMPTS_BUILD_DIR"
-cmake -S "$PROMPTS_DIR" -B "$PROMPTS_BUILD_DIR" -G "Ninja" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" 2>/dev/null || \
-cmake -S "$PROMPTS_DIR" -B "$PROMPTS_BUILD_DIR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
-cmake --build "$PROMPTS_BUILD_DIR" --config "$BUILD_TYPE" --target Prompts
+# Install npm dependencies if needed
+if [ ! -d "$ELECTRON_DIR/node_modules" ]; then
+    echo "  npm install..."
+    npm --prefix "$ELECTRON_DIR" install
+fi
 
-# Also copy frontend files directly from source to bin/Release/plugins/
+# Package the Electron app with electron-builder
+echo "  npm run build..."
+npm --prefix "$ELECTRON_DIR" run build
+
+# Copy the packaged installer / unpacked app to bin/<BUILD_TYPE>/plugins/
+PLUGINS_OUT="$ROOT/bin/$BUILD_TYPE/plugins"
+mkdir -p "$PLUGINS_OUT"
+
+DIST_DIR="$ELECTRON_DIR/dist"
+if [ -d "$DIST_DIR/win-unpacked" ]; then
+    cp -r "$DIST_DIR/win-unpacked" "$PLUGINS_OUT/Prompts"
+elif [ -d "$DIST_DIR" ]; then
+    # Copy any installer exe that was produced
+    find "$DIST_DIR" -maxdepth 1 -name "*.exe" -exec cp {} "$PLUGINS_OUT/" \; 2>/dev/null || true
+fi
+
+# Always copy frontend sources for other plugins that embed them directly
 echo "Copying Prompts frontend to output..."
-cp -r "$PROMPTS_DIR/frontend/"* "$ROOT/bin/$BUILD_TYPE/plugins/" 2>/dev/null || true
+cp -r "$PROMPTS_DIR/frontend/." "$PLUGINS_OUT/" 2>/dev/null || true
 
-# Main build
+# ── Main build ────────────────────────────────────────────────
 echo "Configuring CMake ($BUILD_TYPE)..."
 BUILD_DIR="$ROOT/build"
 mkdir -p "$BUILD_DIR"
