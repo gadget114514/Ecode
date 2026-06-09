@@ -18,7 +18,7 @@ fi
 
 # Package the Electron app with electron-builder
 echo "  npm run build..."
-npm --prefix "$ELECTRON_DIR" run build
+CSC_IDENTITY_AUTO_DISCOVERY=false npm --prefix "$ELECTRON_DIR" run build
 
 # Copy the packaged installer / unpacked app to bin/<BUILD_TYPE>/plugins/
 PLUGINS_OUT="$ROOT/bin/$BUILD_TYPE/plugins"
