@@ -13,7 +13,7 @@ Editor::Editor() : m_activeBufferIndex(0) {}
 Editor::~Editor() {}
 
 size_t Editor::OpenFile(const std::wstring &path) {
-  auto buffer = std::make_unique<Buffer>();
+  DebugLog("Editor::OpenFile: path=" + WStringToString(path), LOG_DEBUG); auto buffer = std::make_unique<Buffer>();
   if (m_progressCb)
     buffer->SetProgressCallback(m_progressCb);
   if (buffer->OpenFile(path)) {

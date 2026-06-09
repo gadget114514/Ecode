@@ -174,6 +174,12 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
         req.model = step.params.count("model") ? step.params.at("model") : "gpt-4.1";
         req.systemPrompt = step.params.count("systemPrompt") ? step.params.at("systemPrompt") : "";
         req.userPrompt = step.params.count("userPrompt") ? step.params.at("userPrompt") : "{content}";
+        req.temperature = 0.7;
+        if (step.params.count("temperature")) {
+            try {
+                req.temperature = std::stod(step.params.at("temperature"));
+            } catch (...) {}
+        }
         
         // Replace placeholders
         auto replaceAll = [](std::string &s, const std::string &from, const std::string &to) {
@@ -192,24 +198,21 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
         
         req.attachments = inputAttachments_;
         
-        providerIt->second->CallStreaming(req,
-            [this, &step](const std::string &chunk) {
-                PostBridge("stream_chunk", "{\"stepIndex\":" + std::to_string(currentStepIndex_) + ",\"text\":\"" + chunk + "\"}");
-            },
-            [this, &step](const AIResponse &resp) {
-                if (currentStepIndex_ < (int)historySteps_.size()) {
-                    historySteps_[currentStepIndex_].output = resp.content;
-                    historySteps_[currentStepIndex_].status = "completed";
-                    historySteps_[currentStepIndex_].promptTokens = resp.promptTokens;
-                    historySteps_[currentStepIndex_].completionTokens = resp.completionTokens;
-                }
-                PostBridge("step_done", "{\"index\":" + std::to_string(currentStepIndex_) +
-                           ",\"tokens\":" + std::to_string(resp.completionTokens) + "}");
-                RunNextStep();
-            },
-            [this](const std::string &error) {
-                HandleError(error);
-            });
+        // Use non-streaming Call to ensure WinHttpRequest logging works
+        AIProvider *provider = providerIt->second;
+        std::thread([this, provider, req]() {
+            int idx = currentStepIndex_;
+            auto resp = provider->Call(req);
+            if (idx < (int)historySteps_.size()) {
+                historySteps_[idx].output = resp.content;
+                historySteps_[idx].status = "completed";
+                historySteps_[idx].promptTokens = resp.promptTokens;
+                historySteps_[idx].completionTokens = resp.completionTokens;
+            }
+            PostBridge("step_done", "{\"index\":" + std::to_string(idx) +
+                       ",\"tokens\":" + std::to_string(resp.completionTokens) + "}");
+            RunNextStep();
+        }).detach();
     } else if (type == "manual") {
         std::string mode   = step.params.count("mode")   ? step.params.at("mode")   : "view";
         std::string prompt = step.params.count("prompt") ? step.params.at("prompt") : "";
@@ -525,6 +528,7 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
         if (op == "contains") matched = resolved.find(value) != std::string::npos;
         else if (op == "equals") matched = (resolved == value);
         
+        PostBridge("log", "{\"message\":\"⚠ Condition step: onTrue/onFalse branch not implemented (always continues)\"}");
         if (matched) {
             std::string action = step.params.count("onTrue") ? step.params.at("onTrue") : "next_step";
             (void)action;
@@ -540,6 +544,7 @@ void PipelineRunner::ExecuteStep(const PipelineStep &step) {
         RunNextStep();
     } else {
         // Unknown step type — skip
+        PostBridge("log", "{\"message\":\"⚠ Unimplemented step type: " + type + " — skipped\"}");
         if (currentStepIndex_ < (int)historySteps_.size()) {
             historySteps_[currentStepIndex_].status = "skipped";
         }
@@ -769,7 +774,7 @@ void PipelineRunner::CancelManual() {
 }
 
 void PipelineRunner::AppendPipelineSteps(const std::string &pipelineName) {
-    // Would need access to Storage to load pipeline by name
+    PostBridge("log", "{\"message\":\"⚠ AppendPipelineSteps not implemented (stub)\"}");
     (void)pipelineName;
 }
 

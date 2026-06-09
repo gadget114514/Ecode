@@ -15,6 +15,8 @@
 #define ID_PIPELINE_CANCEL   223
 #define ID_PROVIDERS_CONFIGURE 230
 #define ID_PROVIDERS_TEST    231
+#define ID_RECIPE_MANAGER    235
+#define ID_RECIPE_CONFIGURE  236
 #define ID_VIEW_TREE         240
 #define ID_VIEW_LIST         241
 #define ID_VIEW_EDITOR       242

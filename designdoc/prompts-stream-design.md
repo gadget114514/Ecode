@@ -117,25 +117,25 @@ Input Pane でこの step の入力ソースを自由に選べる。明示的に
 ## Project Concept & Isolation (プロジェクト概念と隔離設計)
 
 ### 1. ディレクトリ構造の隔離
-データ保存場所である `%APPDATA%/Ecode/Prompts/` の直下をフラットにするのではなく、`projects/` サブフォルダを設けて各プロジェクトのデータを物理的に隔離する。また、プロジェクト間で受け渡すチェストデータを格納する共通領域 `chests/` と、不要なデータの退避先である `storage_chest/` を設ける。
+データ保存場所である `%APPDATA%/Ecode/Prompts/` の直下において、プロジェクト管理情報 (`session.json`) と、各プロジェクト（タブ）のデータ実体（`data/project-日付.json`）を分けて管理する。これにより、プロジェクト間でデータが混入することを物理的・論理的に防止する。
+なお、`config.json`, `providers.json`, `recipes.json`, `pipeline.json` はプロジェクト別の管理から除外された**グローバル共有データ**であり、Ecodeエディタ本体の起動時に復元され、終了時に自動でシリアライズ保存（復帰）されるライフサイクルを持つ。
 
 ```
 %APPDATA%/Ecode/Prompts/
-├── providers.json               
-├── session.json                 
-├── chests/                      ← 共有チェスト領域 (スチール / 要求)
-│   ├── chest_jp_translations.json  
+├── config.json                  ← グローバル共有データ (V2対応など)
+├── providers.json               ← グローバル共有データ (プロバイダ設定)
+├── recipes.json                 ← グローバル共有データ (レシピ設定)
+├── pipeline.json                ← グローバル共有データ (パイプライン定義テンプレート)
+├── session.json                 ← セッション管理データ (タブ一覧: どのプロジェクトがロードされるか)
+├── data/                        ← 各プロジェクトごとのデータ (ノードデータ本体)
+│   ├── general.json             ← 初期プロジェクトデータ
+│   ├── project-20260609_180000.json ← 新規プロジェクト作成時に生成される個別ファイル
 │   └── ...
-├── storage_chest/               ← 新設：貯蔵チェスト領域 (GC対象の退避用ゴミ箱)
-│   ├── deleted_checkpoint_xyz.json
+├── blobs/                       ← 外部メディアファイル等のバイナリデータ
+│   ├── pipeline_...
 │   └── ...
-└── projects/
-    ├── default/                 
-    │   ├── pipeline.json        
-    │   ├── data/                
-    │   ├── blobs/               
-    │   └── history/             
-    └── project_A/               
+└── history/                     ← パイプライン実行履歴データ
+    └── ...
 ```
 
 ### 2. 絶対に混ざらないための3層隔離保証

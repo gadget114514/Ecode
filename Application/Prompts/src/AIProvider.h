@@ -44,3 +44,6 @@ public:
                                const std::string &apiKey,
                                const std::string &baseUrl = "");
 };
+
+// Set global HTTP log callback (for debugging HTTP request/response in JS log)
+void SetHttpLogCallback(std::function<void(const std::string&)> cb);

@@ -5,6 +5,7 @@
 // =============================================================================
 
 #include <cstdio>
+#include <fstream>
 #include <string>
 
 void DebugLog(const std::string &msg, LogLevel level);
@@ -123,9 +124,38 @@ static LRESULT HandleCreate(HWND hwnd) {
   // Subclass tab control for drag-reorder support
   g_oldTabProc = (WNDPROC)SetWindowLongPtr(
       g_tabHwnd, GWLP_WNDPROC, (LONG_PTR)TabSubclassProc);
-
   auto &settings = SettingsManager::Instance();
-  settings.Load();
+  settings.Load(); g_currentLogLevel = settings.GetLogLevel();
+  {
+    std::wstring appDataDir = settings.GetAppDataPath() + L"\\Prompts";
+    std::filesystem::create_directories(appDataDir);
+    auto LoadAndSetGlobal = [&](const std::wstring &fileName, const std::string &jsVarName) {
+      std::wstring filePath = appDataDir + L"\\" + fileName;
+      std::string content = "[]";
+      if (fileName == L"config.json" || fileName == L"providers.json" || fileName == L"pipeline.json") {
+        content = "{}";
+      }
+      std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+      if (file) {
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
+        if (size > 0) {
+          content.resize((size_t)size);
+          file.read(&content[0], size);
+        }
+      }
+      if (content.empty()) {
+        content = (fileName == L"config.json" || fileName == L"providers.json" || fileName == L"pipeline.json") ? "{}" : "[]";
+      }
+      if (g_scriptEngine) {
+        g_scriptEngine->Evaluate(jsVarName + " = " + content + ";");
+      }
+    };
+    LoadAndSetGlobal(L"config.json", "Editor.config");
+    LoadAndSetGlobal(L"providers.json", "Editor.providers");
+    LoadAndSetGlobal(L"recipes.json", "Editor.recipes");
+    LoadAndSetGlobal(L"pipeline.json", "Editor.pipelines");
+  }
 
   std::wstring projDir = settings.GetProjectDirectory();
   if (!projDir.empty()) {
@@ -466,8 +496,10 @@ static void HandleDestroy(HWND hwnd) {
   }
   g_appTabs.clear();
 
-  delete g_scriptEngine;
-  g_scriptEngine = nullptr;
+  if (g_scriptEngine) {
+    delete g_scriptEngine;
+    g_scriptEngine = nullptr;
+  }
   delete g_renderer;
   g_renderer = nullptr;
   delete g_editor;

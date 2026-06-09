@@ -890,6 +890,14 @@ int SettingsManager::SaveSession(const std::wstring &name) {
   WritePrivateProfileStringW(L"Sessions", std::to_wstring(index).c_str(),
                              name.c_str(), idxPath.c_str());
 
+  // Copy Prompts session.json if it exists to session directory for session restoration
+  std::wstring promptsSessionPath = GetAppDataPath() + L"\\Prompts\\session.json";
+  if (std::filesystem::exists(promptsSessionPath)) {
+    std::wstring destPath = sessionDir + L"\\prompts_session.json";
+    std::error_code ec;
+    std::filesystem::copy_file(promptsSessionPath, destPath, std::filesystem::copy_options::overwrite_existing, ec);
+  }
+
   return index;
 }
 
@@ -971,6 +979,37 @@ bool SettingsManager::LoadSession(int index) {
         buf->FoldLine((size_t)line);
       }
     }
+  }
+
+  // Restore Prompts session.json if it was saved for this session
+  std::wstring savedPromptsSession = sessionDir + L"\\prompts_session.json";
+  std::wstring targetPromptsSession = GetAppDataPath() + L"\\Prompts\\session.json";
+  if (std::filesystem::exists(savedPromptsSession)) {
+    std::error_code ec;
+    std::filesystem::copy_file(savedPromptsSession, targetPromptsSession, std::filesystem::copy_options::overwrite_existing, ec);
+
+    // Notify all PromptsAppClass windows to reload session.json
+    struct ReloadContext {
+      static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+        wchar_t className[256];
+        if (GetClassNameW(hwnd, className, 256) > 0) {
+          if (wcscmp(className, L"PromptsAppClass") == 0) {
+            PostMessageW(hwnd, WM_APP + 2, 0, 0); // WM_RELOAD_SESSION
+          }
+        }
+        EnumChildWindows(hwnd, [](HWND childHwnd, LPARAM lp) -> BOOL {
+          wchar_t childClassName[256];
+          if (GetClassNameW(childHwnd, childClassName, 256) > 0) {
+            if (wcscmp(childClassName, L"PromptsAppClass") == 0) {
+              PostMessageW(childHwnd, WM_APP + 2, 0, 0); // WM_RELOAD_SESSION
+            }
+          }
+          return TRUE;
+        }, 0);
+        return TRUE;
+      }
+    };
+    EnumWindows(ReloadContext::EnumWindowsProc, 0);
   }
 
   return true;

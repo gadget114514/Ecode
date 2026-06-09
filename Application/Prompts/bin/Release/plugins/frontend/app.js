@@ -16,17 +16,29 @@ const app = {
         viewMode: 'node', // "node" | "pipeline"
         selectedStep: -1, // selected pipeline step index
         currentRunId: '',
+        activeTreeTab: 'node',
+        fileTree: [],
         projects: [],
         activeProject: 'default',
         incompleteRuns: [],
         chestList: [],
-        historyRetention: 50
+        historyRetention: 50,
+        defaultProvider: 'openai',
+        defaultModel: '',
+        recipes: [],
+        selectedRecipe: '',
+        editingRecipeIndex: -1,
+        providerModels: {}
     },
 
     init() {
         this.setupBridge();
         this.loadLanguage(this.state.language);
         this.setupHints();
+        this.initMessagesResizer();
+        window.addEventListener('beforeunload', () => {
+            this.updateNode();
+        });
     },
 
     setupBridge() {
@@ -58,6 +70,19 @@ const app = {
                 }
                 if (msg.payload.providers) {
                     this.state.providers = msg.payload.providers;
+                }
+                if (msg.payload.config) {
+                    if (msg.payload.config.historyRetention)
+                        this.state.historyRetention = msg.payload.config.historyRetention;
+                    if (msg.payload.config.chestList)
+                        this.state.chestList = msg.payload.config.chestList;
+                    if (msg.payload.config.defaultProvider)
+                        this.state.defaultProvider = msg.payload.config.defaultProvider;
+                    if (msg.payload.config.defaultModel !== undefined)
+                        this.state.defaultModel = msg.payload.config.defaultModel;
+                }
+                if (msg.payload.recipes) {
+                    this.state.recipes = msg.payload.recipes;
                 }
                 // Always show hamburger (embedded: replaces menubar; standalone: supplement)
                 const hb = document.getElementById('btn-hamburger');
@@ -107,12 +132,33 @@ const app = {
             case 'providers_result':
                 this.state.providers = msg.payload || {};
                 this.onProvidersResult(this.state.providers);
+                // Re-render Recipe Manager if it's open
+                if (document.getElementById('recipe-modal')?.classList.contains('visible')) {
+                    this.renderRecipeManager();
+                }
+                break;
+            case 'model_list':
+                if (msg.payload && msg.payload.models) {
+                    if (!this.state.providerModels) this.state.providerModels = {};
+                    this.state.providerModels[msg.payload.provider] = msg.payload.models;
+                    // Update model inputs in Recipe Manager if open
+                    if (document.getElementById('recipe-modal')?.classList.contains('visible')) {
+                        this.updateRecipeManagerModels(msg.payload.provider);
+                    }
+                }
                 break;
             case 'menu_command':
                 this.handleMenuCommand(msg.payload);
                 break;
             case 'open_file_result':
                 this.onFileSelected(msg.payload.path);
+                break;
+            case 'file_tree_result':
+                this.state.fileTree = msg.payload.tree || [];
+                this.renderFileTree();
+                break;
+            case 'file_data_result':
+                this.onFileDataResult(msg.payload.path, msg.payload.root);
                 break;
             case 'save_as_result':
                 this.onSaveAsResult(msg.payload.path);
@@ -292,14 +338,23 @@ const app = {
 
     onFileSelected(path) {
         if (path) {
+            const idx = this.state.tabs.findIndex(t => t.file === path);
+            if (idx >= 0) {
+                this.switchTab(idx);
+                return;
+            }
             this.state.tabs.push({ name: path.split('/').pop().split('\\').pop(), file: path, root: { title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] } });
             this.state.activeTab = this.state.tabs.length - 1;
             this.renderTabs();
             this.addLog('📂 Opened: ' + path);
+            this.postMessage({ type: 'load_file_data', payload: { path: path } });
         }
     },
 
-    saveFile() { this.addLog('💾 Save requested'); },
+    saveFile() {
+        this.addLog('💾 Save requested');
+        this.updateNode();
+    },
     saveFileAs() { this.addLog('💾 Save As requested'); },
     onPipelineCompleted(meta) {
         this.state.pipelineRunning = false;
@@ -310,9 +365,11 @@ const app = {
             catch { return btoa(str); }
         };
 
+        const outputContent = meta.outputContent || '';
+        const autoTitle = outputContent.replace(/\s+/g, ' ').trim().substring(0, 50) + (outputContent.length > 50 ? '...' : '');
         const outputNode = {
-            title: safeB64(meta.pipelineName + ' — ' + (meta.executedAt || '').replace('T',' ').replace('Z','')),
-            content: safeB64(meta.outputContent || ''),
+            title: safeB64(autoTitle || meta.pipelineName),
+            content: safeB64(outputContent),
             mimetype: 'text/plain',
             attachments: [],
             children: [],
@@ -323,7 +380,7 @@ const app = {
         const currentNode = this.getNodeByPath(this.state.currentNodePath);
         if (tab && currentNode) {
             if (!currentNode.children) currentNode.children = [];
-            currentNode.children.push(outputNode);
+            currentNode.children.unshift(outputNode);
             this.renderTree();
             this.renderList();
             if (tab.file && tab.root) {
@@ -331,6 +388,8 @@ const app = {
             }
             this.addLog(`📦 Child node saved: "${meta.pipelineName}"`);
         }
+        this.state.selectedOutputRunIndex = 0;
+        this.renderOutput();
     },
 
     renderPipelineMeta(node) {
@@ -513,7 +572,7 @@ const app = {
             return;
         }
         if (typeof wizardData === 'string') {
-            try { wizardData = JSON.parse(wizardData); } catch {}
+            try { wizardData = JSON.parse(wizardData); } catch { this.addLog('⚠ Failed to parse wizard data'); }
         }
         this._renderPipelineWizard(index, wizardData, content);
     },
@@ -645,7 +704,7 @@ const app = {
                     this.addLog(`⚠ Invalid input for "${stepDef.id}"`);
                     return;
                 }
-            } catch {}
+            } catch { this.addLog('⚠ Failed to parse wizard step input'); }
         }
         // Apply action
         if (stepDef.action === 'setLanguage') {
@@ -684,11 +743,24 @@ const app = {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     },
 
+    safeAtob(str) {
+        if (!str) return '';
+        try {
+            return decodeURIComponent(escape(atob(str)));
+        } catch {
+            try {
+                return atob(str);
+            } catch {
+                return str;
+            }
+        }
+    },
+
     showConfig() {
         const panel = document.getElementById('config-panel');
         if (!panel) return;
         panel.classList.add('visible');
-        this.onProvidersResult(this.state.providers || {});
+        this.postMessage({ type: 'get_providers' });
         this.initConfigDrag();
         this.addLog('⚙ Config opened');
     },
@@ -698,7 +770,217 @@ const app = {
         if (!panel) return;
         // Auto-save on close
         this.saveProviders();
+        this.saveRecipes();
+        this.postMessage({ type: 'save_config', payload: {
+            historyRetention: this.state.historyRetention,
+            defaultProvider: this.state.defaultProvider,
+            defaultModel: this.state.defaultModel
+        }});
         panel.classList.remove('visible');
+    },
+
+    showRecipeManager() {
+        const modal = document.getElementById('recipe-modal');
+        if (!modal) return;
+        modal.classList.add('visible');
+        this.postMessage({ type: 'get_providers' });
+        this.renderRecipeManager();
+    },
+
+    closeRecipeManager() {
+        this.saveRecipes();
+        document.getElementById('recipe-modal')?.classList.remove('visible');
+    },
+
+    renderRecipeManager() {
+        const body = document.getElementById('recipe-modal-body');
+        if (!body) return;
+        const recipes = this.state.recipes || [];
+        const editingIdx = this.state.editingRecipeIndex;
+        const providers = Object.keys(this.state.providers || {});
+        let html = recipes.map((r, i) => {
+            if (i === editingIdx) return this._renderRecipeEditForm(r, i, providers);
+            return this._renderRecipeCard(r, i);
+        }).join('');
+        html += this._renderRecipeAddForm(providers);
+        body.innerHTML = html;
+    },
+
+    _renderRecipeCard(r, i) {
+        const typeIcon = r.type === 'command' ? '⚙️' : '🤖';
+        let detail = '';
+        if (r.type === 'command') {
+            detail = `<span class="recipe-mgr-item-detail-text">⚙️ ${this.escapeHtml(r.command || '')}</span>`;
+        } else {
+            detail = `<span class="recipe-mgr-item-detail-text">${this.escapeHtml(r.provider)}${r.model ? ' / ' + this.escapeHtml(r.model) : ''}</span>`;
+        }
+        return `
+            <div class="recipe-mgr-item">
+                <div class="recipe-mgr-item-header">
+                    <span class="recipe-mgr-item-name">${typeIcon} ${this.escapeHtml(r.name)}</span>
+                    <span class="recipe-mgr-item-type-badge ${r.type === 'command' ? 'type-command' : 'type-ai'}">${r.type === 'command' ? '⚙️ CMD' : '🤖 AI'}</span>
+                </div>
+                <div class="recipe-mgr-item-detail">${detail}</div>
+                <div class="recipe-mgr-item-actions">
+                    <button class="recipe-btn" onclick="app.editRecipe(${i})">✏️ Edit</button>
+                    <button class="recipe-btn recipe-btn-danger" onclick="app.deleteRecipe(${i});app.renderRecipeManager()">🗑 Delete</button>
+                    <span class="recipe-mgr-item-reorder">
+                        <button class="recipe-btn recipe-btn-sm" onclick="app.moveRecipeUp(${i});app.renderRecipeManager()" ${i === 0 ? 'disabled' : ''}>▲</button>
+                        <button class="recipe-btn recipe-btn-sm" onclick="app.moveRecipeDown(${i});app.renderRecipeManager()" ${i === (this.state.recipes || []).length - 1 ? 'disabled' : ''}>▼</button>
+                    </span>
+                </div>
+            </div>`;
+    },
+
+    _renderRecipeEditForm(r, i, providers) {
+        const isCommand = r.type === 'command';
+        let fields = '';
+        if (isCommand) {
+            fields = `<input type="text" id="edit-command" value="${this.escapeHtml(r.command || '')}" placeholder="Command (e.g. echo hello)" class="recipe-input" style="flex:3">`;
+        } else {
+            fields = `
+                <select id="edit-provider" class="recipe-select" style="flex:1" onchange="app.fetchModelsForProvider(this.value)">
+                    ${providers.map(k => `<option value="${this.escapeHtml(k)}" ${k === r.provider ? 'selected' : ''}>${this.escapeHtml(k)}</option>`).join('')}
+                </select>
+                <input type="text" id="edit-model" value="${this.escapeHtml(r.model)}" placeholder="Model" class="recipe-input" style="flex:1">
+                <button class="recipe-btn" onclick="app.fetchModelsForProvider(document.getElementById('edit-provider')?.value)" style="font-size:10px;padding:2px 6px">🔄</button>`;
+        }
+        return `
+            <div class="recipe-mgr-item recipe-mgr-editing">
+                <div class="recipe-edit-row">
+                    <input type="text" id="edit-name" value="${this.escapeHtml(r.name)}" placeholder="Recipe name" class="recipe-input" style="flex:2">
+                    ${fields}
+                </div>
+                ${!isCommand ? `
+                <div class="recipe-edit-row">
+                    <textarea id="edit-system-prompt" placeholder="System prompt (optional)" class="recipe-textarea" style="flex:3">${this.escapeHtml(r.systemPrompt || '')}</textarea>
+                    <input type="number" id="edit-temperature" value="${r.temperature ?? 0.7}" min="0" max="2" step="0.1" placeholder="Temp" class="recipe-input" style="width:60px">
+                </div>` : ''}
+                <div class="recipe-edit-actions">
+                    <button class="recipe-btn recipe-btn-primary" onclick="app.saveEditRecipe(${i})">Save</button>
+                    <button class="recipe-btn" onclick="app.cancelEditRecipe()">Cancel</button>
+                </div>
+            </div>`;
+    },
+
+    _renderRecipeAddForm(providers) {
+        return `
+            <div class="recipe-mgr-add">
+                <div class="recipe-add-title">+ New Recipe</div>
+                <div class="recipe-edit-row">
+                    <input type="text" id="rm-name" placeholder="Recipe name" class="recipe-input" style="flex:2">
+                    <select id="rm-type" class="recipe-select" style="flex:0 0 110px" onchange="app.onNewRecipeTypeChange()">
+                        <option value="ai">🤖 AI</option>
+                        <option value="command">⚙️ Command</option>
+                    </select>
+                </div>
+                <div id="rm-ai-fields">
+                    <div class="recipe-edit-row">
+                        <select id="rm-provider" class="recipe-select" style="flex:1" onchange="app.fetchModelsForProvider(this.value)">
+                            ${providers.map(k => `<option value="${this.escapeHtml(k)}">${this.escapeHtml(k)}</option>`).join('')}
+                        </select>
+                        <input type="text" id="rm-model" placeholder="Model" class="recipe-input" style="flex:1">
+                        <button class="recipe-btn" onclick="app.fetchModelsForProvider(document.getElementById('rm-provider')?.value)" style="font-size:10px;padding:2px 6px">🔄</button>
+                        <input type="number" id="rm-temperature" placeholder="Temp" value="0.7" min="0" max="2" step="0.1" class="recipe-input" style="width:70px">
+                    </div>
+                    <div class="recipe-edit-row">
+                        <textarea id="rm-system-prompt" placeholder="System prompt (optional)" class="recipe-textarea"></textarea>
+                    </div>
+                </div>
+                <div id="rm-cmd-fields" style="display:none">
+                    <div class="recipe-edit-row">
+                        <input type="text" id="rm-command" placeholder="Command (e.g. echo Hello World)" class="recipe-input" style="flex:1">
+                    </div>
+                </div>
+                <div class="recipe-edit-actions">
+                    <button class="recipe-btn recipe-btn-primary" onclick="app.addRecipeFromManager()">+ Add</button>
+                </div>
+            </div>`;
+    },
+
+    onNewRecipeTypeChange() {
+        const type = document.getElementById('rm-type')?.value;
+        const aiFields = document.getElementById('rm-ai-fields');
+        const cmdFields = document.getElementById('rm-cmd-fields');
+        if (!aiFields || !cmdFields) return;
+        aiFields.style.display = type === 'command' ? 'none' : '';
+        cmdFields.style.display = type === 'command' ? '' : 'none';
+    },
+
+    fetchModelsForProvider(provider) {
+        if (!provider) return;
+        this.postMessage({ type: 'fetch_models', payload: { provider } });
+    },
+
+    updateRecipeManagerModels(provider) {
+        if (!provider) return;
+        const models = (this.state.providerModels || {})[provider] || [];
+        if (models.length === 0) return;
+        for (const id of ['rm-model', 'edit-model']) {
+            const el = document.getElementById(id);
+            if (!el || el.tagName === 'SELECT') continue;
+            const currentVal = el.value;
+            const opts = '<option value="">Select model...</option>' +
+                models.map(m => `<option value="${this.escapeHtml(m)}" ${m === currentVal ? 'selected' : ''}>${this.escapeHtml(m)}</option>`).join('');
+            const sel = document.createElement('select');
+            sel.id = id;
+            sel.className = el.className;
+            sel.style.cssText = el.style.cssText;
+            sel.innerHTML = opts;
+            el.parentNode.replaceChild(sel, el);
+        }
+    },
+
+    addRecipeFromManager() {
+        const name = document.getElementById('rm-name')?.value?.trim();
+        if (!name) return;
+        const type = document.getElementById('rm-type')?.value || 'ai';
+        if (!this.state.recipes) this.state.recipes = [];
+        if (type === 'command') {
+            const command = document.getElementById('rm-command')?.value?.trim() || '';
+            this.state.recipes.push({ type, name, command, provider: '', model: '', temperature: 0.7, systemPrompt: '' });
+        } else {
+            const provider = document.getElementById('rm-provider')?.value || 'openai';
+            const model = document.getElementById('rm-model')?.value?.trim() || '';
+            const temp = parseFloat(document.getElementById('rm-temperature')?.value || '0.7');
+            const systemPrompt = document.getElementById('rm-system-prompt')?.value?.trim() || '';
+            this.state.recipes.push({ type, name, provider, model, temperature: temp, systemPrompt, command: '' });
+        }
+        this.renderRecipeManager();
+        this.saveRecipes();
+        this.addLog(`📋 Recipe added: ${name}`);
+    },
+
+    editRecipe(index) {
+        this.state.editingRecipeIndex = index;
+        this.renderRecipeManager();
+    },
+
+    saveEditRecipe(index) {
+        const recipes = this.state.recipes || [];
+        if (index < 0 || index >= recipes.length) return;
+        const name = document.getElementById('edit-name')?.value?.trim();
+        if (!name) return;
+        const recipe = recipes[index];
+        recipe.name = name;
+        if (recipe.type === 'command') {
+            recipe.command = document.getElementById('edit-command')?.value?.trim() || '';
+        } else {
+            recipe.provider = document.getElementById('edit-provider')?.value || 'openai';
+            recipe.model = document.getElementById('edit-model')?.value?.trim() || '';
+            recipe.systemPrompt = document.getElementById('edit-system-prompt')?.value?.trim() || '';
+            recipe.temperature = parseFloat(document.getElementById('edit-temperature')?.value || '0.7');
+        }
+        this.state.editingRecipeIndex = -1;
+        this.renderRecipeManager();
+        this.renderPrompt();
+        this.saveRecipes();
+        this.addLog(`✏️ Recipe saved: ${name}`);
+    },
+
+    cancelEditRecipe() {
+        this.state.editingRecipeIndex = -1;
+        this.renderRecipeManager();
     },
 
     initConfigDrag() {
@@ -737,6 +1019,16 @@ const app = {
     },
 
     renderGeneralConfig() {
+        // Default provider/model
+        const provEl = document.getElementById('config-default-provider');
+        if (provEl) {
+            const providers = this.state.providers || {};
+            provEl.innerHTML = Object.keys(providers).map(k =>
+                `<option value="${this.escapeHtml(k)}" ${k === this.state.defaultProvider ? 'selected' : ''}>${this.escapeHtml(k)}</option>`
+            ).join('');
+        }
+        const modelEl = document.getElementById('config-default-model');
+        if (modelEl) modelEl.value = this.state.defaultModel || '';
         // History retention
         const retentionEl = document.getElementById('config-history-retention');
         if (retentionEl) retentionEl.value = this.state.historyRetention || 50;
@@ -753,6 +1045,199 @@ const app = {
                 <button class="chest-load-btn" onclick="app.loadFromChestConfig('${this.escapeHtml(n)}')">📂 Load</button>
                 <button class="chest-delete-btn" onclick="app.deleteChest('${this.escapeHtml(n)}')">✕</button></div>`
             ).join('');
+        }
+    },
+
+    // ── Recipes ──────────────────────────────────────────────
+    renderRecipesConfig() {
+        const el = document.getElementById('recipe-list');
+        if (!el) return;
+        const recipes = this.state.recipes || [];
+        let html = recipes.map((r, i) => `
+            <div class="recipe-item">
+                <div class="recipe-item-header">
+                    <span class="recipe-item-name">${r.type === 'command' ? '⚙️' : '🤖'} ${this.escapeHtml(r.name)}</span>
+                    <span class="recipe-item-type-badge ${r.type === 'command' ? 'type-command' : 'type-ai'}">${r.type === 'command' ? 'CMD' : 'AI'}</span>
+                </div>
+                <div class="recipe-item-detail">
+                    ${r.type === 'command'
+                        ? '⚙️ ' + this.escapeHtml(r.command || '')
+                        : this.escapeHtml(r.provider) + (r.model ? ' / ' + this.escapeHtml(r.model) : '')}
+                </div>
+                <div class="recipe-item-actions">
+                    <button class="recipe-sm-btn" onclick="app.editRecipe(${i})">✏️</button>
+                    <button class="recipe-sm-btn recipe-sm-btn-danger" onclick="app.deleteRecipe(${i})">🗑</button>
+                    <button class="recipe-sm-btn" onclick="app.moveRecipeUp(${i});app.renderRecipesConfig()" ${i === 0 ? 'disabled' : ''}>▲</button>
+                    <button class="recipe-sm-btn" onclick="app.moveRecipeDown(${i});app.renderRecipesConfig()" ${i === recipes.length - 1 ? 'disabled' : ''}>▼</button>
+                </div>
+            </div>
+        `).join('');
+        html += `
+            <div class="recipe-add-row">
+                <div class="recipe-add-title">+ New Recipe</div>
+                <div class="recipe-config-row">
+                    <input type="text" id="new-recipe-name" placeholder="Recipe name" class="recipe-config-input" style="flex:2">
+                    <select id="new-recipe-type" class="recipe-config-select" style="flex:0 0 90px" onchange="app.onConfigRecipeTypeChange()">
+                        <option value="ai">🤖 AI</option>
+                        <option value="command">⚙️ CMD</option>
+                    </select>
+                </div>
+                <div id="new-ai-fields">
+                    <div class="recipe-config-row">
+                        <select id="new-recipe-provider" class="recipe-config-select" style="flex:1">
+                            ${Object.keys(this.state.providers || {}).map(k => `<option value="${this.escapeHtml(k)}">${this.escapeHtml(k)}</option>`).join('')}
+                        </select>
+                        <input type="text" id="new-recipe-model" placeholder="model" class="recipe-config-input" style="flex:1">
+                        <input type="number" id="new-recipe-temperature" placeholder="Temp" value="0.7" min="0" max="2" step="0.1" class="recipe-config-input" style="width:60px">
+                    </div>
+                    <div class="recipe-config-row">
+                        <input type="text" id="new-recipe-system-prompt" placeholder="System prompt (optional)" class="recipe-config-input" style="flex:3">
+                    </div>
+                </div>
+                <div id="new-cmd-fields" style="display:none">
+                    <div class="recipe-config-row">
+                        <input type="text" id="new-recipe-command" placeholder="Command (e.g. echo Hello)" class="recipe-config-input" style="flex:1">
+                    </div>
+                </div>
+                <div class="recipe-edit-actions" style="margin-top:4px">
+                    <button class="recipe-btn recipe-btn-primary" style="font-size:11px;padding:2px 10px" onclick="app.addRecipe()">+ Add Recipe</button>
+                </div>
+            </div>`;
+        el.innerHTML = html;
+    },
+
+    onConfigRecipeTypeChange() {
+        const type = document.getElementById('new-recipe-type')?.value;
+        const aiFields = document.getElementById('new-ai-fields');
+        const cmdFields = document.getElementById('new-cmd-fields');
+        if (type === 'command') {
+            aiFields.style.display = 'none';
+            cmdFields.style.display = '';
+        } else {
+            aiFields.style.display = '';
+            cmdFields.style.display = 'none';
+        }
+    },
+
+    addRecipe() {
+        const name = document.getElementById('new-recipe-name')?.value?.trim();
+        if (!name) return;
+        const type = document.getElementById('new-recipe-type')?.value || 'ai';
+        if (!this.state.recipes) this.state.recipes = [];
+        if (type === 'command') {
+            const command = document.getElementById('new-recipe-command')?.value?.trim() || '';
+            this.state.recipes.push({ type, name, command, provider: '', model: '', temperature: 0.7, systemPrompt: '' });
+        } else {
+            const provider = document.getElementById('new-recipe-provider')?.value || 'openai';
+            const model = document.getElementById('new-recipe-model')?.value?.trim() || '';
+            const systemPrompt = document.getElementById('new-recipe-system-prompt')?.value?.trim() || '';
+            const temp = parseFloat(document.getElementById('new-recipe-temperature')?.value || '0.7');
+            this.state.recipes.push({ type, name, provider, model, temperature: temp, systemPrompt, command: '' });
+        }
+        this.renderRecipesConfig();
+        this.saveRecipes();
+        this.addLog(`📋 Recipe added: ${name}`);
+    },
+
+    deleteRecipe(index) {
+        const recipes = this.state.recipes || [];
+        if (index < 0 || index >= recipes.length) return;
+        const name = recipes[index].name;
+        if (!confirm(`Delete recipe "${name}"?`)) return;
+        recipes.splice(index, 1);
+        if (this.state.selectedRecipe === name) this.state.selectedRecipe = '';
+        this.renderRecipesConfig();
+        this.renderPrompt();
+        this.updateRecipeBadge();
+        this.saveRecipes();
+        this.addLog(`🗑 Recipe deleted: ${name}`);
+    },
+
+    moveRecipeUp(index) {
+        const recipes = this.state.recipes || [];
+        if (index <= 0 || index >= recipes.length) return;
+        [recipes[index - 1], recipes[index]] = [recipes[index], recipes[index - 1]];
+        if (this.state.editingRecipeIndex === index) this.state.editingRecipeIndex = index - 1;
+        else if (this.state.editingRecipeIndex === index - 1) this.state.editingRecipeIndex = index;
+        this.saveRecipes();
+    },
+
+    moveRecipeDown(index) {
+        const recipes = this.state.recipes || [];
+        if (index < 0 || index >= recipes.length - 1) return;
+        [recipes[index], recipes[index + 1]] = [recipes[index + 1], recipes[index]];
+        if (this.state.editingRecipeIndex === index) this.state.editingRecipeIndex = index + 1;
+        else if (this.state.editingRecipeIndex === index + 1) this.state.editingRecipeIndex = index;
+        this.saveRecipes();
+    },
+
+    saveRecipes() {
+        const recipes = this.state.recipes || [];
+        this.postMessage({ type: 'save_recipes', payload: recipes });
+    },
+
+    setDefaultProvider(val) {
+        this.state.defaultProvider = val;
+        this.renderRecipesConfig();
+    },
+
+    setDefaultModel(val) {
+        this.state.defaultModel = val;
+    },
+
+    getRecipeSettings() {
+        const recipeName = this.state.selectedRecipe;
+        if (recipeName) {
+            const recipe = (this.state.recipes || []).find(r => r.name === recipeName);
+            if (recipe) return recipe;
+        }
+        return {
+            type: 'ai',
+            provider: this.state.defaultProvider || 'openai',
+            model: this.state.defaultModel || '',
+            temperature: 0.7,
+            systemPrompt: '',
+            command: ''
+        };
+    },
+
+    selectRecipe(index) {
+        const recipes = this.state.recipes || [];
+        if (index < 0 || index >= recipes.length) return;
+        this.state.selectedRecipe = recipes[index].name;
+        this.renderPrompt();
+        this.updateRecipeBadge();
+        this.addLog(`📋 Recipe selected: ${this.state.selectedRecipe}`);
+    },
+
+    chooseRecipe() {
+        const recipes = this.state.recipes || [];
+        if (recipes.length === 0) {
+            this.addLog('⚠ No recipes defined. Create one in Config > Recipes.');
+            return;
+        }
+        const current = this.state.selectedRecipe;
+        const names = recipes.map(r => r.name);
+        const idx = current ? names.indexOf(current) : -1;
+        const nextIdx = (idx + 1) % names.length;
+        this.state.selectedRecipe = names[nextIdx];
+        this.renderPrompt();
+        this.updateRecipeBadge();
+        this.addLog(`📋 Recipe: ${this.state.selectedRecipe}`);
+    },
+
+    updateRecipeBadge() {
+        const badge = document.getElementById('recipe-badge');
+        if (!badge) return;
+        const name = this.state.selectedRecipe;
+        if (name) {
+            const recipe = (this.state.recipes || []).find(r => r.name === name);
+            const icon = recipe?.type === 'command' ? '⚙️' : '🤖';
+            badge.textContent = ` ${icon} ${name}`;
+            badge.style.display = '';
+        } else {
+            badge.textContent = '';
+            badge.style.display = 'none';
         }
     },
 
@@ -913,6 +1398,7 @@ const app = {
             case 'pipeline_history': this.showHistory(); break;
             case 'config':          this.showConfig(); break;
             case 'test_connection': this.testConnection(); break;
+            case 'recipe_manager':  this.showRecipeManager(); break;
             case 'toggle_pane':     this.togglePane(cmd.pane + '-pane'); break;
             case 'about':           this.showAbout(); break;
             case 'welcome_wizard':  this.showWizard(); break;
@@ -929,6 +1415,89 @@ const app = {
         }
     },
 
+    switchTreeTab(tab) {
+        this.state.activeTreeTab = tab;
+        const nodeBtn = document.getElementById('btn-tree-tab-node');
+        const fileBtn = document.getElementById('btn-tree-tab-file');
+        const nodeContent = document.getElementById('tree-content');
+        const fileContent = document.getElementById('file-tree-content');
+        
+        if (tab === 'node') {
+            nodeBtn?.classList.add('active');
+            fileBtn?.classList.remove('active');
+            if (nodeContent) nodeContent.style.display = '';
+            if (fileContent) fileContent.style.display = 'none';
+            this.renderTree();
+        } else {
+            nodeBtn?.classList.remove('active');
+            fileBtn?.classList.add('active');
+            if (nodeContent) nodeContent.style.display = 'none';
+            if (fileContent) fileContent.style.display = '';
+            this.requestFileTree();
+        }
+    },
+
+    requestFileTree() {
+        this.postMessage({ type: 'get_file_tree' });
+    },
+
+    renderFileTree() {
+        const el = document.getElementById('file-tree-content');
+        if (!el) return;
+        if (!this.state.fileTree || this.state.fileTree.length === 0) {
+            el.innerHTML = '<div class="empty">No files</div>';
+            return;
+        }
+        el.innerHTML = this.buildFileTreeHTML(this.state.fileTree, 0);
+    },
+
+    buildFileTreeHTML(items, indent) {
+        let html = '';
+        const activeTab = this.state.tabs[this.state.activeTab];
+        const activeFile = activeTab ? activeTab.file : '';
+        
+        items.forEach(item => {
+            if (item.type === 'directory') {
+                html += `<div class="file-tree-node directory" style="padding-left:${indent}px">${this.escapeHtml(item.name)}</div>`;
+                if (item.children && item.children.length > 0) {
+                    html += this.buildFileTreeHTML(item.children, indent + 16);
+                }
+            } else if (item.type === 'file') {
+                const isSelected = item.path === activeFile;
+                const cls = 'file-tree-node file' + (isSelected ? ' selected' : '');
+                const escPath = this.escapeHtml(item.path);
+                html += `<div class="${cls}" style="padding-left:${indent}px" onclick="app.selectFileTreeItem('${escPath}')">${this.escapeHtml(item.name)}</div>`;
+            }
+        });
+        return html;
+    },
+
+    selectFileTreeItem(path) {
+        const tabIndex = this.state.tabs.findIndex(t => t.file === path);
+        if (tabIndex >= 0) {
+            this.switchTab(tabIndex);
+        } else {
+            this.state.tabs.push({ name: path.split('/').pop().split('\\').pop(), file: path, root: { title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] } });
+            this.state.activeTab = this.state.tabs.length - 1;
+            this.renderTabs();
+            this.postMessage({ type: 'load_file_data', payload: { path: path } });
+        }
+    },
+
+    onFileDataResult(path, root) {
+        const idx = this.state.tabs.findIndex(t => t.file === path);
+        if (idx >= 0) {
+            this.state.tabs[idx].root = root;
+            if (idx === this.state.activeTab) {
+                this.renderTree();
+                this.renderList();
+                if (root && root.children && root.children.length > 0) {
+                    this.selectNode(''); // Select root node by default
+                }
+            }
+        }
+    },
+
     // Tree rendering
     renderTree() {
         const el = document.getElementById('tree-content');
@@ -936,16 +1505,21 @@ const app = {
         const tab = this.state.tabs[this.state.activeTab];
         if (!tab || !tab.root) { el.innerHTML = '<div class="empty">No data</div>'; return; }
         el.innerHTML = this.buildTreeHTML(tab.root, '');
+        
+        // Also sync file tree selections if visible
+        if (this.state.activeTreeTab === 'file') {
+            this.renderFileTree();
+        }
     },
 
     buildTreeHTML(node, path) {
         let html = '';
-        const display = this.escapeHtml(node.title ? atob(node.title) : this.getTitleFallback(node));
+        const display = this.escapeHtml(node.title ? this.safeAtob(node.title) : this.getTitleFallback(node));
         const safePath = this.escapeHtml(path);
         const hasChildren = node.children && node.children.length > 0;
         const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') +
                     (this.state.currentNodePath === path ? ' selected' : '');
-        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')">${display}</div>`;
+        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')" oncontextmenu="app.showTreeContextMenu(event, '${safePath}')">${display}</div>`;
         if (hasChildren) {
             html += '<div style="padding-left:16px">';
             node.children.forEach((child, i) => {
@@ -957,15 +1531,15 @@ const app = {
     },
 
     getTitleFallback(node) {
-        if (node.title) return atob(node.title);
+        if (node.title) return this.safeAtob(node.title);
         if (node.mimetype === 'text/plain' && node.content) {
-            const text = atob(node.content);
+            const text = this.safeAtob(node.content);
             const words = text.split(/\s+/).slice(0, 4).join(' ');
             return words + (words.length < text.length ? '...' : '');
         }
-        if (node.mimetype === 'application/rtf') return '[RTF ' + (node.content ? Math.round(atob(node.content).length / 1024) + 'KB' : '0B') + ']';
-        if (node.mimetype.startsWith('image/')) return '[Image ' + (node.content ? Math.round(atob(node.content).length / 1024) + 'KB' : '0B') + ']';
-        if (node.mimetype === 'text/html') return '[HTML ' + (node.content ? atob(node.content).length + ' chars' : '') + ']';
+        if (node.mimetype === 'application/rtf') return '[RTF ' + (node.content ? Math.round(this.safeAtob(node.content).length / 1024) + 'KB' : '0B') + ']';
+        if (node.mimetype.startsWith('image/')) return '[Image ' + (node.content ? Math.round(this.safeAtob(node.content).length / 1024) + 'KB' : '0B') + ']';
+        if (node.mimetype === 'text/html') return '[HTML ' + (node.content ? this.safeAtob(node.content).length + ' chars' : '') + ']';
         return '(empty)';
     },
 
@@ -1024,6 +1598,7 @@ const app = {
         }
         this.pushNav();
         this.state.currentNodePath = path;
+        this.state.selectedOutputRunIndex = 0;
         this.renderTree();
         this.renderList();
         this.loadEditor(path);
@@ -1093,7 +1668,7 @@ const app = {
         const tab = this.state.tabs[this.state.activeTab];
         const tabFile = tab ? tab.file : '';
         el.innerHTML = node.children.map((child, i) => {
-            const display = this.escapeHtml(child.title ? atob(child.title) : this.getTitleFallback(child));
+            const display = this.escapeHtml(child.title ? this.safeAtob(child.title) : this.getTitleFallback(child));
             const childPath = (this.state.currentNodePath ? this.state.currentNodePath + '/' : '/') + i;
             const evalBadge = this.evalBadgeHtml(child.evaluation);
             const evalBtns = this.evalButtonsHtml(`${tabFile}|${childPath}`, 'node', child.evaluation || '');
@@ -1132,22 +1707,8 @@ const app = {
         });
     },
 
-    // Editor
     loadEditor(path) {
-        const node = this.getNodeByPath(path);
-        const titleEl = document.getElementById('node-title');
-        const contentEl = document.getElementById('node-content');
-        if (!node || !titleEl || !contentEl) return;
-        titleEl.value = node.title ? atob(node.title) : '';
-        if (node.mimetype === 'text/plain') {
-            contentEl.value = node.content ? atob(node.content) : '';
-        } else if (node.mimetype.startsWith('image/')) {
-            contentEl.value = '[Image: ' + (node.content ? Math.round(atob(node.content).length / 1024) + 'KB' : 'empty') + ']';
-        } else {
-            contentEl.value = node.content ? atob(node.content) : '';
-        }
-        this.renderAttachments(node);
-        this.renderPipelineMeta(node);
+        this.renderPrompt();
     },
 
     renderAttachments(node) {
@@ -1174,6 +1735,7 @@ const app = {
         const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
         if (title) node.title = safeB64(title.value);
         if (content && node.mimetype === 'text/plain') node.content = safeB64(content.value);
+
         this.renderTree();
         this.renderList();
         const tab = this.state.tabs[this.state.activeTab];
@@ -1182,6 +1744,65 @@ const app = {
         }
         this.addLog('💾 Node updated');
     },
+
+    processPrompt() {
+        this.updateNode();
+
+        if (this.state.viewMode === 'node') {
+            const node = this.getNodeByPath(this.state.currentNodePath);
+            if (!node) {
+                this.addLog('⚠ ノードを選択してください');
+                return;
+            }
+
+            const prompt = document.getElementById('node-content')?.value || '';
+            const input = document.getElementById('input-textarea')?.value || '';
+            const recipe = this.getRecipeSettings();
+
+            const tab = this.state.tabs[this.state.activeTab];
+            const sentText = prompt.includes('{content}') ? prompt.replace('{content}', input) : (prompt + '\n\n' + input);
+
+            this.state.streamedOutput = '';
+            const outputEl = document.getElementById('output-content');
+            if (outputEl) {
+                outputEl.innerHTML = `
+                    <div class="output-toolbar">
+                        <span class="output-label">Processing Output...</span>
+                    </div>
+                    <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 35px); overflow-y: auto;">
+                        <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
+                            <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
+                            <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(sentText)}</pre>
+                        </div>
+                        <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
+                            <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
+                            <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">Connecting to AI...</pre>
+                        </div>
+                    </div>
+                `;
+            }
+
+            this.postMessage({
+                type: 'run_prompt_process',
+                payload: {
+                    nodeId: this.state.currentNodePath || '',
+                    tabFile: tab ? tab.file : '',
+                    content: input,
+                    userPrompt: prompt,
+                    provider: recipe.provider,
+                    model: recipe.model,
+                    systemPrompt: recipe.systemPrompt,
+                    temperature: recipe.temperature
+                }
+            });
+            this.state.pipelineRunning = true;
+            this.addLog(`▶ Processing prompt using ${recipe.provider}/${recipe.model || '(default)'}`);
+        } else {
+            this.runPipeline();
+        }
+    },
+
+
 
     addChild() {
         const node = this.getNodeByPath(this.state.currentNodePath);
@@ -1242,6 +1863,14 @@ const app = {
         if (this.state.pipelineRunning) { this.addLog('⚠ Pipeline already running'); return; }
         const node = this.getNodeByPath(this.state.currentNodePath);
         if (!node) { this.addLog('⚠ ノードを選択してください'); return; }
+        if (!pipelineName && node.pipelineMeta) {
+            try {
+                const meta = JSON.parse(node.pipelineMeta);
+                if (meta && meta.pipelineName) {
+                    pipelineName = meta.pipelineName;
+                }
+            } catch (e) { this.addLog('⚠ Failed to parse pipelineMeta: ' + (e.message || '')); }
+        }
         if (!pipelineName && this.state.pipelines && this.state.pipelines.length > 0) {
             pipelineName = this.state.pipelines[0].name;
         }
@@ -1272,11 +1901,17 @@ const app = {
 
     // Messages
     addLog(text) {
+        console.log('[Prompts Log] ' + text);
         const el = document.getElementById('messages-content');
         if (!el) return;
         const div = document.createElement('div');
         div.className = 'log-entry';
-        div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + text;
+        if (text.includes('<details')) {
+            text = text.replace('<details', '<details open');
+            div.innerHTML = '[' + new Date().toLocaleTimeString() + '] ' + text;
+        } else {
+            div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + text;
+        }
         el.appendChild(div);
         el.scrollTop = el.scrollHeight;
     },
@@ -1288,6 +1923,8 @@ const app = {
 
     // Log context menu and copy
     showLogContextMenu(event) {
+        event.preventDefault();
+        event.stopPropagation();
         const menu = document.getElementById('log-context-menu');
         if (!menu) return;
         const el = event.target.closest('.log-entry');
@@ -1302,12 +1939,65 @@ const app = {
         menu.style.display = 'block';
         menu.style.left = Math.min(event.clientX, window.innerWidth - 160) + 'px';
         menu.style.top = Math.min(event.clientY, window.innerHeight - 120) + 'px';
-        setTimeout(() => document.addEventListener('click', app.hideLogContextMenu, { once: true }), 0);
     },
 
     hideLogContextMenu() {
         const menu = document.getElementById('log-context-menu');
         if (menu) menu.style.display = 'none';
+    },
+
+    showTreeContextMenu(event, path) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const menu = document.getElementById('tree-context-menu');
+        if (!menu) return;
+        
+        const node = this.getNodeByPath(path);
+        if (!node) return;
+        const currentTitle = node.title ? this.safeAtob(node.title) : this.getTitleFallback(node);
+        
+        menu.style.left = event.clientX + 'px';
+        menu.style.top = event.clientY + 'px';
+        menu.style.display = 'block';
+        
+        const escTitle = this.escapeHtml(currentTitle);
+        menu.innerHTML = `
+            <div class="ctx-item" onclick="app.renameNode('${path}', '${escTitle}'); app.hideTreeContextMenu()">✏️ 名前の変更...</div>
+            <div class="ctx-item" onclick="app.selectNode('${path}'); app.addChild(); app.hideTreeContextMenu()">➕ 子ノードを追加</div>
+            <div class="ctx-item" onclick="app.selectNode('${path}'); app.removeNode(); app.hideTreeContextMenu()" style="color: #ff4a4a;">🗑️ 削除</div>
+        `;
+    },
+    
+    hideTreeContextMenu() {
+        const menu = document.getElementById('tree-context-menu');
+        if (menu) menu.style.display = 'none';
+    },
+    
+    renameNode(path, oldTitle) {
+        const node = this.getNodeByPath(path);
+        if (!node) return;
+        const newTitle = prompt('ノードの名前を変更:', oldTitle);
+        if (newTitle === null) return; // Cancelled
+        const trimmed = newTitle.trim();
+        if (trimmed === '') return;
+        
+        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
+        node.title = safeB64(trimmed);
+        
+        this.renderTree();
+        this.renderList();
+        
+        // Also refresh the prompt editor if the renamed node is the currently active one
+        if (this.state.currentNodePath === path) {
+            this.loadEditor(path);
+        }
+        
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && tab.file && tab.root) {
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+        }
+        this.addLog(`✏️ Node renamed to: "${trimmed}"`);
     },
 
     copyLogEntry(text) {
@@ -1361,6 +2051,25 @@ const app = {
     // Pipeline streaming
     appendStreamOutput(payload) {
         this.addLog(`[Step ${payload.stepIndex}] ${payload.text || '...'}`);
+        this.state.streamedOutput = (this.state.streamedOutput || '') + (payload.text || '');
+
+        const outputEl = document.getElementById('output-content');
+        if (outputEl) {
+            let display = outputEl.querySelector('.output-display');
+            if (!display) {
+                outputEl.innerHTML = `
+                    <div class="output-toolbar">
+                        <span class="output-label">Processing Output...</span>
+                    </div>
+                    <pre class="output-display"></pre>
+                `;
+                display = outputEl.querySelector('.output-display');
+            }
+            if (display) {
+                display.textContent = this.state.streamedOutput;
+                display.scrollTop = display.scrollHeight;
+            }
+        }
     },
 
     onStepDone(payload) {
@@ -1370,6 +2079,18 @@ const app = {
 
     highlightStep(payload) {
         this.addLog(`▶ Step ${payload.index}: ${payload.name || ''}`);
+        if (payload.index === 0) {
+            this.state.streamedOutput = '';
+            const outputEl = document.getElementById('output-content');
+            if (outputEl) {
+                outputEl.innerHTML = `
+                    <div class="output-toolbar">
+                        <span class="output-label">Processing Output...</span>
+                    </div>
+                    <pre class="output-display">Connecting to AI...</pre>
+                `;
+            }
+        }
     },
 
     onRtfPosition(pos) {},
@@ -1472,6 +2193,46 @@ const app = {
         }
     },
 
+    initMessagesResizer() {
+        const handle = document.getElementById('messages-resize-handle');
+        const pane = document.getElementById('messages-pane');
+        if (!handle || !pane) return;
+
+        // Restore saved height
+        const saved = localStorage.getItem('prompts_messages_height');
+        if (saved) pane.style.height = saved + 'px';
+
+        let isResizing = false;
+        let startY, startHeight;
+
+        handle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = pane.offsetHeight;
+            handle.classList.add('active');
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newHeight = startHeight - (e.clientY - startY);
+            const clamped = Math.max(80, Math.min(600, newHeight));
+            pane.style.height = clamped + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isResizing) return;
+            isResizing = false;
+            handle.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            // Save height
+            localStorage.setItem('prompts_messages_height', pane.offsetHeight);
+        });
+    },
+
     // ── Wizard ────────────────────────────────────────────────────
     get WIZARD_STEPS() {
         return [
@@ -1488,16 +2249,18 @@ const app = {
             icon: '🔲',
             title: this.t('LangCode') === 'ja' ? '4ペインレイアウトの見方' : '4-Pane Layout Guide',
             body: this.t('LangCode') === 'ja'
-                ? '<p>画面は <b>Tree | Input | Prompt/Params | Output</b> の4ペイン構成です。</p>' +
-                  '<p>📂 <b>Tree</b>: ノード一覧。クリックで選択すると各ペインが連動します。</p>' +
-                  '<p>📥 <b>Input</b>: 選択したノードの中身（素材）を表示・編集します。</p>' +
-                  '<p>⚙️ <b>Prompt/Params</b>: 選択したパイプラインstepの設定を表示・編集します。</p>' +
-                  '<p>📤 <b>Output</b>: 生成された成果物を表示・保存します。</p>'
-                : '<p>The screen has 4 panes: <b>Tree | Input | Prompt/Params | Output</b>.</p>' +
-                  '<p>📂 <b>Tree</b>: Node tree. Click a node to view its details.</p>' +
-                  '<p>📥 <b>Input</b>: Shows the node content (material). Editable.</p>' +
-                  '<p>⚙️ <b>Prompt/Params</b>: Shows pipeline step settings. Editable.</p>' +
-                  '<p>📤 <b>Output</b>: Shows generated results. Save or send to chest.</p>',
+                ? '<p>画面は <b>Tree | 入力(src) | 演算(op) | 出力(dst)</b> の4ペイン構成です。</p>' +
+                  '<p style="font-size:11px;color:#888;margin-top:4px">GAS (GNU Assembler) のオペランド順 <b>op src, dst</b> に準拠。</p>' +
+                  '<ul>' +
+                  '<p>📥 <b>入力 (src)</b>: 処理するデータ。</p>' +
+                  '<p>🔧 <b>演算 (op)</b>: 処理テンプレートとレシピ。</p>' +
+                  '<p>📤 <b>出力 (dst)</b>: 生成された結果。</p>'
+                : '<p>The screen has 4 panes: <b>Tree | Input(src) | Operation(op) | Output(dst)</b>.</p>' +
+                  '<p style="font-size:11px;color:#888;margin-top:4px">Follows GAS (GNU Assembler) operand order: <b>op src, dst</b>.</p>' +
+                  '<ul>' +
+                  '<p>📥 <b>Input (src)</b>: The data to process.</p>' +
+                  '<p>🔧 <b>Operation (op)</b>: Processing template and recipe.</p>' +
+                  '<p>📤 <b>Output (dst)</b>: Generated results.</p>',
             tips: [
                 { icon: '🔄', text: this.t('LangCode') === 'ja'
                     ? '各ペインのヘッダーにあるモード表示（📄 Node / 🔧 Step）をクリックすると、Node View と Pipeline View を切り替えられます。'
@@ -1651,12 +2414,19 @@ const app = {
                 item(t('MenuCut'),         'cut',           'Ctrl+X') +
                 item(t('MenuCopyText'),    'copy',          'Ctrl+C') +
                 item(t('MenuPaste'),       'paste',         'Ctrl+V') +
-                item(t('MenuSelectAll'),   'select_all',    'Ctrl+A')
+                item(t('MenuSelectAll'),   'select_all',    'Ctrl+A') +
+                sep +
+                item(t('AddChild'),        'add_child',     'Alt+Ins') +
+                item(t('Remove'),          'remove_node',   'Del')
             )}
             ${sep}
             ${section(t('MenuSettings'),
                 item('⚙ ' + t('MenuSettingsItem'),  'settings') +
                 item('🔑 ' + t('Config'),             'config')
+            )}
+            ${sep}
+            ${section('Recipe',
+                item('📋 Recipe Manager',  'recipe_manager', 'Ctrl+R')
             )}
             ${sep}
             ${section(t('MenuHelp'),
@@ -1699,8 +2469,11 @@ const app = {
             copy:           () => document.execCommand('copy'),
             paste:          () => document.execCommand('paste'),
             select_all:     () => document.execCommand('selectAll'),
+            add_child:      () => this.addChild(),
+            remove_node:    () => this.removeNode(),
             settings:       () => this.showSettings(),
             config:         () => this.showConfig(),
+            recipe_manager: () => this.showRecipeManager(),
             shortcuts:      () => this.showWizard(3),
             about:          () => this.showAbout(),
             copyright:      () => this.showCopyright(),
@@ -2282,9 +3055,17 @@ const app = {
             inputEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
             return;
         }
-        const content = node.content ? (() => { try { return atob(node.content); } catch { return node.content; } })() : '';
+        // Processing template
+        const template = node.content ? (() => { try { return atob(node.content); } catch { return node.content; } })() : '';
+        // Input data (for {content} substitution)
+        const inputData = (node.children && node.children.length > 0)
+            ? (() => { try { return atob(node.children[0].content || ''); } catch { return ''; } })()
+            : '';
         inputEl.innerHTML = `
-            <textarea id="input-textarea" class="input-textarea" placeholder="${t('NoInput')}">${this.escapeHtml(content)}</textarea>
+            <div style="margin-bottom:6px">
+                <div style="font-size:10px;color:#888;margin-bottom:2px">入力データ:</div>
+                <textarea id="input-textarea" class="input-textarea" placeholder="${t('NoInput')}">${this.escapeHtml(inputData)}</textarea>
+            </div>
             <div class="input-source-bar">
                 <span class="input-source-label">${t('Source')}</span>
                 <span class="input-source-value">${t('PreviousStep')}</span>
@@ -2324,56 +3105,54 @@ const app = {
         }
 
         const node = this.getNodeByPath(this.state.currentNodePath);
-        if (!node || !node.pipelineMeta) {
-            // Show available pipelines to attach
-            const pipelines = this.state.pipelines || [];
-            let html = `<div class="prompt-header">⚙️ ${t('Prompt')}</div>`;
-            html += `<div class="empty" style="padding:8px">${t('NoPrompt')}</div>`;
-            if (pipelines.length > 0) {
-                html += `<div class="prompt-pipeline-list">`;
-                pipelines.forEach((p, i) => {
-                    html += `<div class="prompt-pipeline-item" onclick="app.runPipeline('${this.escapeHtml(p.name)}')">
-                        ▶ ${this.escapeHtml(p.name)}
-                    </div>`;
-                });
-                html += `</div>`;
-            } else {
-                html += `<div class="empty" style="padding:4px;font-size:10px">No pipelines defined. Open ⚡ Pipelines to create one.</div>`;
-            }
-            promptEl.innerHTML = html;
+        if (!node) {
+            promptEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
             return;
         }
-        let meta;
-        try { meta = JSON.parse(node.pipelineMeta); } catch {
-            promptEl.innerHTML = `<div class="empty">${t('NoPrompt')}</div>`;
-            return;
-        }
-        // Editable metadata fields
-        let html = `<div class="prompt-header">📋 ${this.escapeHtml(meta.pipelineName || 'Pipeline')}
-            <button class="prompt-edit-btn" onclick="app.editNodePipelineMeta()">✏ ${t('EditStep')}</button>
-        </div>`;
-        if (meta.steps) {
-            (meta.steps || []).forEach((s, i) => {
-                html += `<div class="prompt-step">
-                    <div class="prompt-step-header">Step ${i + 1}: ${this.escapeHtml(s.name || s.type)}</div>`;
-                for (const [key, value] of Object.entries(s)) {
-                    if (key === 'name' || key === 'type') continue;
-                    const val = String(value);
-                    html += `<div class="param-row">
-                        <span class="param-key">${this.escapeHtml(key)}</span>
-                        <input class="param-input" data-step="${i}" data-key="${this.escapeHtml(key)}" value="${this.escapeHtml(val.length > 200 ? val.substring(0, 200) : val)}">
-                    </div>`;
-                }
-                html += '</div>';
-            });
-        }
-        html += `<button class="prompt-apply-btn" onclick="app.saveNodePipelineMeta()" style="display:none">💾 ${t('ApplyChanges')}</button>`;
-        promptEl.innerHTML = html;
 
-        // Show apply on changes
-        promptEl.querySelectorAll('.param-input').forEach(inp => {
-            inp.oninput = () => { document.querySelector('.prompt-apply-btn').style.display = ''; };
-        });
+        // Prompt text
+        const promptText = node.content ? (() => { try { return atob(node.content); } catch { return node.content; } })() : '';
+
+        let meta = {};
+        if (node.pipelineMeta) {
+            try { meta = JSON.parse(node.pipelineMeta) || {}; } catch (e) {}
+        }
+
+        // Recipe selector
+        const recipes = this.state.recipes || [];
+        let recipeHtml = '';
+        if (recipes.length > 0) {
+            recipeHtml += `<div style="margin-bottom:6px">`;
+            recipeHtml += `<div style="font-size:10px;color:#888;margin-bottom:3px">レシピ:</div>`;
+            recipes.forEach((r, i) => {
+                const sel = r.name === this.state.selectedRecipe ? 'background:#094771;color:#fff' : '';
+                const icon = r.type === 'command' ? '⚙️' : '🤖';
+                let detail = '';
+                if (r.type === 'command') {
+                    detail = this.escapeHtml(r.command || '');
+                } else {
+                    detail = this.escapeHtml(r.provider) + (r.model ? '/' + this.escapeHtml(r.model) : '');
+                }
+                recipeHtml += `<div class="recipe-option" style="cursor:pointer;padding:3px 6px;border-radius:3px;font-size:11px;margin-bottom:2px;${sel}" onclick="app.selectRecipe(${i})">
+                    ${icon} ${this.escapeHtml(r.name)}
+                    <span style="font-size:9px;color:#888">${detail}</span>
+                </div>`;
+            });
+            recipeHtml += `</div>`;
+        } else {
+            recipeHtml += `<div style="font-size:10px;color:#888;margin-bottom:6px">Config > Recipes でレシピを追加</div>`;
+        }
+
+        promptEl.innerHTML = `
+            <button class="btn-primary prompt-editor-process-btn" onclick="app.processPrompt()" style="width:100%;padding:4px;font-size:11px;margin-bottom:6px">▶ 処理実行</button>
+            <div style="margin-bottom:6px">
+                <div style="font-size:10px;color:#888;margin-bottom:2px">プロンプト:</div>
+                <textarea id="node-content" class="input-textarea" placeholder="{content} で入力を参照" style="min-height:100px">${this.escapeHtml(promptText)}</textarea>
+            </div>
+            ${recipeHtml}`;
+
+        // Render pipeline meta if available
+        this.renderPipelineMeta(node);
     },
 
     editNodePipelineMeta() {
@@ -2474,22 +3253,70 @@ const app = {
             outputEl.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
             return;
         }
-        const child = node.children[0];
-        const outputContent = child.content ? (() => { try { return atob(child.content); } catch { return child.content; } })() : '';
-        let html = `<div class="output-toolbar">
-            <span class="output-label">${t('Output')} (${node.children.length})</span>
-            <button class="output-save-btn" onclick="app.saveCurrentOutput()">${t('Save')}</button>
-            <button class="output-discard-btn" onclick="app.discardCurrentOutput()">${t('Discard')}</button>
-            <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
-        </div>`;
 
-        // Show score if available
-        if (child.evaluation) {
-            html += `<div class="eval-badge">★ ${this.escapeHtml(child.evaluation)}</div>`;
+        let selectedIdx = this.state.selectedOutputRunIndex !== undefined ? this.state.selectedOutputRunIndex : 0;
+        if (selectedIdx >= node.children.length) {
+            selectedIdx = 0;
+            this.state.selectedOutputRunIndex = 0;
         }
 
-        html += `<pre class="output-display">${this.escapeHtml(outputContent)}</pre>`;
+        const child = node.children[selectedIdx];
+        let sentText = 'N/A';
+        let receivedText = child.content ? (() => { try { return atob(child.content); } catch { return child.content; } })() : '';
+
+        if (child.pipelineMeta) {
+            try {
+                const meta = JSON.parse(child.pipelineMeta);
+                if (meta && meta.steps && meta.steps[0]) {
+                    sentText = meta.steps[0].input || 'N/A';
+                    receivedText = meta.steps[0].output || receivedText;
+                }
+            } catch(e) {}
+        }
+
+        const runOptions = node.children.map((c, idx) => {
+            const title = c.title ? this.safeAtob(c.title) : `Run ${idx + 1}`;
+            return `<option value="${idx}" ${idx === selectedIdx ? 'selected' : ''}>${this.escapeHtml(title)}</option>`;
+        }).join('');
+
+        let html = `
+            <div class="output-toolbar">
+                <span class="output-label">${t('Output')} (${node.children.length})</span>
+                <button class="output-save-btn" onclick="app.saveCurrentOutput()">${t('Save')}</button>
+                <button class="output-discard-btn" onclick="app.discardCurrentOutput()">${t('Discard')}</button>
+                <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
+            </div>
+            
+            <div class="output-run-selector-row" style="margin: 8px; display: flex; align-items: center; gap: 8px; font-size: 11px;">
+                <label for="output-run-selector" style="font-weight: bold; color: #858585;">実行履歴 (History):</label>
+                <select id="output-run-selector" onchange="app.onOutputRunSelected(this.value)" style="background: #252526; color: #ccc; border: 1px solid #3c3c3c; padding: 2px; font-size: 11px; flex: 1;">
+                    ${runOptions}
+                </select>
+            </div>
+        `;
+
+        if (child.evaluation) {
+            html += `<div class="eval-badge" style="margin: 0 8px 8px 8px;">★ ${this.escapeHtml(child.evaluation)}</div>`;
+        }
+
+        html += `
+            <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 75px); overflow-y: auto;">
+                <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
+                    <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
+                    <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(sentText)}</pre>
+                </div>
+                <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
+                    <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
+                    <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(receivedText)}</pre>
+                </div>
+            </div>
+        `;
         outputEl.innerHTML = html;
+    },
+
+    onOutputRunSelected(value) {
+        this.state.selectedOutputRunIndex = parseInt(value);
+        this.renderOutput();
     },
 
     renderPipelineOutput(el) {
@@ -3447,6 +4274,7 @@ const app = {
     handleKey(e) {
         if (e.ctrlKey && e.key === 's') { e.preventDefault(); this.saveFile(); }
         if (e.ctrlKey && e.key === 'f') { e.preventDefault(); document.getElementById('search-box')?.focus(); }
+        if (e.ctrlKey && e.key === 'r') { e.preventDefault(); this.showRecipeManager(); }
         if (e.altKey && e.key === 'ArrowLeft')  { e.preventDefault(); this.navBack(); }
         if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); this.navForward(); }
         if (e.key === 'F1') { e.preventDefault(); this.showWizard(); }
@@ -3597,4 +4425,16 @@ const app = {
 document.addEventListener('DOMContentLoaded', () => {
     app.init();
     document.addEventListener('keydown', (e) => app.handleKey(e));
+    
+    // Global listener to close context menus when clicking outside
+    document.addEventListener('mousedown', (e) => {
+        const treeMenu = document.getElementById('tree-context-menu');
+        if (treeMenu && treeMenu.style.display !== 'none' && !treeMenu.contains(e.target)) {
+            app.hideTreeContextMenu();
+        }
+        const logMenu = document.getElementById('log-context-menu');
+        if (logMenu && logMenu.style.display !== 'none' && !logMenu.contains(e.target)) {
+            app.hideLogContextMenu();
+        }
+    });
 });
