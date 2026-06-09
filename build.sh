@@ -16,25 +16,18 @@ if [ ! -d "$ELECTRON_DIR/node_modules" ]; then
     npm --prefix "$ELECTRON_DIR" install
 fi
 
-# Package the Electron app with electron-builder
+# Package the Electron app with @electron/packager (no winCodeSign needed)
 echo "  npm run build..."
-CSC_IDENTITY_AUTO_DISCOVERY=false npm --prefix "$ELECTRON_DIR" run build
+npm --prefix "$ELECTRON_DIR" run build
 
-# Copy the packaged installer / unpacked app to bin/<BUILD_TYPE>/plugins/
+# Copy the packaged app to bin/<BUILD_TYPE>/plugins/
 PLUGINS_OUT="$ROOT/bin/$BUILD_TYPE/plugins"
 mkdir -p "$PLUGINS_OUT"
 
-DIST_DIR="$ELECTRON_DIR/dist"
-if [ -d "$DIST_DIR/win-unpacked" ]; then
-    cp -r "$DIST_DIR/win-unpacked" "$PLUGINS_OUT/Prompts"
-elif [ -d "$DIST_DIR" ]; then
-    # Copy any installer exe that was produced
-    find "$DIST_DIR" -maxdepth 1 -name "*.exe" -exec cp {} "$PLUGINS_OUT/" \; 2>/dev/null || true
+DIST_DIR="$ELECTRON_DIR/dist/Prompts-win32-x64"
+if [ -d "$DIST_DIR" ]; then
+    cp -r "$DIST_DIR" "$PLUGINS_OUT/Prompts"
 fi
-
-# Always copy frontend sources for other plugins that embed them directly
-echo "Copying Prompts frontend to output..."
-cp -r "$PROMPTS_DIR/frontend/." "$PLUGINS_OUT/" 2>/dev/null || true
 
 # ── Main build ────────────────────────────────────────────────
 echo "Configuring CMake ($BUILD_TYPE)..."
