@@ -55,7 +55,7 @@ int LspClient::SendRequest(const std::string &method,
 
   std::string header =
       "Content-Length: " + std::to_string(request.length()) + "\r\n\r\n";
-  m_process->Write(header + request);
+  DebugLog("LSP SendRequest: method=" + method + ", id=" + std::to_string(id), LOG_DEBUG); m_process->Write(header + request);
   return id;
 }
 
@@ -66,7 +66,7 @@ void LspClient::SendNotification(const std::string &method,
 
   std::string header =
       "Content-Length: " + std::to_string(notification.length()) + "\r\n\r\n";
-  m_process->Write(header + notification);
+  DebugLog("LSP SendNotification: method=" + method, LOG_DEBUG); m_process->Write(header + notification);
 }
 
 void LspClient::OnProcessOutput(const std::string &output) {
@@ -99,7 +99,7 @@ void LspClient::OnProcessOutput(const std::string &output) {
 void LspClient::HandleMessage(const std::string &json) {
   // Very basic JSON parsing for id and method
   // In a real implementation, we'd use a proper JSON library
-  if (json.find("\"id\":") != std::string::npos) {
+  DebugLog("LSP HandleMessage: " + json.substr(0, (std::min)((size_t)200, json.length())), LOG_DEBUG); if (json.find("\"id\":") != std::string::npos) {
     // It's a response
     size_t idPos = json.find("\"id\":");
     size_t valStart = json.find_first_of("0123456789", idPos);

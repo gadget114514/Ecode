@@ -46,32 +46,40 @@
     <div id="main-content">
         <div id="tree-pane" class="pane">
             <div class="pane-header" onclick="app.togglePane('tree-pane')">📂 <span data-i18n="Tree">Tree</span></div>
+            <div class="tree-tabs">
+                <button id="btn-tree-tab-node" class="tree-tab-btn active" onclick="app.switchTreeTab('node')">Node</button>
+                <button id="btn-tree-tab-file" class="tree-tab-btn" onclick="app.switchTreeTab('file')">File</button>
+            </div>
             <div id="tree-content" class="pane-content"></div>
+            <div id="file-tree-content" class="pane-content" style="display:none"></div>
         </div>
-        <div id="stream-panes">
-            <div id="input-pane" class="pane">
-                <div class="pane-header" onclick="app.togglePane('input-pane')">
-                    📥 <span data-i18n="Input">Input</span>
-                    <span class="input-meta" id="input-meta"></span>
-                </div>
-                <div id="input-content" class="pane-content stream-content"></div>
+        <div id="prompt-pane" class="pane">
+            <div class="pane-header" onclick="app.togglePane('prompt-pane')">
+                🔧 <span>演算</span>
+                <span class="pane-meta" style="font-size:9px;color:#555;margin-left:4px">(op)</span>
+                <span class="pane-meta" id="prompt-meta"></span>
+                <span class="recipe-badge" id="recipe-badge"></span>
             </div>
-            <div id="prompt-pane" class="pane">
-                <div class="pane-header" onclick="app.togglePane('prompt-pane')">
-                    ⚙️ <span data-i18n="Prompt">Prompt/Params</span>
-                    <span class="pane-meta" id="prompt-meta"></span>
-                </div>
-                <div id="prompt-content" class="pane-content stream-content"></div>
+            <div id="prompt-content" class="pane-content stream-content"></div>
+        </div>
+        <div id="input-pane" class="pane">
+            <div class="pane-header" onclick="app.togglePane('input-pane')">
+                📥 <span>入力</span>
+                <span class="pane-meta" style="font-size:9px;color:#555;margin-left:4px">(src)</span>
+                <span class="input-meta" id="input-meta"></span>
             </div>
-            <div id="output-pane" class="pane">
-                <div class="pane-header" onclick="app.togglePane('output-pane')">
-                    📤 <span data-i18n="Output">Output</span>
-                    <span class="pane-meta" id="output-meta"></span>
-                </div>
-                <div id="output-content" class="pane-content stream-content"></div>
+            <div id="input-content" class="pane-content stream-content"></div>
+        </div>
+        <div id="output-pane" class="pane">
+            <div class="pane-header" onclick="app.togglePane('output-pane')">
+                📤 <span>出力</span>
+                <span class="pane-meta" style="font-size:9px;color:#555;margin-left:4px">(dst)</span>
+                <span class="pane-meta" id="output-meta"></span>
             </div>
+            <div id="output-content" class="pane-content stream-content"></div>
         </div>
     </div>
+    <div id="messages-resize-handle"></div>
     <div id="messages-pane" class="pane">
         <div class="pane-header" onclick="app.togglePane('messages-pane')">
             <span>📝 <span data-i18n="Messages">Messages</span></span>
@@ -210,6 +218,20 @@
     </div>
 </div>
 
+<!-- Recipe Manager Modal -->
+<div id="recipe-modal" class="modal">
+    <div class="modal-content recipe-modal-content">
+        <div class="recipe-modal-header">
+            <span>📋 Recipe Manager</span>
+            <span class="modal-close" onclick="app.closeRecipeManager()">&times;</span>
+        </div>
+        <div id="recipe-modal-body" class="recipe-modal-body"></div>
+        <div class="recipe-modal-footer">
+            <button onclick="app.closeRecipeManager()" data-i18n="Close">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- Config Panel (non-modal floating) -->
 <div id="config-panel">
     <div class="config-drag-handle" id="config-drag-handle">
@@ -219,6 +241,7 @@
     <div class="config-body">
         <div class="config-tabs">
             <button class="config-tab active" onclick="app.switchConfigTab('providers', this)" data-i18n="Providers">Providers</button>
+            <button class="config-tab" onclick="app.switchConfigTab('recipes', this)" data-i18n="Recipes">Recipes</button>
             <button class="config-tab" onclick="app.switchConfigTab('general', this)" data-i18n="General">General</button>
         </div>
         <div id="config-tab-providers" class="config-tab-panel">
@@ -228,7 +251,26 @@
                 <button onclick="app.closeConfig()" data-i18n="Close">Close</button>
             </div>
         </div>
+        <div id="config-tab-recipes" class="config-tab-panel" style="display:none">
+            <div class="recipe-list" id="recipe-list"></div>
+            <div class="config-actions">
+                <button onclick="app.closeConfig()" data-i18n="Close">Close</button>
+            </div>
+        </div>
         <div id="config-tab-general" class="config-tab-panel" style="display:none">
+            <div class="settings-field-row">
+                <label data-i18n="DefaultProvider">Default Provider</label>
+                <div class="settings-field-control">
+                    <select id="config-default-provider" onchange="app.setDefaultProvider(this.value)" style="flex:1;background:#252526;color:#ccc;border:1px solid #3c3c3c;padding:2px 4px;font-size:11px;"></select>
+                </div>
+            </div>
+            <div class="settings-field-row">
+                <label data-i18n="DefaultModel">Default Model</label>
+                <div class="settings-field-control">
+                    <input type="text" id="config-default-model" placeholder="gpt-4o" onchange="app.setDefaultModel(this.value)" style="flex:1;background:#252526;color:#ccc;border:1px solid #3c3c3c;padding:2px 4px;font-size:11px;">
+                </div>
+            </div>
+            <div class="settings-separator"></div>
             <div class="settings-field-row">
                 <label data-i18n="HistoryRetention">History Retention (runs)</label>
                 <div class="settings-field-hint" data-i18n="HistoryRetentionDesc">Number of execution histories to keep per project.</div>

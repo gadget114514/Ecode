@@ -28,6 +28,11 @@ BEGIN
         MENUITEM "&Configure...",          ID_PROVIDERS_CONFIGURE
         MENUITEM "&Test Connection",       ID_PROVIDERS_TEST
     END
+    POPUP "&Recipe"
+    BEGIN
+        MENUITEM "&Manager...\tCtrl+R",    ID_RECIPE_MANAGER
+        MENUITEM "&Configure...",          ID_RECIPE_CONFIGURE
+    END
     POPUP "&View"
     BEGIN
         MENUITEM "Toggle &Tree\tCtrl+1",   ID_VIEW_TREE

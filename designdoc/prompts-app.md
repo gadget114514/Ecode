@@ -1,4 +1,4 @@
-﻿# Prompts Application Design
+# Prompts Application Design
 
 ## Overview
 
@@ -47,12 +47,14 @@ Application/Prompts/
 
 ```
 %APPDATA%/Ecode/Prompts/
-├── session.json         ← Tab list (authoritative; lone source of truth for startup)
+├── config.json          ← Global configuration
 ├── providers.json       ← API keys (NOT in source tree, NOT in git)
-├── pipeline.json        ← Pipeline definitions (no keys)
+├── recipes.json         ← Global recipe definitions
+├── pipeline.json        ← Global pipeline definitions (no keys)
+├── session.json         ← Tab list (authoritative; lone source of truth for startup)
 ├── data/
-│   ├── general.json     ← Per-tab tree data
-│   ├── code.json
+│   ├── general.json     ← Initial/default per-tab tree data
+│   ├── project-20260609_180000.json ← Created when a new project/tab is created
 │   └── ...
 ├── blobs/               ← External media files from pipeline runs
 │   ├── pipeline_20250530_153042_0.png
@@ -66,8 +68,18 @@ Application/Prompts/
 - Created on first launch
 - **Startup behavior**: `session.json` → read `tabs[]` → load each `file` → restore all tabs.  
   If `tabs[]` is empty, auto-create `data/general.json` with a single empty node and add it.
+- **New Project / Tab Creation**:
+  - When a new project is created, a dedicated project file named `project-YYYYMMDD_HHMMSS.json` is automatically generated under `data/`.
+  - The list of active tabs/projects is stored in `session.json`, whereas all actual node data (tree structures, node titles, text contents, attachments, etc.) are saved within their respective project files.
 - `providers.json` contains API keys — NEVER stored in source tree
 - `blobs/` contains large media files from pipeline runs, referenced externally
+- **Global Configuration Lifecycle**:
+  - `config.json`, `providers.json`, `recipes.json`, and `pipeline.json` are designated as **Global Data** rather than per-project data.
+  - They are loaded into the Ecode host's script engine context on application startup (`Editor.config`, `Editor.providers`, `Editor.recipes`, `Editor.pipelines`) for scripting API access.
+  - They are **NOT** written back or saved upon Ecode application exit (`HandleDestroy`). This is because the `Prompts` WebView2 application itself is responsible for saving these configuration files directly and immediately to `%APPDATA%\Ecode\Prompts\` when any mutations (e.g. adding a recipe, updating API keys) occur. Overwriting them on exit would lead to data regressions.
+- **Pipeline definition vs. Project Application**:
+  - **`pipeline.json`** serves as a global master list storing reusable pipeline templates (step flows, API references, variables, etc.).
+  - **Project files (`project-日付.json`)** store the actual node text output, generated files (`attachments`), and evaluation notes (`evaluation`/`evaluationNote`) resulting from running a pipeline, alongside a reference string (`pipelineMeta`) indicating which global pipeline template was applied to the node.
 
 ### Blob Garbage Collection
 

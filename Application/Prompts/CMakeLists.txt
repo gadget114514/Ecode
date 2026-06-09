@@ -52,20 +52,7 @@ file(GLOB_RECURSE PROMTS_FRONTEND_DEPS
 set_source_files_properties(${PROMTS_FRONTEND_DEPS} PROPERTIES HEADER_FILE_ONLY TRUE)
 target_sources(Prompts PRIVATE ${PROMTS_FRONTEND_DEPS})
 
-# Copy frontend to output directories (source-based, always fresh)
-set(PROMTS_SRC_FRONT "${CMAKE_CURRENT_SOURCE_DIR}/frontend")
-set(PROMTS_ROOT_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../bin")
-add_custom_command(TARGET Prompts POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROMTS_SRC_FRONT}" "$<TARGET_FILE_DIR:Prompts>/frontend"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROMTS_SRC_FRONT}" "${PROMTS_ROOT_OUT}/$<CONFIG>/plugins/frontend"
-    COMMENT "Updating frontend to plugin dirs..."
-)
-add_custom_command(TARGET Prompts POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-    "${CMAKE_CURRENT_SOURCE_DIR}/packages/wv2/build/native/x64/WebView2Loader.dll"
-    "$<TARGET_FILE_DIR:Prompts>/WebView2Loader.dll"
-    COMMENT "Copying WebView2Loader.dll..."
-)
+# ── Post-build: skip copy (done manually) ──
 
 set_target_properties(Prompts PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin/$<CONFIG>/plugins"

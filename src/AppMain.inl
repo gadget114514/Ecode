@@ -70,6 +70,37 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   switch (uMsg) {
   case WM_CREATE:
     return HandleCreate(hwnd);
+  case WM_APP + 3: { // WM_RELOAD_GLOBAL_DATA
+    if (g_scriptEngine) {
+      std::wstring appDataDir = SettingsManager::Instance().GetAppDataPath() + L"\\Prompts";
+      auto LoadAndSetGlobal = [&](const std::wstring &fileName, const std::string &jsVarName) {
+        std::wstring filePath = appDataDir + L"\\" + fileName;
+        std::string content = "[]";
+        if (fileName == L"config.json" || fileName == L"providers.json" || fileName == L"pipeline.json") {
+          content = "{}";
+        }
+        std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+        if (file) {
+          std::streamsize size = file.tellg();
+          file.seekg(0, std::ios::beg);
+          if (size > 0) {
+            content.resize((size_t)size);
+            file.read(&content[0], size);
+          }
+        }
+        if (content.empty()) {
+          content = (fileName == L"config.json" || fileName == L"providers.json" || fileName == L"pipeline.json") ? "{}" : "[]";
+        }
+        g_scriptEngine->Evaluate(jsVarName + " = " + content + ";");
+      };
+      LoadAndSetGlobal(L"config.json", "Editor.config");
+      LoadAndSetGlobal(L"providers.json", "Editor.providers");
+      LoadAndSetGlobal(L"recipes.json", "Editor.recipes");
+      LoadAndSetGlobal(L"pipeline.json", "Editor.pipelines");
+      DebugLog("Editor global configs reloaded and synchronized.", LOG_INFO);
+    }
+    return 0;
+  }
   case WM_COPYDATA: {
     PCOPYDATASTRUCT pcds = (PCOPYDATASTRUCT)lParam;
     if (pcds && pcds->dwData == 0x5654) {
