@@ -29,7 +29,9 @@
       }
     ],
     "win": {
-      "target": "dir"
+      "target": "dir",
+      "sign": false,
+      "verifyUpdateCodeSignature": false
     }
   }
 }
