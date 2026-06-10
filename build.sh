@@ -26,8 +26,13 @@ mkdir -p "$PLUGINS_OUT"
 
 DIST_DIR="$ELECTRON_DIR/dist/Prompts-win32-x64"
 if [ -d "$DIST_DIR" ]; then
+    # embedded (plugins): bin/<BUILD_TYPE>/plugins/Prompts/
     rm -rf "$PLUGINS_OUT/Prompts"
     cp -r "$DIST_DIR/." "$PLUGINS_OUT/Prompts"
+    # standalone: bin/<BUILD_TYPE>/Prompts/
+    STANDALONE_OUT="$ROOT/bin/$BUILD_TYPE/Prompts"
+    rm -rf "$STANDALONE_OUT"
+    cp -r "$DIST_DIR/." "$STANDALONE_OUT"
 fi
 
 # ── Main build ────────────────────────────────────────────────
