@@ -143,11 +143,18 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .nav-buttons button:hover { background: #3d3d3d; color: #ccc; }
 
 /* Tree */
-.tree-node { padding: 2px 4px; cursor: pointer; border-radius: 2px; }
+.tree-node { padding: 2px 4px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
 .tree-node:hover { background: #3d3d3d; }
 .tree-node.selected { background: #094771; }
 .tree-node.leaf:before { content: '📋 '; }
 .tree-node.branch:before { content: '📂 '; }
+.tree-node.collapsed.branch:before { content: '📁 '; }
+.tree-collapse-btn { width: 14px; text-align: center; font-size: 9px; color: #888; flex-shrink: 0; margin-right: 2px; cursor: pointer; }
+.tree-collapse-btn:hover { color: #fff; }
+.tree-collapse-btn-spacer { width: 14px; flex-shrink: 0; margin-right: 2px; }
+.tree-children { padding-left: 16px; }
+.ctx-danger { color: #f66 !important; }
+.ctx-danger:hover { background: #a33 !important; color: #fff !important; }
 
 /* Tree Tabs */
 .tree-tabs {
