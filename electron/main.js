@@ -1745,6 +1745,7 @@ function buildMenu() {
             label: 'Help',
             submenu: [
                 { label: 'Welcome Wizard', click: send('welcome_wizard') },
+                { label: 'Reset Welcome Wizard', click: send('reset_wizard') },
                 { label: 'Setup Wizard', click: send('setup_wizard') },
                 { label: 'Documentation', click: () => shell.openExternal('https://github.com/gadget114514/Ecode') },
                 { label: 'About', click: send('about') },
@@ -1808,6 +1809,7 @@ function createWindow() {
     }
 
     mainWindow.webContents.on('did-finish-load', () => {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
         postToJS('ready', {});
     });
 
