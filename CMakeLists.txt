@@ -462,6 +462,19 @@ add_plugin_build(dukluv         Application/dukluv)
 add_plugin_build(JYEditor       Application/JYEditor)
 add_plugin_build(FastDired      Application/FastDired)
 
+# Build InvokePrompts (dotnet / C#) — output goes directly to bin/Release/plugins/
+find_program(DOTNET_EXECUTABLE dotnet)
+if(DOTNET_EXECUTABLE)
+    add_custom_command(TARGET ecode PRE_BUILD
+        COMMAND "${DOTNET_EXECUTABLE}" build
+            "${CMAKE_CURRENT_SOURCE_DIR}/Application/InvokePrompts/InvokePrompts.csproj"
+            -c Release
+        COMMENT "Building InvokePrompts..."
+    )
+else()
+    message(WARNING "dotnet not found; InvokePrompts will not be built automatically.")
+endif()
+
 # Custom/unknown plugins: copy any .exe from plugins_custom/
 set(CUSTOM_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/plugins_custom")
 set(PLUGIN_OUT_DIR "$<TARGET_FILE_DIR:ecode>/plugins")

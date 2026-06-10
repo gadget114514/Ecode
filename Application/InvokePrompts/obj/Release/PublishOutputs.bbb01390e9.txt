@@ -1,0 +1,2 @@
+D:\ws\Ecode\.claude\worktrees\competent-brahmagupta-8895a3\bin\Release\plugins\win-x64\publish\InvokePrompt.pdb
+D:\ws\Ecode\.claude\worktrees\competent-brahmagupta-8895a3\bin\Release\plugins\win-x64\publish\InvokePrompt.exe
