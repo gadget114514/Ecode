@@ -1402,6 +1402,7 @@ const app = {
             case 'toggle_pane':     this.togglePane(cmd.pane + '-pane'); break;
             case 'about':           this.showAbout(); break;
             case 'welcome_wizard':  this.showWizard(); break;
+            case 'reset_wizard':    this.resetWizard(); break;
             case 'setup_wizard':    this.showSetupWizard(); break;
             default: this.addLog('⚠ Unknown menu command: ' + cmd.action);
         }
@@ -2318,6 +2319,11 @@ const app = {
         localStorage.setItem('prompts_wizard_done', '1');
     },
 
+    resetWizard() {
+        localStorage.removeItem('prompts_wizard_done');
+        this.addLog('🔄 Welcome Wizard reset — will show on next launch');
+    },
+
     renderWizardStep() {
         try {
             const steps = this.WIZARD_STEPS;
@@ -2404,6 +2410,7 @@ const app = {
                 item('📤 ' + t('MenuExportNode'), 'export_node') +
                 sep +
                 item('🤖 ' + t('MenuWelcomeWizard'), 'welcome_wizard', 'F1') +
+                item('🔄 Reset Welcome Wizard',       'reset_wizard') +
                 item('🚀 ' + t('MenuSetupWizard'),   'setup_wizard')
             )}
             ${sep}
