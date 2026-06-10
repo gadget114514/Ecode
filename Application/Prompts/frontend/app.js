@@ -28,7 +28,8 @@ const app = {
         recipes: [],
         selectedRecipe: '',
         editingRecipeIndex: -1,
-        providerModels: {}
+        providerModels: {},
+        collapsedPaths: new Set()
     },
 
     init() {
@@ -39,6 +40,7 @@ const app = {
         window.addEventListener('beforeunload', () => {
             this.updateNode();
         });
+        document.addEventListener('click', () => this.hideTreeContextMenu());
     },
 
     setupBridge() {
@@ -1517,17 +1519,186 @@ const app = {
         const display = this.escapeHtml(node.title ? this.safeAtob(node.title) : this.getTitleFallback(node));
         const safePath = this.escapeHtml(path);
         const hasChildren = node.children && node.children.length > 0;
+        const collapsed = this.state.collapsedPaths.has(path);
         const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') +
-                    (this.state.currentNodePath === path ? ' selected' : '');
-        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')" oncontextmenu="app.showTreeContextMenu(event, '${safePath}')">${display}</div>`;
-        if (hasChildren) {
-            html += '<div style="padding-left:16px">';
+                    (this.state.currentNodePath === path ? ' selected' : '') +
+                    (collapsed ? ' collapsed' : '');
+        const collapseBtn = hasChildren
+            ? `<span class="tree-collapse-btn" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapsed ? '▶' : '▼'}</span>`
+            : '<span class="tree-collapse-btn-spacer"></span>';
+        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')" oncontextmenu="event.preventDefault();event.stopPropagation();app.showTreeContextMenu(event,'${safePath}')">${collapseBtn}${display}</div>`;
+        if (hasChildren && !collapsed) {
+            html += '<div class="tree-children">';
             node.children.forEach((child, i) => {
                 html += this.buildTreeHTML(child, path + '/' + i);
             });
             html += '</div>';
         }
         return html;
+    },
+
+    treeToggleCollapse(path) {
+        if (this.state.collapsedPaths.has(path)) {
+            this.state.collapsedPaths.delete(path);
+        } else {
+            this.state.collapsedPaths.add(path);
+        }
+        this.renderTree();
+    },
+
+    showTreeContextMenu(event, path) {
+        this.selectNode(path);
+        const node = this.getNodeByPath(path);
+        const parts = path.split('/').filter(p => p !== '');
+        const isRoot = parts.length === 0;
+        const hasChildren = node && node.children && node.children.length > 0;
+        const collapsed = this.state.collapsedPaths.has(path);
+
+        let idx = -1, siblingCount = 0;
+        if (!isRoot) {
+            idx = parseInt(parts[parts.length - 1]);
+            const parentPath = parts.slice(0, -1).join('/');
+            const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+            siblingCount = parent && parent.children ? parent.children.length : 0;
+        }
+
+        const menu = document.getElementById('tree-context-menu');
+        let items = '';
+
+        if (hasChildren) {
+            const label = collapsed ? '▶ 展開' : '▼ 折りたたむ';
+            items += `<div class="ctx-item" onclick="app.treeToggleCollapse('${path}');app.hideTreeContextMenu()">${label}</div>`;
+            items += '<div class="ctx-sep"></div>';
+        }
+
+        items += `<div class="ctx-item" onclick="app.treeCtxAddChild('${path}');app.hideTreeContextMenu()">➕ 子ノードを追加</div>`;
+        if (!isRoot) {
+            items += `<div class="ctx-item" onclick="app.treeCtxAddSibling('${path}');app.hideTreeContextMenu()">➕ 兄弟ノードを追加</div>`;
+            items += '<div class="ctx-sep"></div>';
+            items += `<div class="ctx-item" onclick="app.treeCtxRename('${path}');app.hideTreeContextMenu()">✏️ 名前変更</div>`;
+            items += '<div class="ctx-sep"></div>';
+            if (idx > 0) {
+                items += `<div class="ctx-item" onclick="app.treeCtxMoveUp('${path}');app.hideTreeContextMenu()">⬆ 上に移動</div>`;
+            }
+            if (idx < siblingCount - 1) {
+                items += `<div class="ctx-item" onclick="app.treeCtxMoveDown('${path}');app.hideTreeContextMenu()">⬇ 下に移動</div>`;
+            }
+            items += '<div class="ctx-sep"></div>';
+            items += `<div class="ctx-item ctx-danger" onclick="app.treeCtxDelete('${path}');app.hideTreeContextMenu()">🗑 削除</div>`;
+        }
+
+        menu.innerHTML = items;
+        menu.style.display = 'block';
+        menu.style.left = Math.min(event.clientX, window.innerWidth - 180) + 'px';
+        menu.style.top = Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 10) + 'px';
+    },
+
+    hideTreeContextMenu() {
+        const menu = document.getElementById('tree-context-menu');
+        if (menu) menu.style.display = 'none';
+    },
+
+    treeCtxAddChild(path) {
+        const node = this.getNodeByPath(path);
+        if (!node) return;
+        if (!node.children) node.children = [];
+        node.children.push({ title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] });
+        this.state.collapsedPaths.delete(path);
+        this.state.currentNodePath = path + '/' + (node.children.length - 1);
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(this.state.currentNodePath);
+        this.saveCurrentTab();
+        this.addLog('➕ 子ノードを追加しました');
+    },
+
+    treeCtxAddSibling(path) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length === 0) return;
+        const idx = parseInt(parts[parts.length - 1]);
+        const parentPath = parts.slice(0, -1).join('/');
+        const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+        if (!parent || !parent.children) return;
+        parent.children.splice(idx + 1, 0, { title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] });
+        const newPath = (parentPath ? '/' + parentPath : '') + '/' + (idx + 1);
+        this.state.currentNodePath = newPath;
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(this.state.currentNodePath);
+        this.saveCurrentTab();
+        this.addLog('➕ 兄弟ノードを追加しました');
+    },
+
+    treeCtxDelete(path) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length === 0) return;
+        const idx = parseInt(parts[parts.length - 1]);
+        const parentPath = parts.slice(0, -1).join('/');
+        const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+        if (!parent || !parent.children || idx >= parent.children.length) return;
+        if (!confirm('このノードを削除しますか？')) return;
+        parent.children.splice(idx, 1);
+        this.state.currentNodePath = parentPath ? '/' + parentPath : '';
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(this.state.currentNodePath);
+        this.saveCurrentTab();
+        this.addLog('🗑 ノードを削除しました');
+    },
+
+    treeCtxMoveUp(path) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length === 0) return;
+        const idx = parseInt(parts[parts.length - 1]);
+        if (idx === 0) return;
+        const parentPath = parts.slice(0, -1).join('/');
+        const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+        if (!parent || !parent.children) return;
+        [parent.children[idx - 1], parent.children[idx]] = [parent.children[idx], parent.children[idx - 1]];
+        const newPath = (parentPath ? '/' + parentPath : '') + '/' + (idx - 1);
+        this.state.currentNodePath = newPath;
+        this.renderTree();
+        this.renderList();
+        this.saveCurrentTab();
+        this.addLog('⬆ ノードを上に移動しました');
+    },
+
+    treeCtxMoveDown(path) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length === 0) return;
+        const idx = parseInt(parts[parts.length - 1]);
+        const parentPath = parts.slice(0, -1).join('/');
+        const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+        if (!parent || !parent.children || idx >= parent.children.length - 1) return;
+        [parent.children[idx], parent.children[idx + 1]] = [parent.children[idx + 1], parent.children[idx]];
+        const newPath = (parentPath ? '/' + parentPath : '') + '/' + (idx + 1);
+        this.state.currentNodePath = newPath;
+        this.renderTree();
+        this.renderList();
+        this.saveCurrentTab();
+        this.addLog('⬇ ノードを下に移動しました');
+    },
+
+    treeCtxRename(path) {
+        const node = this.getNodeByPath(path);
+        if (!node) return;
+        const current = node.title ? atob(node.title) : '';
+        const newName = prompt('ノード名を入力してください:', current);
+        if (newName === null) return;
+        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
+        node.title = safeB64(newName);
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(path);
+        this.saveCurrentTab();
+        this.addLog('✏️ ノード名を変更しました');
+    },
+
+    saveCurrentTab() {
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && tab.file && tab.root) {
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+        }
     },
 
     getTitleFallback(node) {
