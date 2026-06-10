@@ -26,7 +26,8 @@ mkdir -p "$PLUGINS_OUT"
 
 DIST_DIR="$ELECTRON_DIR/dist/Prompts-win32-x64"
 if [ -d "$DIST_DIR" ]; then
-    cp -r "$DIST_DIR" "$PLUGINS_OUT/Prompts"
+    rm -rf "$PLUGINS_OUT/Prompts"
+    cp -r "$DIST_DIR/." "$PLUGINS_OUT/Prompts"
 fi
 
 # ── Main build ────────────────────────────────────────────────
