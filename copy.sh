@@ -1,1 +1,1 @@
-cp -rp Application/Prompts/frontend bin/Release/plugins/
+cp -rp Application/Prompts/frontend/. bin/Release/plugins/Prompts/resources/frontend/
