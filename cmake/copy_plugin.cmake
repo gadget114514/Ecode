@@ -32,6 +32,20 @@ execute_process(
 )
 if(_copy_ret EQUAL 0)
   message(STATUS "Copied ${_full} -> ${plug_exe}")
+  if(name STREQUAL "FastFileSearch")
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${out_dir}/apps"
+    )
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${plug_exe}" "${out_dir}/apps/FastFileSearch.exe"
+      RESULT_VARIABLE _app_copy_ret
+    )
+    if(_app_copy_ret EQUAL 0)
+      message(STATUS "Copied ${plug_exe} -> ${out_dir}/apps/FastFileSearch.exe")
+    else()
+      message(WARNING "Failed to copy ${plug_exe} -> ${out_dir}/apps/FastFileSearch.exe")
+    endif()
+  endif()
 else()
   message(WARNING "Failed to copy ${_full} -> ${plug_exe} (error ${_copy_ret})")
 endif()
