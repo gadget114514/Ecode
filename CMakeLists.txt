@@ -440,25 +440,27 @@ add_plugin(JYEditor       Application/JYEditor)
 add_plugin(Prompts        Application/Prompts)
 add_plugin(FastDired      Application/FastDired)
 
-# Build FastDired plugin via its own CMake build tree
-set(FASTDIRED_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Application/FastDired/build")
-add_custom_command(TARGET ecode PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${FASTDIRED_BUILD_DIR}"
-    COMMAND ${CMAKE_COMMAND} -S "${CMAKE_CURRENT_SOURCE_DIR}/Application/FastDired"
-        -B "${FASTDIRED_BUILD_DIR}" -G "${CMAKE_GENERATOR}" -A x64
-    COMMAND ${CMAKE_COMMAND} --build "${FASTDIRED_BUILD_DIR}" --config $<CONFIG>
-    COMMENT "Building FastDired..."
-)
+# Macro to configure and build a plugin via its own CMake build tree
+macro(add_plugin_build name dir)
+    set(p_build "${CMAKE_CURRENT_SOURCE_DIR}/${dir}/build")
+    add_custom_command(TARGET ecode PRE_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${p_build}"
+        COMMAND ${CMAKE_COMMAND} -S "${CMAKE_CURRENT_SOURCE_DIR}/${dir}"
+            -B "${p_build}" -G "${CMAKE_GENERATOR}" -A x64
+        COMMAND ${CMAKE_COMMAND} --build "${p_build}" --config $<CONFIG>
+        COMMENT "Building ${name}..."
+    )
+endmacro()
 
-# Copy FastFileSearch to apps/ directory for app launcher
-set(plugin_out "$<TARGET_FILE_DIR:ecode>")
-add_custom_command(TARGET ecode POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${plugin_out}/apps"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${plugin_out}/plugins/FastFileSearch.exe"
-        "${plugin_out}/apps/FastFileSearch.exe"
-    COMMENT "Copying FastFileSearch.exe to apps/..."
-)
+add_plugin_build(Dired          Application/Dired)
+add_plugin_build(CSVEditor      Application/CSVEditor)
+add_plugin_build(FastFileSearch Application/FastFileSearch)
+add_plugin_build(FastFD         Application/FastFD)
+add_plugin_build(Terminal       Application/Terminal)
+add_plugin_build(SureBackup     Application/SureBackup)
+add_plugin_build(dukluv         Application/dukluv)
+add_plugin_build(JYEditor       Application/JYEditor)
+add_plugin_build(FastDired      Application/FastDired)
 
 # Custom/unknown plugins: copy any .exe from plugins_custom/
 set(CUSTOM_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/plugins_custom")
