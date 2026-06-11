@@ -5,7 +5,7 @@ const app = {
         tabs: [],
         activeTab: 0,
         currentNode: null,
-        currentNodePath: [],
+        currentNodePath: '',
         language: 'en',
         pipelineRunning: false,
         testMode: false,
@@ -44,7 +44,9 @@ const app = {
     },
 
     setupBridge() {
-        window.chrome.webview.addEventListener('message', (e) => {
+        const bridge = window.__promptsBridge || window.chrome?.webview;
+        if (!bridge) { console.error('No IPC bridge available'); return; }
+        bridge.addEventListener('message', (e) => {
             const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
             this.handleBridge(msg);
         });
@@ -247,13 +249,12 @@ const app = {
     },
 
     postMessage(obj) {
-        if (window.chrome && window.chrome.webview) {
-            window.chrome.webview.postMessage(obj);
-        }
+        const bridge = window.__promptsBridge || window.chrome?.webview;
+        if (bridge) bridge.postMessage(obj);
     },
 
     sendInitData() {
-        window.chrome.webview.postMessage({
+        this.postMessage({
             type: 'init_complete',
             language: this.state.language
         });
@@ -338,7 +339,7 @@ const app = {
     },
 
     openFile() {
-        window.chrome.webview.postMessage({ type: 'open_file_dialog', filter: 'JSON|*.json' });
+        this.postMessage({ type: 'open_file_dialog', filter: 'JSON|*.json' });
     },
 
     onFileSelected(path) {
@@ -2097,7 +2098,7 @@ const app = {
     },
 
     cancelPipeline() {
-        window.chrome.webview.postMessage({ type: 'cancel_pipeline' });
+        this.postMessage({ type: 'cancel_pipeline' });
         this.state.pipelineRunning = false;
         this.addLog('✕ Pipeline canceled');
     },
@@ -2242,7 +2243,7 @@ const app = {
         clearTimeout(this.state.searchTimeout);
         if (query.length < 2) return;
         this.state.searchTimeout = setTimeout(() => {
-            window.chrome.webview.postMessage({ type: 'search', query, scope: 'all_tabs' });
+            this.postMessage({ type: 'search', query, scope: 'all_tabs' });
         }, 300);
     },
 

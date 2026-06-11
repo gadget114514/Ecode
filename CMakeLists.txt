@@ -443,7 +443,6 @@ add_plugin(Terminal       Application/Terminal)
 add_plugin(SureBackup     Application/SureBackup)
 add_plugin(dukluv         Application/dukluv)
 add_plugin(JYEditor       Application/JYEditor)
-add_plugin(Prompts        Application/Prompts)
 add_plugin(FastDired      Application/FastDired)
 
 # Macro to configure and build a plugin via its own CMake build tree
@@ -468,18 +467,8 @@ add_plugin_build(dukluv         Application/dukluv)
 add_plugin_build(JYEditor       Application/JYEditor)
 add_plugin_build(FastDired      Application/FastDired)
 
-# Build InvokePrompts (dotnet / C#) — output goes directly to bin/Release/plugins/
-find_program(DOTNET_EXECUTABLE dotnet)
-if(DOTNET_EXECUTABLE)
-    add_custom_command(TARGET ecode PRE_BUILD
-        COMMAND "${DOTNET_EXECUTABLE}" build
-            "${CMAKE_CURRENT_SOURCE_DIR}/Application/InvokePrompts/InvokePrompts.csproj"
-            -c Release
-        COMMENT "Building InvokePrompts..."
-    )
-else()
-    message(WARNING "dotnet not found; InvokePrompts will not be built automatically.")
-endif()
+add_plugin_build(InvokePrompts Application/InvokePrompts)
+add_plugin(InvokePrompts      Application/InvokePrompts)
 
 # Custom/unknown plugins: copy any .exe from plugins_custom/
 set(CUSTOM_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/plugins_custom")

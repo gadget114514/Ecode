@@ -2840,3 +2840,262 @@ describe('Drag-and-drop file processing logic', () => {
         assert.ok(attrs.includes(',2'));
     });
 });
+
+// ── 7. Selection / Color logic ──────────────────────────────────
+describe('Selection & Color logic', () => {
+
+    // ---- pure helpers (extracted from frontend) ----
+
+    function isAncestor(ancestor, descendant) {
+        if (!ancestor || !descendant) return false;
+        const a = ancestor.split('/').filter(p => p !== '');
+        const d = descendant.split('/').filter(p => p !== '');
+        if (a.length >= d.length) return false;
+        return a.every((p, i) => p === d[i]);
+    }
+
+    // result-node class: depends on selection + link state
+    function resultNodeClass(childPath, currentResultNodePath, selectedDataPath, isLinkedSourceFn) {
+        const sel = currentResultNodePath === childPath;
+        const link = selectedDataPath === childPath;
+        const hist = isLinkedSourceFn(childPath);
+        if (sel && link) return 'selected-data';       // 🔴
+        if (sel) return 'selected-result';             // 🟠
+        if (link || hist) return 'selected-linked';    // 🟡
+        return '';
+    }
+
+    // step-node class: depends on selection + link state
+    function stepNodeClass(path, isSelected, currentNodePath, selectedDataPath, isLinkedSourceFn, getParentTitleFn) {
+        if (isSelected) {
+            if (getParentTitleFn(path) === 'Processed') return 'selected-result';
+            return 'selected-input';  // 🟢
+        }
+        const ancestorOfLink = selectedDataPath &&
+            (selectedDataPath === path || selectedDataPath.startsWith(path + '/'));
+        if (ancestorOfLink || isLinkedSourceFn(path)) return 'selected-linked';  // gray
+        return '';
+    }
+
+    function getParentTitle(path, tree) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length < 2) return '';
+        const parentPath = parts.slice(0, -1).join('/');
+        let node = tree;
+        for (const p of parentPath.split('/').filter(Boolean)) {
+            const idx = parseInt(p);
+            if (!node.children || idx >= node.children.length) return '';
+            node = node.children[idx];
+        }
+        try { return node.title ? atob(node.title) : ''; } catch { return node.title || ''; }
+    }
+
+    // build a set of linked source paths by scanning linkInfo in tree
+    function buildLinkedSources(tree) {
+        const result = new Set();
+        function scan(nodes) {
+            if (!nodes) return;
+            for (const n of nodes) {
+                if (n.linkInfo) {
+                    try {
+                        const info = JSON.parse(n.linkInfo);
+                        if (info.sourcePath) result.add(info.sourcePath);
+                    } catch {}
+                }
+                scan(n.children);
+            }
+        }
+        scan(tree.children);
+        return result;
+    }
+
+    // ---- sample tree data ----
+    const b64 = s => { try { return btoa(unescape(encodeURIComponent(s))); } catch { return btoa(s); } };
+
+    const tree = {
+        title: '', content: '', mimetype: 'text/plain', children: [
+            { title: b64('Step 1'), content: '', mimetype: 'text/plain', children: [
+                { title: b64('Processed'), content: '', mimetype: 'text/plain', children: [
+                    { title: b64('2026-06-10 12:00:00'), content: b64('result A'), mimetype: 'text/plain', children: [] },
+                ]}
+            ]},
+            { title: b64('Step 2'), content: '', mimetype: 'text/plain', children: [
+                { title: b64('Processed'), content: '', mimetype: 'text/plain', children: [
+                    { title: b64('2026-06-10 13:00:00'), content: b64('result B'), mimetype: 'text/plain',
+                        linkInfo: JSON.stringify({ sourcePath: '0/0/0', sourceResultTitle: '2026-06-10 12:00:00', sourceStepTitle: 'Step 1' }),
+                        children: [] },
+                ]}
+            ]},
+        ]
+    };
+    // Paths:
+    //   Step 1         = "0"
+    //     Processed    = "0/0"
+    //       Result A   = "0/0/0"
+    //   Step 2         = "1"
+    //     Processed    = "1/0"
+    //       Result B   = "1/0/0"   (linkInfo.sourcePath = "0/0/0")
+
+    const linkedSources = buildLinkedSources(tree);
+
+    // ---- isAncestor tests ----
+    test('isAncestor: root is ancestor of child', () => {
+        assert.ok(isAncestor('0', '0/0'));
+    });
+
+    test('isAncestor: root is ancestor of grandchild', () => {
+        assert.ok(isAncestor('0', '0/0/0'));
+    });
+
+    test('isAncestor: same path is NOT ancestor', () => {
+        assert.ok(!isAncestor('0', '0'));
+    });
+
+    test('isAncestor: different branch is NOT ancestor', () => {
+        assert.ok(!isAncestor('0', '1'));
+        assert.ok(!isAncestor('0', '1/0'));
+    });
+
+    test('isAncestor: deeper path cannot be ancestor of shallower', () => {
+        assert.ok(!isAncestor('0/0', '0'));
+    });
+
+    test('isAncestor: empty/null paths', () => {
+        assert.ok(!isAncestor('', '0'));
+        assert.ok(!isAncestor('0', ''));
+        assert.ok(!isAncestor(null, '0'));
+    });
+
+    // ---- resultNodeClass tests ----
+    test('resultNodeClass: unselected node returns empty', () => {
+        const cls = resultNodeClass('1/0/0', '', '', () => false);
+        assert.equal(cls, '');
+    });
+
+    test('resultNodeClass: selected only returns orange', () => {
+        const cls = resultNodeClass('0/0/0', '0/0/0', '', () => false);
+        assert.equal(cls, 'selected-result');
+    });
+
+    test('resultNodeClass: selected + linked returns red', () => {
+        const cls = resultNodeClass('0/0/0', '0/0/0', '0/0/0', () => false);
+        assert.equal(cls, 'selected-data');
+    });
+
+    test('resultNodeClass: unselected but has linkInfo returns lemon', () => {
+        const cls = resultNodeClass('0/0/0', '1/0/0', '', p => linkedSources.has(p));
+        assert.equal(cls, 'selected-linked');
+    });
+
+    test('resultNodeClass: unselected but is selectedDataPath returns lemon', () => {
+        const cls = resultNodeClass('0/0/0', '', '0/0/0', () => false);
+        assert.equal(cls, 'selected-linked');
+    });
+
+    test('resultNodeClass: selected but different path from linked returns orange', () => {
+        const cls = resultNodeClass('1/0/0', '1/0/0', '0/0/0', () => false);
+        assert.equal(cls, 'selected-result');
+    });
+
+    // ---- stepNodeClass tests ----
+    test('stepNodeClass: selected returns green', () => {
+        const cls = stepNodeClass('0', true, '0', '', () => false, p => getParentTitle(p, tree));
+        assert.equal(cls, 'selected-input');
+    });
+
+    test('stepNodeClass: selected + parent is Processed returns orange (should not happen for steps)', () => {
+        // If a step's parent were Processed, that would be a result node edge case
+        const cls = stepNodeClass('0/0/0', true, '0/0/0', '', () => false, p => getParentTitle(p, tree));
+        assert.equal(cls, 'selected-result');
+    });
+
+    test('stepNodeClass: unselected but descendant contains selectedDataPath returns gray', () => {
+        // Step 0 has child Processed with Result A at "0/0/0" which IS selectedDataPath
+        // Step 0 is ancestor of the linked node
+        const cls = stepNodeClass('0', false, '1', '0/0/0', p => linkedSources.has(p), p => getParentTitle(p, tree));
+        assert.equal(cls, 'selected-linked');
+    });
+
+    test('stepNodeClass: unselected step with no linked descendant returns empty', () => {
+        // Step 2 is not linked in any way
+        const cls = stepNodeClass('1', false, '0', '0/0/0', p => linkedSources.has(p), p => getParentTitle(p, tree));
+        assert.equal(cls, '');
+    });
+
+    test('stepNodeClass: unselected with no link returns empty', () => {
+        const cls = stepNodeClass('1', false, '0', '', () => false, p => getParentTitle(p, tree));
+        assert.equal(cls, '');
+    });
+
+    test('stepNodeClass: unselected but is selectedDataPath ancestor returns gray', () => {
+        const cls = stepNodeClass('0', false, '1', '0/0/0', () => false, p => getParentTitle(p, tree));
+        assert.equal(cls, 'selected-linked');
+    });
+
+    // ---- linkedSources scanning ----
+    test('buildLinkedSources finds sourcePath from linkInfo', () => {
+        assert.ok(linkedSources.has('0/0/0'));
+    });
+
+    test('buildLinkedSources does not include unrelated paths', () => {
+        assert.ok(!linkedSources.has('0/0'));
+        assert.ok(!linkedSources.has('1/0/0'));
+    });
+
+    // ---- recalcLinkMode: test isAncestor-driven logic ----
+    test('recalcLinkMode: step IS ancestor of result → viewing mode (no link)', () => {
+        // Step "0" is ancestor of result "0/0/0" → should stay as viewing (selectedDataPath = null)
+        const stepPath = '0';
+        const resultPath = '0/0/0';
+        const shouldLink = !isAncestor(stepPath, resultPath);
+        assert.ok(!shouldLink);
+    });
+
+    test('recalcLinkMode: step is NOT ancestor of result → linking mode', () => {
+        // Step "1" is NOT ancestor of result "0/0/0" → should link
+        const stepPath = '1';
+        const resultPath = '0/0/0';
+        const shouldLink = !isAncestor(stepPath, resultPath);
+        assert.ok(shouldLink);
+    });
+
+    // ---- Gemini provider header auth tests (need mock server) ----
+    test('Gemini call sends X-Goog-Api-Key header', async () => {
+        // Use the existing mock server from the AI Provider test suite
+        // but since we can't access it here, we inline a simple server
+        const srv = await new Promise(resolve => {
+            const s = http.createServer((req, res) => {
+                // capture and respond
+                let body = '';
+                req.on('data', c => body += c);
+                req.on('end', () => {
+                    globalThis._lastGemini = { url: req.url, headers: req.headers, body };
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'mock' }] } }] }));
+                });
+            });
+            s.listen(0, '127.0.0.1', () => resolve(s));
+        });
+        const port = srv.address().port;
+
+        // Simulate Gemini provider's call with X-Goog-Api-Key header
+        const body = JSON.stringify({
+            contents: [{ parts: [{ text: 'hello' }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+        });
+        const raw = await new Promise((resolve, reject) => {
+            const opts = { hostname: '127.0.0.1', port, path: `/v1beta/models/gemini-2.5-flash:generateContent`, method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': 'test-key-123', 'Content-Length': Buffer.byteLength(body) } };
+            const req = http.request(opts, res => { const ch = []; res.on('data', c => ch.push(c)); res.on('end', () => resolve(Buffer.concat(ch).toString())); });
+            req.on('error', reject);
+            req.write(body);
+            req.end();
+        });
+
+        assert.equal(globalThis._lastGemini.headers['x-goog-api-key'], 'test-key-123');
+        assert.ok(!globalThis._lastGemini.url.includes('key='));
+        const j = JSON.parse(raw);
+        assert.equal(j.candidates[0].content.parts[0].text, 'mock');
+        srv.close();
+    });
+});

@@ -146,6 +146,9 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .tree-node { padding: 2px 4px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
 .tree-node:hover { background: #3d3d3d; }
 .tree-node.selected { background: #094771; }
+.tree-node.selected-input { background: #2a6b2a; }
+.tree-node.selected-result { background: #8a5a1a; }
+.tree-node.selected-data { background: #8a2a2a; }
 .tree-node.leaf:before { content: '📋 '; }
 .tree-node.branch:before { content: '📂 '; }
 .tree-node.collapsed.branch:before { content: '📁 '; }
@@ -153,15 +156,29 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .tree-collapse-btn:hover { color: #fff; }
 .tree-collapse-btn-spacer { width: 14px; flex-shrink: 0; margin-right: 2px; }
 .tree-children { padding-left: 16px; }
+
+.tree-processed-header { padding: 3px 4px; cursor: pointer; border-radius: 2px; color: #888; font-size: 11px; border-top: 1px solid #3a3a3a; margin-top: 4px; user-select: none; }
+.tree-processed-header:hover { color: #aaa; }
+.result-node { padding: 2px 4px; cursor: pointer; border-radius: 2px; color: #aaa; font-size: 11px; }
+.result-node:hover { background: #3d3d3d; }
+
+.tree-node.selected-linked { background: #3a3a3a; }
+.result-node.selected-result { background: #8a5a1a; color: #fff; }
+.result-node.selected-data { background: #8a2a2a; color: #fff; }
+.result-node.selected-linked { background: #b8a030; color: #000; }
+.tree-processed-header.linked { color: #e0d050; }
 .ctx-danger { color: #f66 !important; }
 .ctx-danger:hover { background: #a33 !important; color: #fff !important; }
 
 /* Tree Tabs */
 .tree-tabs {
     display: flex;
+    align-items: center;
     background: #252526;
     border-bottom: 1px solid #333;
 }
+.tree-add-btn { background: none; border: none; color: #4ec94e; cursor: pointer; font-size: 14px; padding: 0 4px; line-height: 1; margin-left: auto; }
+.tree-add-btn:hover { color: #6fe96f; }
 .tree-tab-btn {
     flex: 1;
     padding: 6px 12px;
@@ -270,6 +287,10 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .log-entry { padding: 2px 0; border-bottom: 1px solid #2d2d2d; cursor: default; }
 .log-entry:hover { background: #2a2a2a; }
 .messages-actions { margin-left: auto; display: flex; gap: 2px; }
+.msg-tabs { display: flex; gap: 2px; flex: 1; }
+.msg-tab { background: none; border: none; color: #888; cursor: pointer; font-size: 11px; padding: 2px 8px; border-radius: 3px; }
+.msg-tab:hover { color: #ccc; background: #3d3d3d; }
+.msg-tab-active { color: #fff; background: #4a4a4a; }
 .msg-action-btn { background: none; border: none; color: #888; cursor: pointer; font-size: 12px; padding: 0 4px; line-height: 1; }
 .msg-action-btn:hover { color: #fff; }
 

@@ -1,13 +1,15 @@
-cmake_minimum_required(VERSION 3.15)
-project(InvokePrompts LANGUAGES NONE)
+cmake_minimum_required(VERSION 3.10)
+project(InvokePrompts LANGUAGES C)
 
-find_program(DOTNET_EXECUTABLE dotnet REQUIRED)
+add_executable(InvokePrompts WIN32 src/main.c)
 
-add_custom_target(InvokePrompts ALL
-    COMMAND "${DOTNET_EXECUTABLE}" build
-        "${CMAKE_CURRENT_SOURCE_DIR}/InvokePrompts.csproj"
-        -c Release
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "Building InvokePrompts (dotnet)"
-    USES_TERMINAL
+target_link_libraries(InvokePrompts shell32)
+
+if(MSVC)
+    target_compile_options(InvokePrompts PRIVATE /W3 /utf-8)
+    target_compile_definitions(InvokePrompts PRIVATE UNICODE _UNICODE)
+endif()
+
+set_target_properties(InvokePrompts PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin"
 )

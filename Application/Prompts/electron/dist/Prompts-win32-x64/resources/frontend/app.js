@@ -5,7 +5,7 @@ const app = {
         tabs: [],
         activeTab: 0,
         currentNode: null,
-        currentNodePath: [],
+        currentNodePath: '',
         language: 'en',
         pipelineRunning: false,
         testMode: false,
@@ -16,7 +16,7 @@ const app = {
         viewMode: 'node', // "node" | "pipeline"
         selectedStep: -1, // selected pipeline step index
         currentRunId: '',
-        activeTreeTab: 'node',
+        activeTreeTab: 'pipeline',
         fileTree: [],
         projects: [],
         activeProject: 'default',
@@ -28,7 +28,8 @@ const app = {
         recipes: [],
         selectedRecipe: '',
         editingRecipeIndex: -1,
-        providerModels: {}
+        providerModels: {},
+        collapsedPaths: new Set()
     },
 
     init() {
@@ -39,12 +40,17 @@ const app = {
         window.addEventListener('beforeunload', () => {
             this.updateNode();
         });
+        document.addEventListener('click', () => this.hideTreeContextMenu());
     },
 
     setupBridge() {
-        window.chrome.webview.addEventListener('message', (e) => {
-            const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-            this.handleBridge(msg);
+        window.__promptsBridge.addEventListener('message', (e) => {
+            try {
+                const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+                this.handleBridge(msg);
+            } catch (err) {
+                console.error('[Prompts] Bridge error:', err);
+            }
         });
     },
 
@@ -226,6 +232,9 @@ const app = {
             case 'save_run_state':
                 this.postMessage({ type: 'save_run_state', payload: msg.payload });
                 break;
+            case 'http_log':
+                this.addHttpLog(msg.payload);
+                break;
             case 'incomplete_run_detected':
                 this.state.incompleteRuns = msg.payload.runs || [];
                 this.showIncompleteRuns();
@@ -242,13 +251,13 @@ const app = {
     },
 
     postMessage(obj) {
-        if (window.chrome && window.chrome.webview) {
-            window.chrome.webview.postMessage(obj);
+        if (window.__promptsBridge) {
+            window.__promptsBridge.postMessage(obj);
         }
     },
 
     sendInitData() {
-        window.chrome.webview.postMessage({
+        window.__promptsBridge.postMessage({
             type: 'init_complete',
             language: this.state.language
         });
@@ -333,7 +342,7 @@ const app = {
     },
 
     openFile() {
-        window.chrome.webview.postMessage({ type: 'open_file_dialog', filter: 'JSON|*.json' });
+        window.__promptsBridge.postMessage({ type: 'open_file_dialog', filter: 'JSON|*.json' });
     },
 
     onFileSelected(path) {
@@ -355,7 +364,11 @@ const app = {
         this.addLog('💾 Save requested');
         this.updateNode();
     },
-    saveFileAs() { this.addLog('💾 Save As requested'); },
+    saveFileAs() {
+        this.addLog('💾 Save As requested');
+        this.updateNode();
+        this.postMessage({ type: 'save_file_as' });
+    },
     onPipelineCompleted(meta) {
         this.state.pipelineRunning = false;
         this.addLog(`✅ Pipeline "${meta.pipelineName}" completed`);
@@ -365,10 +378,13 @@ const app = {
             catch { return btoa(str); }
         };
 
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const timeLabel = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
         const outputContent = meta.outputContent || '';
-        const autoTitle = outputContent.replace(/\s+/g, ' ').trim().substring(0, 50) + (outputContent.length > 50 ? '...' : '');
         const outputNode = {
-            title: safeB64(autoTitle || meta.pipelineName),
+            title: safeB64(timeLabel),
             content: safeB64(outputContent),
             mimetype: 'text/plain',
             attachments: [],
@@ -380,13 +396,23 @@ const app = {
         const currentNode = this.getNodeByPath(this.state.currentNodePath);
         if (tab && currentNode) {
             if (!currentNode.children) currentNode.children = [];
-            currentNode.children.unshift(outputNode);
+            let processedFolder = currentNode.children.find(c => {
+                const t = c.title ? (() => { try { return atob(c.title); } catch { return c.title; } })() : '';
+                return t === 'Processed';
+            });
+            if (!processedFolder) {
+                const safeB64Title = (() => { try { return btoa(unescape(encodeURIComponent('Processed'))); } catch { return btoa('Processed'); } })();
+                processedFolder = { title: safeB64Title, content: '', mimetype: 'text/plain', attachments: [], children: [] };
+                currentNode.children.push(processedFolder);
+            }
+            if (!processedFolder.children) processedFolder.children = [];
+            processedFolder.children.unshift(outputNode);
             this.renderTree();
             this.renderList();
             if (tab.file && tab.root) {
                 this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
             }
-            this.addLog(`📦 Child node saved: "${meta.pipelineName}"`);
+            this.addLog(`📦 Result saved under Processed`);
         }
         this.state.selectedOutputRunIndex = 0;
         this.renderOutput();
@@ -757,9 +783,15 @@ const app = {
     },
 
     showConfig() {
+        console.log('[Prompts] showConfig called');
         const panel = document.getElementById('config-panel');
-        if (!panel) return;
+        if (!panel) {
+            console.error('[Prompts] config-panel element not found');
+            this.addLog('⚠ Config panel not found');
+            return;
+        }
         panel.classList.add('visible');
+        console.log('[Prompts] config-panel visible class added');
         this.postMessage({ type: 'get_providers' });
         this.initConfigDrag();
         this.addLog('⚙ Config opened');
@@ -780,9 +812,15 @@ const app = {
     },
 
     showRecipeManager() {
+        console.log('[Prompts] showRecipeManager called');
         const modal = document.getElementById('recipe-modal');
-        if (!modal) return;
+        if (!modal) {
+            console.error('[Prompts] recipe-modal element not found');
+            this.addLog('⚠ Recipe modal not found');
+            return;
+        }
         modal.classList.add('visible');
+        console.log('[Prompts] recipe-modal visible class added');
         this.postMessage({ type: 'get_providers' });
         this.renderRecipeManager();
     },
@@ -1391,8 +1429,6 @@ const app = {
             case 'new_tab':         this.newTab(); break;
             case 'save':            this.saveFile(); break;
             case 'save_as':         this.saveFileAs(); break;
-            case 'import_zip':      this.addLog('📦 Import ZIP — coming soon'); break;
-            case 'export_node':     this.addLog('📤 Export Node — coming soon'); break;
             case 'run_pipeline':    this.runPipeline(); break;
             case 'pipeline_manager': this.showPipelineManager(); break;
             case 'pipeline_history': this.showHistory(); break;
@@ -1402,36 +1438,116 @@ const app = {
             case 'toggle_pane':     this.togglePane(cmd.pane + '-pane'); break;
             case 'about':           this.showAbout(); break;
             case 'welcome_wizard':  this.showWizard(); break;
+            case 'reset_wizard':    this.resetWizard(); break;
             case 'setup_wizard':    this.showSetupWizard(); break;
             default: this.addLog('⚠ Unknown menu command: ' + cmd.action);
         }
+    },
+
+    _stripProcessedNodes(node) {
+        if (!node || !node.children) return;
+        node.children = node.children.filter(c => {
+            const title = c.title ? (() => { try { return atob(c.title); } catch { return c.title; } })() : '';
+            if (title === 'Processed') return false;
+            this._stripProcessedNodes(c);
+            return true;
+        });
     },
 
     onSaveAsResult(path) {
         const tab = this.state.tabs[this.state.activeTab];
         if (tab && path) {
             tab.file = path.split('/').pop().split('\\').pop();
-            this.addLog('💾 Saved as: ' + path);
+            const cleanRoot = JSON.parse(JSON.stringify(tab.root));
+            this._stripProcessedNodes(cleanRoot);
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: cleanRoot } });
+            this.addLog('💾 Saved as: ' + path + ' (Processed excluded)');
         }
+    },
+
+    exportPipeline() {
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node || !node.children || node.children.length === 0) {
+            this.addLog('⚠ エクスポートするパイプラインステップがありません');
+            return;
+        }
+        const safeAtob = str => { try { return atob(str); } catch { return str; } };
+        const steps = node.children.map(c => ({
+            title: c.title ? safeAtob(c.title) : '',
+            prompt: c.content ? safeAtob(c.content) : '',
+        }));
+        const pipelineData = { version: 1, steps };
+        const json = JSON.stringify(pipelineData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'pipeline_' + Date.now() + '.pipeline.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.addLog(`📤 Pipeline exported: ${steps.length} steps`);
+    },
+
+    importPipeline() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,.pipeline.json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    const steps = data.steps || [];
+                    if (steps.length === 0) { this.addLog('⚠ No steps in pipeline file'); return; }
+                    const node = this.getNodeByPath(this.state.currentNodePath);
+                    if (!node) { this.addLog('⚠ Select a parent node first'); return; }
+                    if (!node.children) node.children = [];
+                    const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
+                    steps.forEach(s => {
+                        node.children.push({
+                            title: safeB64(s.title || ''),
+                            content: safeB64(s.prompt || ''),
+                            mimetype: 'text/plain',
+                            attachments: [],
+                            children: [],
+                        });
+                    });
+                    this.renderTree();
+                    this.addLog(`📥 Pipeline imported: ${steps.length} steps`);
+                    const tab = this.state.tabs[this.state.activeTab];
+                    if (tab && tab.file && tab.root) {
+                        this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+                    }
+                } catch (err) {
+                    this.addLog('⚠ Failed to import pipeline: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
     },
 
     switchTreeTab(tab) {
         this.state.activeTreeTab = tab;
-        const nodeBtn = document.getElementById('btn-tree-tab-node');
+        const pipelineBtn = document.getElementById('btn-tree-tab-pipeline');
         const fileBtn = document.getElementById('btn-tree-tab-file');
-        const nodeContent = document.getElementById('tree-content');
+        const pipelineContent = document.getElementById('tree-content');
         const fileContent = document.getElementById('file-tree-content');
         
-        if (tab === 'node') {
-            nodeBtn?.classList.add('active');
+        if (tab === 'pipeline') {
+            pipelineBtn?.classList.add('active');
             fileBtn?.classList.remove('active');
-            if (nodeContent) nodeContent.style.display = '';
+            if (pipelineContent) pipelineContent.style.display = '';
             if (fileContent) fileContent.style.display = 'none';
             this.renderTree();
         } else {
-            nodeBtn?.classList.remove('active');
+            pipelineBtn?.classList.remove('active');
             fileBtn?.classList.add('active');
-            if (nodeContent) nodeContent.style.display = 'none';
+            if (pipelineContent) pipelineContent.style.display = 'none';
             if (fileContent) fileContent.style.display = '';
             this.requestFileTree();
         }
@@ -1492,7 +1608,7 @@ const app = {
                 this.renderTree();
                 this.renderList();
                 if (root && root.children && root.children.length > 0) {
-                    this.selectNode(''); // Select root node by default
+                    this.selectNode('0'); // Select first child by default
                 }
             }
         }
@@ -1504,30 +1620,285 @@ const app = {
         if (!el) return;
         const tab = this.state.tabs[this.state.activeTab];
         if (!tab || !tab.root) { el.innerHTML = '<div class="empty">No data</div>'; return; }
-        el.innerHTML = this.buildTreeHTML(tab.root, '');
+        const children = tab.root.children || [];
+        if (children.length === 0) {
+            el.innerHTML = '<div class="empty">No pipeline nodes</div>';
+            return;
+        }
+        let html = '';
+        children.forEach((child, i) => {
+            html += this.buildTreeHTML(child, String(i));
+        });
+        el.innerHTML = html;
         
-        // Also sync file tree selections if visible
         if (this.state.activeTreeTab === 'file') {
             this.renderFileTree();
         }
     },
 
     buildTreeHTML(node, path) {
+        const safeAtob = str => { try { return atob(str); } catch { return str; } };
+        const nodeTitle = node.title ? safeAtob(node.title) : '';
+        const isProcessed = nodeTitle === 'Processed';
+
         let html = '';
-        const display = this.escapeHtml(node.title ? this.safeAtob(node.title) : this.getTitleFallback(node));
+        const display = this.escapeHtml(nodeTitle || this.getTitleFallback(node));
         const safePath = this.escapeHtml(path);
         const hasChildren = node.children && node.children.length > 0;
+        const collapsed = this.state.collapsedPaths.has(path);
+        const isSelected = this.state.currentNodePath === path;
+
+        if (isProcessed) {
+            const itemCls = 'tree-processed-header' + (collapsed ? ' collapsed' : '');
+            const collapseBtn = hasChildren
+                ? `<span class="tree-collapse-btn" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapsed ? '▶' : '▼'}</span>`
+                : '<span class="tree-collapse-btn-spacer"></span>';
+            html += `<div class="${itemCls}" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapseBtn}📦 Processed (${hasChildren ? node.children.length : 0})</div>`;
+            if (hasChildren && !collapsed) {
+                html += '<div class="tree-children">';
+                node.children.forEach((child, i) => {
+                    const childPath = path + '/' + i;
+                    const childDisplay = this.escapeHtml(child.title ? safeAtob(child.title) : this.getTitleFallback(child));
+                    const childSelected = this.state.currentResultNodePath === childPath;
+                    const childCls = 'tree-node leaf result-node' + (childSelected ? ' selected-result' : '');
+                    html += `<div class="${childCls}" onclick="app.selectNode('${this.escapeHtml(childPath)}')">📋 ${childDisplay}</div>`;
+                });
+                html += '</div>';
+            }
+            return html;
+        }
+
+        let selectedCls = '';
+        if (isSelected) {
+            const parts = path.split('/').filter(p => p !== '');
+            if (parts.length >= 2) {
+                const parentPath = parts.slice(0, -1).join('/');
+                const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+                if (parent && parent.title) {
+                    const parentTitle = safeAtob(parent.title);
+                    selectedCls = parentTitle === 'Processed' ? ' selected-result' : ' selected-input';
+                }
+            }
+            if (!selectedCls) selectedCls = ' selected-input';
+        }
         const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') +
-                    (this.state.currentNodePath === path ? ' selected' : '');
-        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')" oncontextmenu="app.showTreeContextMenu(event, '${safePath}')">${display}</div>`;
-        if (hasChildren) {
-            html += '<div style="padding-left:16px">';
+                    selectedCls +
+                    (collapsed ? ' collapsed' : '');
+        const collapseBtn = hasChildren
+            ? `<span class="tree-collapse-btn" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapsed ? '▶' : '▼'}</span>`
+            : '<span class="tree-collapse-btn-spacer"></span>';
+        html += `<div class="${cls}" onclick="app.selectNode('${safePath}')" oncontextmenu="event.preventDefault();event.stopPropagation();app.showTreeContextMenu(event,'${safePath}')">${collapseBtn}${display}</div>`;
+        if (hasChildren && !collapsed) {
+            html += '<div class="tree-children">';
             node.children.forEach((child, i) => {
                 html += this.buildTreeHTML(child, path + '/' + i);
             });
             html += '</div>';
         }
         return html;
+    },
+
+    treeToggleCollapse(path) {
+        if (this.state.collapsedPaths.has(path)) {
+            this.state.collapsedPaths.delete(path);
+        } else {
+            this.state.collapsedPaths.add(path);
+        }
+        this.renderTree();
+    },
+
+    showTreeContextMenu(event, path) {
+        this.selectNode(path);
+        const node = this.getNodeByPath(path);
+        const parts = path.split('/').filter(p => p !== '');
+        const isRoot = parts.length === 0;
+        const hasChildren = node && node.children && node.children.length > 0;
+        const collapsed = this.state.collapsedPaths.has(path);
+
+        let idx = -1, siblingCount = 0;
+        if (!isRoot) {
+            idx = parseInt(parts[parts.length - 1]);
+            const parentPath = parts.slice(0, -1).join('/');
+            const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+            siblingCount = parent && parent.children ? parent.children.length : 0;
+        }
+
+        const menu = document.getElementById('tree-context-menu');
+        let items = '';
+
+        if (hasChildren) {
+            const label = collapsed ? '▶ 展開' : '▼ 折りたたむ';
+            items += `<div class="ctx-item" onclick="app.treeToggleCollapse('${path}');app.hideTreeContextMenu()">${label}</div>`;
+            items += '<div class="ctx-sep"></div>';
+        }
+
+        items += `<div class="ctx-item" onclick="app.treeCtxAddChild('${path}');app.hideTreeContextMenu()">➕ 子ノードを追加</div>`;
+        items += '<div class="ctx-sep"></div>';
+        items += `<div class="ctx-item" onclick="app.treeCtxRename('${path}');app.hideTreeContextMenu()">✏️ 名前変更</div>`;
+        items += '<div class="ctx-sep"></div>';
+        if (!isRoot) {
+            items += `<div class="ctx-item" onclick="app.treeCtxAddSibling('${path}');app.hideTreeContextMenu()">➕ 兄弟ノードを追加</div>`;
+            items += '<div class="ctx-sep"></div>';
+            if (idx > 0) {
+                items += `<div class="ctx-item" onclick="app.treeCtxMoveUp('${path}');app.hideTreeContextMenu()">⬆ 上に移動</div>`;
+            }
+            if (idx < siblingCount - 1) {
+                items += `<div class="ctx-item" onclick="app.treeCtxMoveDown('${path}');app.hideTreeContextMenu()">⬇ 下に移動</div>`;
+            }
+            items += '<div class="ctx-sep"></div>';
+            items += `<div class="ctx-item ctx-danger" onclick="app.treeCtxDelete('${path}');app.hideTreeContextMenu()">🗑 削除</div>`;
+        }
+
+        menu.innerHTML = items;
+        menu.style.display = 'block';
+        menu.style.left = Math.min(event.clientX, window.innerWidth - 180) + 'px';
+        menu.style.top = Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 10) + 'px';
+    },
+
+    hideTreeContextMenu() {
+        const menu = document.getElementById('tree-context-menu');
+        if (menu) menu.style.display = 'none';
+    },
+
+    addRootNode() {
+        const tab = this.state.tabs[this.state.activeTab];
+        if (!tab || !tab.root) return;
+        if (!tab.root.children) tab.root.children = [];
+        tab.root.children.push({ title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] });
+        const idx = tab.root.children.length - 1;
+        this.state.currentNodePath = String(idx);
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(this.state.currentNodePath);
+        this.saveCurrentTab();
+        this.addLog('➕ ルートノードを追加しました');
+    },
+
+    treeCtxAddChild(path) {
+        const node = this.getNodeByPath(path);
+        if (!node) {
+            this.addRootNode();
+            return;
+        }
+        if (!node.children) node.children = [];
+        node.children.push({ title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] });
+        this.state.collapsedPaths.delete(path);
+        this.state.currentNodePath = path + '/' + (node.children.length - 1);
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(this.state.currentNodePath);
+        this.saveCurrentTab();
+        this.addLog('➕ 子ノードを追加しました');
+    },
+
+    treeCtxAddSibling(path) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length === 0) return;
+        const idx = parseInt(parts[parts.length - 1]);
+        const parentPath = parts.slice(0, -1).join('/');
+        const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+        if (!parent || !parent.children) return;
+        parent.children.splice(idx + 1, 0, { title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] });
+        const newPath = (parentPath ? '/' + parentPath : '') + '/' + (idx + 1);
+        this.state.currentNodePath = newPath;
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(this.state.currentNodePath);
+        this.saveCurrentTab();
+        this.addLog('➕ 兄弟ノードを追加しました');
+    },
+
+    treeCtxDelete(path) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length === 0) return;
+        const idx = parseInt(parts[parts.length - 1]);
+        const parentPath = parts.slice(0, -1).join('/');
+        const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+        if (!parent || !parent.children || idx >= parent.children.length) return;
+        if (!window.confirm('このノードを削除しますか？')) return;
+        parent.children.splice(idx, 1);
+        this.state.currentNodePath = parentPath ? '/' + parentPath : '';
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(this.state.currentNodePath);
+        this.saveCurrentTab();
+        this.addLog('🗑 ノードを削除しました');
+    },
+
+    treeCtxMoveUp(path) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length === 0) return;
+        const idx = parseInt(parts[parts.length - 1]);
+        if (idx === 0) return;
+        const parentPath = parts.slice(0, -1).join('/');
+        const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+        if (!parent || !parent.children) return;
+        [parent.children[idx - 1], parent.children[idx]] = [parent.children[idx], parent.children[idx - 1]];
+        const newPath = (parentPath ? '/' + parentPath : '') + '/' + (idx - 1);
+        this.state.currentNodePath = newPath;
+        this.renderTree();
+        this.renderList();
+        this.saveCurrentTab();
+        this.addLog('⬆ ノードを上に移動しました');
+    },
+
+    treeCtxMoveDown(path) {
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length === 0) return;
+        const idx = parseInt(parts[parts.length - 1]);
+        const parentPath = parts.slice(0, -1).join('/');
+        const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+        if (!parent || !parent.children || idx >= parent.children.length - 1) return;
+        [parent.children[idx], parent.children[idx + 1]] = [parent.children[idx + 1], parent.children[idx]];
+        const newPath = (parentPath ? '/' + parentPath : '') + '/' + (idx + 1);
+        this.state.currentNodePath = newPath;
+        this.renderTree();
+        this.renderList();
+        this.saveCurrentTab();
+        this.addLog('⬇ ノードを下に移動しました');
+    },
+
+    treeCtxRename(path) {
+        console.log('[treeCtxRename] path:', path);
+        const node = this.getNodeByPath(path);
+        if (!node) { console.log('[treeCtxRename] node not found'); return; }
+        console.log('[treeCtxRename] node.title:', node.title);
+        this._renamePath = path;
+        const safeAtob = str => { try { return atob(str); } catch { return str; } };
+        const current = node.title ? safeAtob(node.title) : '';
+        const input = document.getElementById('rename-input');
+        if (input) input.value = current;
+        const modal = document.getElementById('rename-modal');
+        if (modal) modal.classList.add('visible');
+    },
+
+    renameConfirm() {
+        const modal = document.getElementById('rename-modal');
+        if (modal) modal.classList.remove('visible');
+        const path = this._renamePath;
+        if (!path) return;
+        const node = this.getNodeByPath(path);
+        if (!node) return;
+        const input = document.getElementById('rename-input');
+        if (!input || !input.value.trim()) return;
+        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
+        node.title = safeB64(input.value.trim());
+        this.renderTree();
+        this.renderList();
+        this.loadEditor(path);
+        this.saveCurrentTab();
+        this.addLog(`✏️ ノード名を変更: "${input.value.trim()}"`);
+    },
+
+    renameCancel() {
+        document.getElementById('rename-modal')?.classList.remove('visible');
+    },
+
+    saveCurrentTab() {
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && tab.file && tab.root) {
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+        }
     },
 
     getTitleFallback(node) {
@@ -1597,11 +1968,55 @@ const app = {
             this.clearAllSpeakingStyles();
         }
         this.pushNav();
-        this.state.currentNodePath = path;
+
+        // Check if the node is a child of "Processed"
+        const parts = path.split('/').filter(p => p !== '');
+        let isResult = false;
+
+        if (parts.length >= 2) {
+            const parentPath = parts.slice(0, -1).join('/');
+            const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+            if (parent && parent.title) {
+                const parentTitle = (() => { try { return atob(parent.title); } catch { return parent.title; } })();
+                if (parentTitle === 'Processed') {
+                    isResult = true;
+                }
+            }
+        }
+
+        if (isResult) {
+            this.state.currentResultNodePath = path;
+
+            // Check if the currently selected green node is the parent of Processed
+            const processedFolderPath = parts.slice(0, -1).join('/');
+            const greenNodePath = this.state.currentNodePath;
+            if (greenNodePath === processedFolderPath) {
+                // Green node IS the parent of this result → don't change input
+                return;
+            }
+
+            const node = this.getNodeByPath(path);
+            if (node && node.content) {
+                const nodeContent = (() => { try { return atob(node.content); } catch { return node.content; } })();
+                const inputTa = document.getElementById('input-textarea');
+                if (inputTa) {
+                    inputTa.value = nodeContent;
+                }
+                this.addLog('📋 Processed result set as input of selected op node');
+                const tab = this.state.tabs[this.state.activeTab];
+                if (tab && tab.file && tab.root) {
+                    this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+                }
+            }
+        } else {
+            this.state.currentNodePath = path;
+            this.state.currentResultNodePath = null;
+        }
+
         this.state.selectedOutputRunIndex = 0;
         this.renderTree();
         this.renderList();
-        this.loadEditor(path);
+        this.loadEditor(this.state.currentNodePath);
     },
 
     // Evaluation badge HTML helper
@@ -1696,6 +2111,36 @@ const app = {
         return node;
     },
 
+    isResultNode(path) {
+        if (!path) return false;
+        const parts = path.split('/').filter(p => p !== '');
+        if (parts.length >= 2) {
+            const parentPath = parts.slice(0, -1).join('/');
+            const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+            if (parent && parent.title) {
+                const parentTitle = (() => { try { return atob(parent.title); } catch { return parent.title; } })();
+                return parentTitle === 'Processed';
+            }
+        }
+        return false;
+    },
+
+    onInputChanged(value) {
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (node && node.children && node.children.length > 0) {
+            const firstChild = node.children[0];
+            const title = firstChild.title ? (() => { try { return atob(firstChild.title); } catch { return firstChild.title; } })() : '';
+            if (title !== 'Processed') {
+                const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
+                firstChild.content = safeB64(value);
+                const tab = this.state.tabs[this.state.activeTab];
+                if (tab && tab.file && tab.root) {
+                    this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+                }
+            }
+        }
+    },
+
     copyItemText(index) {
         const node = this.getNodeByPath(this.state.currentNodePath);
         if (!node || !node.children || index >= node.children.length) return;
@@ -1755,24 +2200,56 @@ const app = {
                 return;
             }
 
-            const prompt = document.getElementById('node-content')?.value || '';
+            const parts = this.state.currentNodePath.split('/').filter(p => p !== '');
+            const parentPath = parts.slice(0, -1).join('/');
+            const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
+            if (!parent || !parent.children || parent.children.length === 0) {
+                this.addLog('⚠ パイプラインを実行する兄弟ノードがありません');
+                return;
+            }
+
+            const currentIdx = parts.length > 0 ? parseInt(parts[parts.length - 1]) : 0;
+            if (isNaN(currentIdx)) {
+                this.addLog('⚠ 無効なノードパス');
+                return;
+            }
+
+            const siblings = parent.children.slice(currentIdx);
+            if (siblings.length === 0) {
+                this.addLog('⚠ 実行するステップがありません');
+                return;
+            }
+
             const input = document.getElementById('input-textarea')?.value || '';
+            const tab = this.state.tabs[this.state.activeTab];
             const recipe = this.getRecipeSettings();
 
-            const tab = this.state.tabs[this.state.activeTab];
-            const sentText = prompt.includes('{content}') ? prompt.replace('{content}', input) : (prompt + '\n\n' + input);
+            const safeAtob = str => { try { return atob(str); } catch { return str; } };
+            const pipelineSiblings = siblings.filter(s => {
+                const t = s.title ? safeAtob(s.title) : '';
+                return t !== 'Processed';
+            });
+            if (pipelineSiblings.length === 0) {
+                this.addLog('⚠ パイプラインステップがありません');
+                return;
+            }
+            const steps = pipelineSiblings.map((s, i) => ({
+                name: s.title ? safeAtob(s.title) : ('Step ' + (currentIdx + i + 1)),
+                prompt: s.content ? safeAtob(s.content) : '',
+            }));
 
+            const firstSent = steps[0].prompt.includes('{content}') ? steps[0].prompt.replace('{content}', input) : (steps[0].prompt + '\n\n' + input);
             this.state.streamedOutput = '';
             const outputEl = document.getElementById('output-content');
             if (outputEl) {
                 outputEl.innerHTML = `
                     <div class="output-toolbar">
-                        <span class="output-label">Processing Output...</span>
+                        <span class="output-label">Pipeline: ${steps.length} steps</span>
                     </div>
                     <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 35px); overflow-y: auto;">
                         <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
                             <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
-                            <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(sentText)}</pre>
+                            <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(firstSent)}</pre>
                         </div>
                         <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
                             <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
@@ -1782,21 +2259,20 @@ const app = {
                 `;
             }
 
+            console.log('[Prompts] processPrompt sibling pipeline:', { steps, input, recipe });
             this.postMessage({
-                type: 'run_prompt_process',
+                type: 'run_sibling_pipeline',
                 payload: {
-                    nodeId: this.state.currentNodePath || '',
-                    tabFile: tab ? tab.file : '',
+                    steps,
                     content: input,
-                    userPrompt: prompt,
                     provider: recipe.provider,
                     model: recipe.model,
                     systemPrompt: recipe.systemPrompt,
-                    temperature: recipe.temperature
+                    temperature: recipe.temperature,
                 }
             });
             this.state.pipelineRunning = true;
-            this.addLog(`▶ Processing prompt using ${recipe.provider}/${recipe.model || '(default)'}`);
+            this.addLog(`▶ Sibling pipeline: ${steps.length} steps (${recipe.provider}/${recipe.model || '(default)'})`);
         } else {
             this.runPipeline();
         }
@@ -1812,6 +2288,10 @@ const app = {
         this.renderTree();
         this.renderList();
         this.addLog('➕ Child added');
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && tab.file && tab.root) {
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+        }
     },
 
     removeNode() {
@@ -1829,6 +2309,10 @@ const app = {
         this.renderList();
         this.loadEditor(this.state.currentNodePath);
         this.addLog('🗑 Node removed');
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && tab.file && tab.root) {
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+        }
     },
 
     navRoot() {
@@ -1888,7 +2372,7 @@ const app = {
     },
 
     cancelPipeline() {
-        window.chrome.webview.postMessage({ type: 'cancel_pipeline' });
+            window.__promptsBridge.postMessage({ type: 'cancel_pipeline' });
         this.state.pipelineRunning = false;
         this.addLog('✕ Pipeline canceled');
     },
@@ -1946,60 +2430,6 @@ const app = {
         if (menu) menu.style.display = 'none';
     },
 
-    showTreeContextMenu(event, path) {
-        event.preventDefault();
-        event.stopPropagation();
-        
-        const menu = document.getElementById('tree-context-menu');
-        if (!menu) return;
-        
-        const node = this.getNodeByPath(path);
-        if (!node) return;
-        const currentTitle = node.title ? this.safeAtob(node.title) : this.getTitleFallback(node);
-        
-        menu.style.left = event.clientX + 'px';
-        menu.style.top = event.clientY + 'px';
-        menu.style.display = 'block';
-        
-        const escTitle = this.escapeHtml(currentTitle);
-        menu.innerHTML = `
-            <div class="ctx-item" onclick="app.renameNode('${path}', '${escTitle}'); app.hideTreeContextMenu()">✏️ 名前の変更...</div>
-            <div class="ctx-item" onclick="app.selectNode('${path}'); app.addChild(); app.hideTreeContextMenu()">➕ 子ノードを追加</div>
-            <div class="ctx-item" onclick="app.selectNode('${path}'); app.removeNode(); app.hideTreeContextMenu()" style="color: #ff4a4a;">🗑️ 削除</div>
-        `;
-    },
-    
-    hideTreeContextMenu() {
-        const menu = document.getElementById('tree-context-menu');
-        if (menu) menu.style.display = 'none';
-    },
-    
-    renameNode(path, oldTitle) {
-        const node = this.getNodeByPath(path);
-        if (!node) return;
-        const newTitle = prompt('ノードの名前を変更:', oldTitle);
-        if (newTitle === null) return; // Cancelled
-        const trimmed = newTitle.trim();
-        if (trimmed === '') return;
-        
-        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
-        node.title = safeB64(trimmed);
-        
-        this.renderTree();
-        this.renderList();
-        
-        // Also refresh the prompt editor if the renamed node is the currently active one
-        if (this.state.currentNodePath === path) {
-            this.loadEditor(path);
-        }
-        
-        const tab = this.state.tabs[this.state.activeTab];
-        if (tab && tab.file && tab.root) {
-            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
-        }
-        this.addLog(`✏️ Node renamed to: "${trimmed}"`);
-    },
-
     copyLogEntry(text) {
         if (!text) return;
         navigator.clipboard.writeText(text).then(() => {
@@ -2026,6 +2456,54 @@ const app = {
     clearLogs() {
         const el = document.getElementById('messages-content');
         if (el) el.innerHTML = '';
+        const httpEl = document.getElementById('http-log-content');
+        if (httpEl) httpEl.innerHTML = '';
+    },
+
+    switchMsgTab(tab) {
+        document.querySelectorAll('.msg-tab').forEach(b => b.classList.toggle('msg-tab-active', b.dataset.tab === tab));
+        const logEl = document.getElementById('messages-content');
+        const httpEl = document.getElementById('http-log-content');
+        if (logEl) logEl.style.display = tab === 'log' ? '' : 'none';
+        if (httpEl) httpEl.style.display = tab === 'http' ? '' : 'none';
+    },
+
+    addHttpLog(entry) {
+        const el = document.getElementById('http-log-content');
+        if (!el) return;
+        const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
+        const id = entry.id || '';
+        let html = '';
+        if (entry.type === 'request') {
+            const bodyPreview = entry.body ? entry.body.slice(0, 300) : '';
+            html = `<div style="padding:4px 6px;border-bottom:1px solid #2d2d2d;background:#1a3a1a;">
+                <span style="color:#888;font-size:10px">[${time}]</span>
+                <span style="color:#4ec94e;font-weight:bold">➡ REQ</span>
+                <span style="color:#aaa;margin-left:4px">${entry.method}</span>
+                <span style="color:#6cf;margin-left:4px">${this.escapeHtml(entry.url)}</span>
+                ${bodyPreview ? `<details style="margin-top:2px"><summary style="color:#888;font-size:10px;cursor:pointer">Body</summary><pre style="margin:2px 0 0 12px;font-size:10px;color:#aaa;white-space:pre-wrap">${this.escapeHtml(bodyPreview)}</pre></details>` : ''}
+            </div>`;
+        } else if (entry.type === 'response') {
+            const bodyPreview = entry.body ? entry.body.slice(0, 500) : '';
+            const statusColor = entry.statusCode >= 200 && entry.statusCode < 300 ? '#4ec94e' : '#e64';
+            html = `<div style="padding:4px 6px;border-bottom:1px solid #2d2d2d;background:#1a1a2e;">
+                <span style="color:#888;font-size:10px">[${time}]</span>
+                <span style="color:${statusColor};font-weight:bold">⬅ RES</span>
+                <span style="color:#fff;margin-left:4px">${entry.statusCode}</span>
+                <span style="color:#888;margin-left:4px;font-size:10px">${entry.duration}ms</span>
+                ${bodyPreview ? `<details style="margin-top:2px"><summary style="color:#888;font-size:10px;cursor:pointer">Body</summary><pre style="margin:2px 0 0 12px;font-size:10px;color:#aaa;white-space:pre-wrap">${this.escapeHtml(bodyPreview)}</pre></details>` : ''}
+            </div>`;
+        } else if (entry.type === 'error') {
+            html = `<div style="padding:4px 6px;border-bottom:1px solid #2d2d2d;background:#2e1a1a;">
+                <span style="color:#888;font-size:10px">[${time}]</span>
+                <span style="color:#e64;font-weight:bold">✖ ERR</span>
+                <span style="color:#f88;margin-left:4px">${this.escapeHtml(entry.error || '')}</span>
+            </div>`;
+        }
+        if (html) {
+            el.insertAdjacentHTML('beforeend', html);
+            el.scrollTop = el.scrollHeight;
+        }
     },
 
     // Search
@@ -2033,7 +2511,7 @@ const app = {
         clearTimeout(this.state.searchTimeout);
         if (query.length < 2) return;
         this.state.searchTimeout = setTimeout(() => {
-            window.chrome.webview.postMessage({ type: 'search', query, scope: 'all_tabs' });
+            window.__promptsBridge.postMessage({ type: 'search', query, scope: 'all_tabs' });
         }, 300);
     },
 
@@ -2075,6 +2553,18 @@ const app = {
     onStepDone(payload) {
         this.addLog(`✅ Step ${payload.index} done` + (payload.tokens ? ` (${payload.tokens} tokens)` : ''));
         if (payload.status === 'completed') this.state.pipelineRunning = false;
+        if (payload.output) {
+            this.state.streamedOutput = payload.output;
+            const outputEl = document.getElementById('output-content');
+            if (outputEl) {
+                outputEl.innerHTML = `
+                    <div class="output-toolbar">
+                        <span class="output-label">Step ${payload.index} Output</span>
+                    </div>
+                    <pre class="output-display" style="margin:0;flex:1;background:#1e1e1e;border:1px solid #2d2d2d;padding:8px;font-family:monospace;white-space:pre-wrap;font-size:11px;overflow-y:auto;">${this.escapeHtml(payload.output)}</pre>
+                `;
+            }
+        }
     },
 
     highlightStep(payload) {
@@ -2318,6 +2808,11 @@ const app = {
         localStorage.setItem('prompts_wizard_done', '1');
     },
 
+    resetWizard() {
+        localStorage.removeItem('prompts_wizard_done');
+        this.addLog('🔄 Welcome Wizard reset — will show on next launch');
+    },
+
     renderWizardStep() {
         try {
             const steps = this.WIZARD_STEPS;
@@ -2400,10 +2895,8 @@ const app = {
                 item(t('MenuSave'),        'save',          'Ctrl+S') +
                 item(t('MenuSaveAs'),      'save_as',       'Ctrl+Shift+S') +
                 sep +
-                item('📦 ' + t('MenuImportZip'),  'import_zip') +
-                item('📤 ' + t('MenuExportNode'), 'export_node') +
-                sep +
                 item('🤖 ' + t('MenuWelcomeWizard'), 'welcome_wizard', 'F1') +
+                item('🔄 Reset Welcome Wizard',       'reset_wizard') +
                 item('🚀 ' + t('MenuSetupWizard'),   'setup_wizard')
             )}
             ${sep}
@@ -2459,8 +2952,7 @@ const app = {
             open:           () => this.openFile(),
             save:           () => this.saveFile(),
             save_as:        () => this.saveFileAs(),
-            import_zip:     () => this.addLog('📦 Import ZIP — coming soon'),
-            export_node:    () => this.addLog('📤 Export Node — coming soon'),
+
             welcome_wizard: () => this.showWizard(),
             setup_wizard:   () => this.showSetupWizard(),
             undo:           () => document.execCommand('undo'),
@@ -2548,60 +3040,76 @@ const app = {
         this.postMessage({ type: 'history_detail', payload: { id } });
     },
 
+    showHistoryInPanes(record) {
+        this.closeHistory();
+        const steps = (record.steps || []);
+        const firstStep = steps[0] || {};
+        const lastStep = steps[steps.length - 1] || {};
+        const t = key => this.t(key);
+
+        const inputEl = document.getElementById('input-content');
+        if (inputEl) {
+            inputEl.innerHTML = `
+                <div style="margin-bottom:6px">
+                    <div style="font-size:10px;color:#888;margin-bottom:2px">入力データ:</div>
+                    <textarea class="input-textarea" readonly style="min-height:80px">${this.escapeHtml(firstStep.input || '')}</textarea>
+                </div>
+                <div class="input-source-bar">
+                    <span class="input-source-label">${t('Source')}</span>
+                    <span class="input-source-value">History</span>
+                </div>`;
+        }
+
+        const promptEl = document.getElementById('prompt-content');
+        if (promptEl) {
+            let html = `<div style="font-size:11px;color:#ccc;margin-bottom:4px;padding:4px;background:#2a2a2a;border-radius:3px;">
+                📋 ${this.escapeHtml(record.pipelineName || '')} — ${steps.length} steps</div>`;
+            steps.forEach((step, i) => {
+                const evalBadge = this.evalBadgeHtml(step.evaluation || '');
+                html += `<div class="history-step" style="margin-bottom:4px;">
+                    <div class="history-step-header" onclick="this.parentElement.classList.toggle('expanded')" style="cursor:pointer;padding:3px 6px;background:#252525;border-radius:3px;font-size:11px;">
+                        <span style="color:#888">${i + 1}.</span>
+                        <span style="color:#ccc">${evalBadge} ${this.escapeHtml(step.name || step.type || '')}</span>
+                        <span style="float:right;color:#555">▶</span>
+                    </div>
+                    <div class="history-step-body" style="display:none;padding:6px;font-size:10px;">
+                        <div style="color:#888;margin-bottom:2px">Input:</div>
+                        <pre style="margin:0 0 6px 0;white-space:pre-wrap;color:#aaa">${this.escapeHtml(step.input || '')}</pre>
+                        <div style="color:#888;margin-bottom:2px">Output:</div>
+                        <pre style="margin:0;white-space:pre-wrap;color:#aaa">${this.escapeHtml(step.output || '')}</pre>
+                    </div>
+                </div>`;
+            });
+            promptEl.innerHTML = html;
+        }
+
+        const outputEl = document.getElementById('output-content');
+        if (outputEl) {
+            outputEl.innerHTML = `
+                <div class="output-toolbar">
+                    <span class="output-label">${this.escapeHtml(record.pipelineName || '')}</span>
+                </div>
+                <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 35px); overflow-y: auto;">
+                    <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
+                        <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
+                        <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(firstStep.input || '')}</pre>
+                    </div>
+                    <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
+                        <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
+                        <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(lastStep.output || '')}</pre>
+                    </div>
+                </div>`;
+        }
+
+        this.addLog(`📋 Loaded history: ${record.pipelineName}`);
+    },
+
     onHistoryDetailResult(record) {
-        const detailView = document.getElementById('history-detail-view');
-        if (!detailView) return;
         if (!record || !record.pipelineName) {
-            detailView.innerHTML = '<div class="history-empty">データが見つかりません</div>';
+            this.addLog('⚠ History data not found');
             return;
         }
-        const runId = record.id || '';
-        const runEval = record.evaluation || '';
-
-        const stepsHtml = (record.steps || []).map((step, i) => {
-            const stepEval = step.evaluation || '';
-            const stepEvalBtns = this.evalButtonsHtml(`${runId}|${i}`, 'step', stepEval);
-            const evalBadge = this.evalBadgeHtml(stepEval);
-            return `
-            <div class="history-step ${stepEval ? 'has-eval eval-' + stepEval : ''}">
-                <div class="history-step-header" onclick="this.parentElement.classList.toggle('expanded')">
-                    <span class="history-step-num">${i + 1}</span>
-                    <span class="history-step-name">${evalBadge}${this.escapeHtml(step.name || '')}</span>
-                    <span class="history-step-type">${this.escapeHtml(step.type || '')}</span>
-                    ${step.promptTokens || step.completionTokens ? `<span class="history-step-tokens">${(step.promptTokens||0)+(step.completionTokens||0)} tok</span>` : ''}
-                    <span class="history-step-eval-btns" onclick="event.stopPropagation()">${stepEvalBtns}</span>
-                    <span class="history-step-toggle">▶</span>
-                </div>
-                <div class="history-step-body">
-                    <div class="history-step-section">
-                        <div class="history-step-label">Input</div>
-                        <pre class="history-step-content">${this.escapeHtml(step.input || '')}</pre>
-                    </div>
-                    <div class="history-step-section">
-                        <div class="history-step-label">Output</div>
-                        <pre class="history-step-content">${this.escapeHtml(step.output || '')}</pre>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-
-        const runEvalBtns = this.evalButtonsHtml(runId, 'run', runEval);
-        detailView.innerHTML = `
-            <div class="history-detail-nav">
-                <button class="btn-back" onclick="app.backToHistoryList()">← 一覧に戻る</button>
-            </div>
-            <div class="history-detail-header">
-                <div class="history-detail-name">${this.escapeHtml(record.pipelineName || '')}</div>
-                <div class="history-detail-meta">
-                    <span class="history-detail-date">${this.escapeHtml((record.startedAt || record.executedAt || '').replace('T',' ').replace('Z',''))}</span>
-                    <span class="history-detail-run-eval">${runEvalBtns}</span>
-                </div>
-            </div>
-            ${record.outputContent ? `<div class="history-detail-output">
-                <div class="history-step-label">最終出力</div>
-                <pre class="history-step-content">${this.escapeHtml(record.outputContent)}</pre>
-            </div>` : ''}
-            <div class="history-steps">${stepsHtml}</div>`;
+        this.showHistoryInPanes(record);
     },
 
     backToHistoryList() {
@@ -3055,16 +3563,15 @@ const app = {
             inputEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
             return;
         }
-        // Processing template
-        const template = node.content ? (() => { try { return atob(node.content); } catch { return node.content; } })() : '';
-        // Input data (for {content} substitution)
+        
         const inputData = (node.children && node.children.length > 0)
             ? (() => { try { return atob(node.children[0].content || ''); } catch { return ''; } })()
             : '';
+
         inputEl.innerHTML = `
             <div style="margin-bottom:6px">
                 <div style="font-size:10px;color:#888;margin-bottom:2px">入力データ:</div>
-                <textarea id="input-textarea" class="input-textarea" placeholder="${t('NoInput')}">${this.escapeHtml(inputData)}</textarea>
+                <textarea id="input-textarea" class="input-textarea" placeholder="${t('NoInput')}" oninput="app.onInputChanged(this.value)">${this.escapeHtml(inputData)}</textarea>
             </div>
             <div class="input-source-bar">
                 <span class="input-source-label">${t('Source')}</span>
@@ -3249,18 +3756,48 @@ const app = {
         }
 
         const node = this.getNodeByPath(this.state.currentNodePath);
-        if (!node || !node.children || node.children.length === 0) {
+        if (!node) {
+            outputEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
+            return;
+        }
+
+        // Find the Processed folder under node
+        let processedFolder = node.children ? node.children.find(c => {
+            const t = c.title ? (() => { try { return atob(c.title); } catch { return c.title; } })() : '';
+            return t === 'Processed';
+        }) : null;
+
+        const runs = processedFolder && processedFolder.children ? processedFolder.children : [];
+
+        let child = null;
+        let selectedIdx = 0;
+
+        if (this.state.currentResultNodePath) {
+            child = this.getNodeByPath(this.state.currentResultNodePath);
+            if (child && runs.length > 0) {
+                const idx = runs.findIndex(r => r === child);
+                if (idx !== -1) {
+                    selectedIdx = idx;
+                }
+            }
+        } else {
+            if (runs.length === 0) {
+                outputEl.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
+                return;
+            }
+            selectedIdx = this.state.selectedOutputRunIndex !== undefined ? this.state.selectedOutputRunIndex : 0;
+            if (selectedIdx >= runs.length) {
+                selectedIdx = 0;
+                this.state.selectedOutputRunIndex = 0;
+            }
+            child = runs[selectedIdx];
+        }
+
+        if (!child) {
             outputEl.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
             return;
         }
 
-        let selectedIdx = this.state.selectedOutputRunIndex !== undefined ? this.state.selectedOutputRunIndex : 0;
-        if (selectedIdx >= node.children.length) {
-            selectedIdx = 0;
-            this.state.selectedOutputRunIndex = 0;
-        }
-
-        const child = node.children[selectedIdx];
         let sentText = 'N/A';
         let receivedText = child.content ? (() => { try { return atob(child.content); } catch { return child.content; } })() : '';
 
@@ -3274,14 +3811,14 @@ const app = {
             } catch(e) {}
         }
 
-        const runOptions = node.children.map((c, idx) => {
+        const runOptions = runs.map((c, idx) => {
             const title = c.title ? this.safeAtob(c.title) : `Run ${idx + 1}`;
             return `<option value="${idx}" ${idx === selectedIdx ? 'selected' : ''}>${this.escapeHtml(title)}</option>`;
         }).join('');
 
-        let html = `
+        const toolbarHtml = `
             <div class="output-toolbar">
-                <span class="output-label">${t('Output')} (${node.children.length})</span>
+                <span class="output-label">${t('Output')} (${runs.length})</span>
                 <button class="output-save-btn" onclick="app.saveCurrentOutput()">${t('Save')}</button>
                 <button class="output-discard-btn" onclick="app.discardCurrentOutput()">${t('Discard')}</button>
                 <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
@@ -3294,6 +3831,8 @@ const app = {
                 </select>
             </div>
         `;
+
+        let html = toolbarHtml;
 
         if (child.evaluation) {
             html += `<div class="eval-badge" style="margin: 0 8px 8px 8px;">★ ${this.escapeHtml(child.evaluation)}</div>`;
@@ -3315,7 +3854,16 @@ const app = {
     },
 
     onOutputRunSelected(value) {
-        this.state.selectedOutputRunIndex = parseInt(value);
+        const idx = parseInt(value);
+        this.state.selectedOutputRunIndex = idx;
+        if (this.state.currentResultNodePath) {
+            const parts = this.state.currentResultNodePath.split('/').filter(p => p !== '');
+            if (parts.length >= 2) {
+                parts[parts.length - 1] = String(idx);
+                this.state.currentResultNodePath = '/' + parts.join('/');
+            }
+        }
+        this.renderTree();
         this.renderOutput();
     },
 

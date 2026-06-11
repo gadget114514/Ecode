@@ -16,23 +16,33 @@ if [ ! -d "$ELECTRON_DIR/node_modules" ]; then
     npm --prefix "$ELECTRON_DIR" install
 fi
 
-# Package the Electron app with @electron/packager (no winCodeSign needed)
-echo "  npm run build..."
-npm --prefix "$ELECTRON_DIR" run build
-
 # Copy the packaged app to bin/<BUILD_TYPE>/plugins/
 PLUGINS_OUT="$ROOT/bin/$BUILD_TYPE/plugins"
 mkdir -p "$PLUGINS_OUT"
 
-DIST_DIR="$ELECTRON_DIR/dist/Prompts-win32-x64"
-if [ -d "$DIST_DIR" ]; then
+# Package the Electron app with @electron/packager (no winCodeSign needed)
+# Output directly to target plugins directory
+echo "  electron-packager..."
+cd "$ELECTRON_DIR"
+npx electron-packager . Prompts \
+    --platform=win32 \
+    --arch=x64 \
+    --out="$PLUGINS_OUT" \
+    --overwrite \
+    --asar \
+    --extra-resource=../frontend
+cd "$ROOT"
+
+# Rename to Prompts
+if [ -d "$PLUGINS_OUT/Prompts-win32-x64" ]; then
     # embedded (plugins): bin/<BUILD_TYPE>/plugins/Prompts/
     rm -rf "$PLUGINS_OUT/Prompts"
-    cp -r "$DIST_DIR/." "$PLUGINS_OUT/Prompts"
+    mv "$PLUGINS_OUT/Prompts-win32-x64" "$PLUGINS_OUT/Prompts"
+    
     # standalone: bin/<BUILD_TYPE>/Prompts/
     STANDALONE_OUT="$ROOT/bin/$BUILD_TYPE/Prompts"
     rm -rf "$STANDALONE_OUT"
-    cp -r "$DIST_DIR/." "$STANDALONE_OUT"
+    cp -r "$PLUGINS_OUT/Prompts/." "$STANDALONE_OUT"
 fi
 
 # ── Main build ────────────────────────────────────────────────

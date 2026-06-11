@@ -20,6 +20,8 @@
         <button id="btn-open" onclick="app.openFile()" data-hint="JSONファイルを開く (Ctrl+O)">📂 <span data-i18n="Open">Open</span></button>
         <button id="btn-save" onclick="app.saveFile()" data-hint="現在のタブを保存 (Ctrl+S)">💾 <span data-i18n="Save">Save</span></button>
         <button id="btn-saveas" onclick="app.saveFileAs()" data-hint="別名で保存 (Ctrl+Shift+S)">💾 <span data-i18n="SaveAs">Save As</span></button>
+        <button id="btn-export-pipeline" onclick="app.exportPipeline()" data-hint="パイプラインをエクスポート">📤 Pipe</button>
+        <button id="btn-import-pipeline" onclick="app.importPipeline()" data-hint="パイプラインをインポート">📥 Pipe</button>
         <span class="separator">|</span>
         <button id="btn-pipeline" onclick="app.runPipeline()" data-hint="選択中のノードにパイプラインを実行 (F5)">▶ <span data-i18n="RunPipeline">Run</span></button>
         <button id="btn-optimize" onclick="app.showOptimize()" data-hint="パイプラインをAIで最適化 (評価シグナルを使用)">✨ <span data-i18n="Optimize">Optimize</span></button>
@@ -47,8 +49,9 @@
         <div id="tree-pane" class="pane">
             <div class="pane-header" onclick="app.togglePane('tree-pane')">📂 <span data-i18n="Tree">Tree</span></div>
             <div class="tree-tabs">
-                <button id="btn-tree-tab-node" class="tree-tab-btn active" onclick="app.switchTreeTab('node')">Node</button>
+                <button id="btn-tree-tab-pipeline" class="tree-tab-btn active" onclick="app.switchTreeTab('pipeline')">Pipeline</button>
                 <button id="btn-tree-tab-file" class="tree-tab-btn" onclick="app.switchTreeTab('file')">File</button>
+                <button class="tree-add-btn" onclick="app.addRootNode()" title="ルートノードを追加">➕</button>
             </div>
             <div id="tree-content" class="pane-content"></div>
             <div id="file-tree-content" class="pane-content" style="display:none"></div>
@@ -79,16 +82,20 @@
             <div id="output-content" class="pane-content stream-content"></div>
         </div>
     </div>
-    <div id="messages-resize-handle"></div>
     <div id="messages-pane" class="pane">
+        <div id="messages-resize-handle"></div>
         <div class="pane-header" onclick="app.togglePane('messages-pane')">
-            <span>📝 <span data-i18n="Messages">Messages</span></span>
+            <span class="msg-tabs">
+                <button class="msg-tab msg-tab-active" data-tab="log" onclick="event.stopPropagation();app.switchMsgTab('log')">📝 <span data-i18n="Messages">Log</span></button>
+                <button class="msg-tab" data-tab="http" onclick="event.stopPropagation();app.switchMsgTab('http')">🌐 HTTP</button>
+            </span>
             <span class="messages-actions">
                 <button class="msg-action-btn" onclick="event.stopPropagation();app.copyAllLogs()" title="Copy all logs" data-hint="Copy all logs">📋</button>
                 <button class="msg-action-btn" onclick="event.stopPropagation();app.clearLogs()" title="Clear logs" data-hint="Clear logs">✕</button>
             </span>
         </div>
         <div id="messages-content" oncontextmenu="event.preventDefault();app.showLogContextMenu(event)"></div>
+        <div id="http-log-content" style="display:none;overflow-y:auto;flex:1;font-family:monospace;font-size:11px;padding:4px;background:#1e1e1e;"></div>
     </div>
     <!-- Log Context Menu -->
     <div id="log-context-menu" class="context-menu" style="display:none"></div>
@@ -292,6 +299,17 @@
                 <label data-i18n="StorageChest">Storage Chest</label>
                 <button onclick="app.clearStorageChest()" class="btn-danger config-danger-btn" data-i18n="ClearStorageChest">Empty Storage Chest</button>
             </div>
+        </div>
+    </div>
+</div>
+<!-- Rename Modal -->
+<div id="rename-modal" class="modal">
+    <div class="modal-content" style="width:360px;padding:16px;">
+        <h3 style="margin:0 0 8px;font-size:13px;">✏️ ノード名を変更</h3>
+        <input id="rename-input" type="text" style="width:100%;background:#252526;color:#ccc;border:1px solid #3c3c3c;padding:4px 6px;font-size:12px;margin-bottom:8px;box-sizing:border-box;">
+        <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button onclick="app.renameConfirm()" class="btn-primary" style="padding:4px 12px;font-size:11px;">OK</button>
+            <button onclick="app.renameCancel()" style="padding:4px 12px;font-size:11px;">Cancel</button>
         </div>
     </div>
 </div>

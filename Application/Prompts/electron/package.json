@@ -6,7 +6,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . Prompts --platform=win32 --arch=x64 --out=dist --overwrite --asar --extra-resource=../frontend",
+    "build": "electron-packager . Prompts --platform=win32 --arch=x64 --out=../../../bin/Release/plugins --overwrite --asar --extra-resource=../frontend",
     "test": "node --test test.js"
   },
   "devDependencies": {
