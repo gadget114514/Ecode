@@ -6,6 +6,8 @@ const app = {
         activeTab: 0,
         currentNode: null,
         currentNodePath: '',
+        selectedOpPath: '',
+        selectedDataPath: '',
         language: 'en',
         pipelineRunning: false,
         testMode: false,
@@ -383,16 +385,30 @@ const app = {
         };
 
         const tab = this.state.tabs[this.state.activeTab];
-        const currentNode = this.getNodeByPath(this.state.currentNodePath);
-        if (tab && currentNode) {
-            if (!currentNode.children) currentNode.children = [];
-            currentNode.children.unshift(outputNode);
+        const opNodePath = this.state.selectedOpPath || this.state.currentNodePath;
+        const opNode = this.getNodeByPath(opNodePath);
+        if (tab && opNode) {
+            if (!opNode.children) opNode.children = [];
+            // Find "Processed" child
+            let processedNode = null;
+            opNode.children.forEach(child => {
+                if (child.title && this.safeAtob(child.title) === 'Processed') {
+                    processedNode = child;
+                }
+            });
+            if (processedNode) {
+                if (!processedNode.children) processedNode.children = [];
+                processedNode.children.unshift(outputNode);
+                this.addLog(`📦 Child node saved under Processed: "${meta.pipelineName}"`);
+            } else {
+                opNode.children.unshift(outputNode);
+                this.addLog(`📦 Child node saved: "${meta.pipelineName}"`);
+            }
             this.renderTree();
             this.renderList();
             if (tab.file && tab.root) {
                 this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
             }
-            this.addLog(`📦 Child node saved: "${meta.pipelineName}"`);
         }
         this.state.selectedOutputRunIndex = 0;
         this.renderOutput();
@@ -760,6 +776,53 @@ const app = {
                 return str;
             }
         }
+    },
+
+    isDataNodePath(path) {
+        if (!path) return false;
+        const parts = path.split('/');
+        for (let i = 1; i < parts.length; i++) {
+            const ancestorPath = parts.slice(0, i).join('/');
+            const ancestorNode = this.getNodeByPath(ancestorPath);
+            if (ancestorNode && ancestorNode.title && this.safeAtob(ancestorNode.title) === 'Processed') {
+                return true;
+            }
+        }
+        return false;
+    },
+
+    getLogicalOpPath(path) {
+        if (!path) return '';
+        const parts = path.split('/');
+        for (let i = 1; i < parts.length; i++) {
+            const ancestorPath = parts.slice(0, i).join('/');
+            const ancestorNode = this.getNodeByPath(ancestorPath);
+            if (ancestorNode && ancestorNode.title && this.safeAtob(ancestorNode.title) === 'Processed') {
+                return parts.slice(0, i - 1).join('/');
+            }
+        }
+        return path;
+    },
+
+    isAncestor(ancestor, descendant) {
+        if (!ancestor || !descendant) return false;
+        const a = ancestor.split('/').filter(p => p !== '');
+        const d = descendant.split('/').filter(p => p !== '');
+        if (a.length >= d.length) return false;
+        return a.every((p, i) => p === d[i]);
+    },
+
+    getDOMElementForPath(path) {
+        if (path === '') return null;
+        const escapedPath = path.replace(/'/g, "\\'");
+        const els = document.querySelectorAll('.tree-node');
+        for (let i = 0; i < els.length; i++) {
+            const attr = els[i].getAttribute('onclick') || '';
+            if (attr.includes(`selectNode('${escapedPath}')`) || attr.includes(`selectNode("${escapedPath}")`)) {
+                return els[i];
+            }
+        }
+        return null;
     },
 
     showConfig() {
@@ -1211,8 +1274,8 @@ const app = {
         const recipes = this.state.recipes || [];
         if (index < 0 || index >= recipes.length) return;
         this.state.selectedRecipe = recipes[index].name;
-        // Persist per-node recipe selection
-        const node = this.getNodeByPath(this.state.currentNodePath);
+        // Persist per-node recipe selection on logical parent op node
+        const node = this.getNodeByPath(this.state.selectedOpPath || this.state.currentNodePath);
         if (node) {
             node.selectedRecipe = this.state.selectedRecipe;
             this.saveCurrentTab();
@@ -1233,7 +1296,7 @@ const app = {
         const idx = current ? names.indexOf(current) : -1;
         const nextIdx = (idx + 1) % names.length;
         this.state.selectedRecipe = names[nextIdx];
-        const node = this.getNodeByPath(this.state.currentNodePath);
+        const node = this.getNodeByPath(this.state.selectedOpPath || this.state.currentNodePath);
         if (node) {
             node.selectedRecipe = this.state.selectedRecipe;
             this.saveCurrentTab();
@@ -1516,8 +1579,161 @@ const app = {
         }
     },
 
+    checkNodeColorInvariants() {
+        const tab = this.state.tabs[this.state.activeTab];
+        if (!tab || !tab.root) return;
+
+        const checkNode = (node, path) => {
+            const isRoot = path === '';
+            const nodeTitle = node.title ? this.safeAtob(node.title) : '';
+            const isProcessed = nodeTitle === 'Processed';
+
+            // 1. Virtual state logic check
+            let colorCls = '';
+            const selectedOpPath = this.state.selectedOpPath;
+            const selectedDataPath = this.state.selectedDataPath;
+
+            if (!isRoot && !isProcessed) {
+                if (selectedDataPath !== '' && path === selectedDataPath) {
+                    const isViewingMode = selectedOpPath !== '' && this.isAncestor(selectedOpPath, selectedDataPath);
+                    if (isViewingMode) {
+                        colorCls = 'selected-result';
+                    } else {
+                        colorCls = 'selected-data';
+                    }
+                } else if (selectedDataPath !== '' && path === this.getLogicalOpPath(selectedDataPath)) {
+                    colorCls = 'selected-input';
+                } else if (selectedOpPath !== '' && path === selectedOpPath) {
+                    colorCls = 'selected';
+                } else if (selectedOpPath !== '') {
+                    if (this.isDataNodePath(path) && this.getLogicalOpPath(path) === selectedOpPath) {
+                        colorCls = 'selected-result';
+                    }
+                }
+            }
+
+            if (isRoot || isProcessed) {
+                if (colorCls) {
+                    console.error(`Runtime node color invariant violation (logic): Root/Processed node at path "${path}" has color class "${colorCls}"`);
+                }
+            } else if (this.isDataNodePath(path)) {
+                if (colorCls === 'selected' || colorCls === 'selected-input') {
+                    console.error(`Runtime node color invariant violation (logic): Data node at path "${path}" has op-node color class "${colorCls}"`);
+                }
+            } else {
+                if (colorCls === 'selected-data' || colorCls === 'selected-result') {
+                    console.error(`Runtime node color invariant violation (logic): Op-node at path "${path}" has data node color class "${colorCls}"`);
+                }
+            }
+
+            // 2. Real DOM element check
+            if (path !== '') {
+                const el = this.getDOMElementForPath(path);
+
+                if (el) {
+                    const classes = el.className.split(' ');
+                    if (isProcessed) {
+                        if (classes.includes('selected') || classes.includes('selected-input') ||
+                            classes.includes('selected-data') || classes.includes('selected-result')) {
+                            console.error(`Runtime node color invariant violation (DOM): Processed node at "${path}" has color classes in DOM: ${el.className}`);
+                        }
+                    } else if (this.isDataNodePath(path)) {
+                        if (classes.includes('selected') || classes.includes('selected-input')) {
+                            console.error(`Runtime node color invariant violation (DOM): Data node at "${path}" has op-node color classes in DOM: ${el.className}`);
+                        }
+                    } else {
+                        if (classes.includes('selected-data') || classes.includes('selected-result')) {
+                            console.error(`Runtime node color invariant violation (DOM): Op-node at "${path}" has data node color classes in DOM: ${el.className}`);
+                        }
+                    }
+                }
+            }
+
+            if (node.children) {
+                node.children.forEach((child, i) => {
+                    checkNode(child, path === '' ? String(i) : path + '/' + i);
+                });
+            }
+        };
+
+        checkNode(tab.root, '');
+
+        // 3. Runtime mode check (閲覧モード vs 連結モード) based on parent-child relationship
+        const selectedOpPath = this.state.selectedOpPath;
+        const selectedDataPath = this.state.selectedDataPath;
+
+        if (selectedOpPath !== '' && selectedDataPath !== '') {
+            const hasParentChildRelation = this.isAncestor(selectedOpPath, selectedDataPath);
+            const opEl = this.getDOMElementForPath(selectedOpPath);
+            const dataEl = this.getDOMElementForPath(selectedDataPath);
+
+            let opOk = true;
+            let dataOk = true;
+            let opError = '';
+            let dataError = '';
+
+            if (hasParentChildRelation) {
+                // Viewing Mode (閲覧モード):
+                // Step node has selected-input (green) class, no selected (blue) class
+                // Data node has selected-result (orange) class, no selected-data (red) class
+                if (opEl) {
+                    const classes = opEl.className.split(' ');
+                    if (!classes.includes('selected-input') || classes.includes('selected')) {
+                        opOk = false;
+                        opError = `Op Node classes expected: [selected-input], actual: [${opEl.className}]`;
+                    }
+                }
+                if (dataEl) {
+                    const classes = dataEl.className.split(' ');
+                    if (!classes.includes('selected-result') || classes.includes('selected-data')) {
+                        dataOk = false;
+                        dataError = `Data Node classes expected: [selected-result], actual: [${dataEl.className}]`;
+                    }
+                }
+
+                if (opOk && dataOk) {
+                    this.addLog('🔍 Runtime Check (Viewing Mode): OK (Op: Green, Data: Orange)');
+                } else {
+                    const errMsg = [opError, dataError].filter(Boolean).join('; ');
+                    this.addLog(`❌ Runtime Check (Viewing Mode) FAILED: ${errMsg}`);
+                    console.error(`Runtime mode check violation (Viewing Mode): ${errMsg}`);
+                }
+            } else {
+                // Linking Mode (連結モード):
+                // Step node has selected (blue) class, no selected-input (green) class
+                // Data node has selected-data (red) class, no selected-result (orange) class
+                if (opEl) {
+                    const classes = opEl.className.split(' ');
+                    if (!classes.includes('selected') || classes.includes('selected-input')) {
+                        opOk = false;
+                        opError = `Op Node classes expected: [selected], actual: [${opEl.className}]`;
+                    }
+                }
+                if (dataEl) {
+                    const classes = dataEl.className.split(' ');
+                    if (!classes.includes('selected-data') || classes.includes('selected-result')) {
+                        dataOk = false;
+                        dataError = `Data Node classes expected: [selected-data], actual: [${dataEl.className}]`;
+                    }
+                }
+
+                if (opOk && dataOk) {
+                    this.addLog('🔍 Runtime Check (Linking Mode): OK (Op: Blue, Data: Red)');
+                } else {
+                    const errMsg = [opError, dataError].filter(Boolean).join('; ');
+                    this.addLog(`❌ Runtime Check (Linking Mode) FAILED: ${errMsg}`);
+                    console.error(`Runtime mode check violation (Linking Mode): ${errMsg}`);
+                }
+            }
+        }
+    },
+
     // Tree rendering
     renderTree() {
+        if (this.state.viewMode === 'pipeline') {
+            this.renderPipelineSteps();
+            return;
+        }
         const el = document.getElementById('tree-content');
         if (!el) return;
         const tab = this.state.tabs[this.state.activeTab];
@@ -1531,6 +1747,9 @@ const app = {
         if (this.state.activeTreeTab === 'file') {
             this.renderFileTree();
         }
+
+        // Run runtime invariants validation
+        this.checkNodeColorInvariants();
     },
 
     buildTreeHTML(node, path) {
@@ -1541,28 +1760,42 @@ const app = {
         const collapsed = this.state.collapsedPaths.has(path);
 
         // Compute color class based on relationship to selected node
-        const currentPath = this.state.currentNodePath;
-        const selectedIsLeaf = this._selectedIsLeaf;
+        const selectedOpPath = this.state.selectedOpPath;
+        const selectedDataPath = this.state.selectedDataPath;
         let colorCls = '';
-        if (currentPath === path) {
-            // Selected node: data (leaf) node = selected-data, operation (branch) node = selected
-            colorCls = selectedIsLeaf ? ' selected-data' : ' selected';
-        } else {
-            // Parent of currently selected node (= input/operation source)
-            if (currentPath !== '') {
-                const parentOfCurrent = currentPath.lastIndexOf('/') === 0
-                    ? '' : currentPath.substring(0, currentPath.lastIndexOf('/'));
-                if (path === parentOfCurrent) colorCls = ' selected-input';
-            }
-            // Direct child of currently selected operation node (= result)
-            if (!colorCls && !selectedIsLeaf && path !== '') {
-                const nodeParent = path.lastIndexOf('/') === 0
-                    ? '' : path.substring(0, path.lastIndexOf('/'));
-                if (nodeParent === currentPath) colorCls = ' selected-result';
+
+        const isRoot = path === '';
+        const nodeTitle = node.title ? this.safeAtob(node.title) : '';
+        const isProcessed = nodeTitle === 'Processed';
+
+        if (!isRoot && !isProcessed) {
+            if (selectedDataPath !== '' && path === selectedDataPath) {
+                const isViewingMode = selectedOpPath !== '' && this.isAncestor(selectedOpPath, selectedDataPath);
+                if (isViewingMode) {
+                    colorCls = ' selected-result';
+                } else {
+                    colorCls = ' selected-data';
+                }
+            } else if (selectedDataPath !== '' && path === this.getLogicalOpPath(selectedDataPath)) {
+                colorCls = ' selected-input';
+            } else if (selectedOpPath !== '' && path === selectedOpPath) {
+                colorCls = ' selected';
+            } else if (selectedOpPath !== '') {
+                if (this.isDataNodePath(path) && this.getLogicalOpPath(path) === selectedOpPath) {
+                    colorCls = ' selected-result';
+                }
             }
         }
 
-        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') + colorCls +
+        let extraCls = '';
+        if (selectedOpPath !== '' && path === selectedOpPath) {
+            extraCls += ' current-op';
+        }
+        if (selectedDataPath !== '' && path === selectedDataPath) {
+            extraCls += ' current-data';
+        }
+
+        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') + colorCls + extraCls +
                     (collapsed ? ' collapsed' : '');
         const collapseBtn = hasChildren
             ? `<span class="tree-collapse-btn" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapsed ? '▶' : '▼'}</span>`
@@ -1826,10 +2059,39 @@ const app = {
         this.pushNav();
         this.state.currentNodePath = path;
         this.state.selectedOutputRunIndex = 0;
-        // Restore per-node selectedRecipe
+
         const node = this.getNodeByPath(path);
         if (node) {
-            this.state.selectedRecipe = node.selectedRecipe || '';
+            const nodeTitle = node.title ? this.safeAtob(node.title) : '';
+            const isProcessed = nodeTitle === 'Processed';
+            const isRoot = path === '';
+
+            if (isRoot || isProcessed) {
+                this.state.selectedOpPath = '';
+                this.state.selectedDataPath = '';
+            } else if (this.isDataNodePath(path)) {
+                if (this.state.selectedDataPath === path) {
+                    this.state.selectedDataPath = '';
+                } else {
+                    this.state.selectedDataPath = path;
+                }
+            } else {
+                if (this.state.selectedOpPath === path) {
+                    this.state.selectedOpPath = '';
+                } else {
+                    this.state.selectedOpPath = path;
+                }
+            }
+        } else {
+            this.state.selectedOpPath = '';
+            this.state.selectedDataPath = '';
+        }
+
+        // Restore per-node selectedRecipe from the logical parent step node if data node is selected
+        const opNodePath = this.state.selectedOpPath || path;
+        const opNode = this.getNodeByPath(opNodePath);
+        if (opNode) {
+            this.state.selectedRecipe = opNode.selectedRecipe || '';
             this.updateRecipeBadge();
         }
         this.renderTree();
@@ -1961,7 +2223,8 @@ const app = {
     },
 
     updateNode() {
-        const node = this.getNodeByPath(this.state.currentNodePath);
+        const nodePath = this.state.selectedOpPath || this.state.currentNodePath;
+        const node = this.getNodeByPath(nodePath);
         if (!node) return;
         const title = document.getElementById('node-title');
         const content = document.getElementById('node-content');
@@ -1999,18 +2262,15 @@ const app = {
             const outputEl = document.getElementById('output-content');
             if (outputEl) {
                 outputEl.innerHTML = `
-                    <div class="output-toolbar">
-                        <span class="output-label">Processing Output...</span>
-                    </div>
                     <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 35px); overflow-y: auto;">
-                        <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
-                            <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
-                            <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(sentText)}</pre>
-                        </div>
-                        <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
-                            <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
-                            <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">Connecting to AI...</pre>
-                        </div>
+                        <details class="output-history-sent-details" style="margin-bottom: 8px;">
+                            <summary style="font-size: 10px; font-weight: bold; color: #858585; cursor: pointer; outline: none; user-select: none; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</summary>
+                            <pre class="sent-display" style="margin: 4px 0 0 0; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto; max-height: 150px;">${this.escapeHtml(sentText)}</pre>
+                        </details>
+                        <details class="output-history-received-details" style="margin-bottom: 8px;">
+                            <summary style="font-size: 10px; font-weight: bold; color: #858585; cursor: pointer; outline: none; user-select: none; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</summary>
+                            <pre class="output-display" style="margin: 4px 0 0 0; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto; max-height: 250px;">Connecting to AI...</pre>
+                        </details>
                     </div>
                 `;
             }
@@ -2296,11 +2556,18 @@ const app = {
                     <div class="output-toolbar">
                         <span class="output-label">Processing Output...</span>
                     </div>
-                    <pre class="output-display"></pre>
+                    <details class="output-history-received-details" style="margin: 8px;">
+                        <summary style="font-size: 10px; font-weight: bold; color: #858585; cursor: pointer; outline: none; user-select: none; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</summary>
+                        <pre class="output-display" style="margin: 4px 0 0 0; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto; max-height: 250px;"></pre>
+                    </details>
                 `;
                 display = outputEl.querySelector('.output-display');
             }
             if (display) {
+                const details = display.closest('details');
+                if (details && !details.open) {
+                    details.open = true;
+                }
                 display.textContent = this.state.streamedOutput;
                 display.scrollTop = display.scrollHeight;
             }
@@ -3291,15 +3558,68 @@ const app = {
             return;
         }
 
-        const node = this.getNodeByPath(this.state.currentNodePath);
+        const currentPath = this.state.currentNodePath;
+        const node = this.getNodeByPath(currentPath);
         if (!node) {
             inputEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
             return;
         }
-        // Input text: editable {content} for the belt
-        const inputData = (node.children && node.children.length > 0)
-            ? (() => { try { return atob(node.children[0].content || ''); } catch { return ''; } })()
-            : '';
+
+        const getRunResults = (opNode) => {
+            if (!opNode || !opNode.children) return [];
+            const proc = opNode.children.find(c => c.title && this.safeAtob(c.title) === 'Processed');
+            return proc ? (proc.children || []) : opNode.children;
+        };
+
+        let inputData = '';
+        const selectedDataPath = this.state.selectedDataPath;
+        const selectedOpPath = this.state.selectedOpPath;
+
+        if (selectedDataPath !== '') {
+            const dataNode = this.getNodeByPath(selectedDataPath);
+            const isViewingMode = selectedOpPath !== '' && this.isAncestor(selectedOpPath, selectedDataPath);
+            if (isViewingMode) {
+                // Viewing Mode: keep input and output as they are
+                if (dataNode && dataNode.pipelineMeta) {
+                    try {
+                        const meta = JSON.parse(dataNode.pipelineMeta);
+                        if (meta && meta.steps && meta.steps.length > 0) {
+                            inputData = meta.steps[0].input || '';
+                        }
+                    } catch(e) {}
+                }
+                if (!inputData && dataNode && dataNode.content) {
+                    try { inputData = atob(dataNode.content); } catch { inputData = dataNode.content; }
+                }
+            } else {
+                // Linking Mode: write output of selectedDataPath (which is dataNode.content) to input of selectedOpPath
+                if (dataNode && dataNode.content) {
+                    try { inputData = atob(dataNode.content); } catch { inputData = dataNode.content; }
+                }
+            }
+        } else {
+            const runs = getRunResults(node);
+            if (runs.length > 0) {
+                let selectedIdx = this.state.selectedOutputRunIndex !== undefined ? this.state.selectedOutputRunIndex : 0;
+                if (selectedIdx >= runs.length) selectedIdx = 0;
+                const child = runs[selectedIdx];
+                if (child && child.pipelineMeta) {
+                    try {
+                        const meta = JSON.parse(child.pipelineMeta);
+                        if (meta && meta.steps && meta.steps.length > 0) {
+                            inputData = meta.steps[0].input || '';
+                        }
+                    } catch(e) {}
+                }
+                if (!inputData && child && child.content) {
+                    try { inputData = atob(child.content); } catch { inputData = child.content; }
+                }
+            } else {
+                if (node.content) {
+                    try { inputData = atob(node.content); } catch { inputData = node.content; }
+                }
+            }
+        }
         // Belt-level media attachments (inputAttachments, separate from machine-level node.attachments)
         const inputAttachments = node.inputAttachments || [];
         const attachHtml = inputAttachments.length > 0
@@ -3451,14 +3771,7 @@ const app = {
         }
 
         // If the selected node is a data/leaf node, show the parent operation node's prompt
-        let promptNodePath = this.state.currentNodePath;
-        const selNode = this.getNodeByPath(promptNodePath);
-        if (selNode && (!selNode.children || selNode.children.length === 0) && promptNodePath !== '') {
-            const parent = promptNodePath.lastIndexOf('/') === 0
-                ? '' : promptNodePath.substring(0, promptNodePath.lastIndexOf('/'));
-            promptNodePath = parent;
-        }
-
+        const promptNodePath = this.state.selectedOpPath || this.state.currentNodePath;
         const node = this.getNodeByPath(promptNodePath);
         if (!node) {
             promptEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
@@ -3637,19 +3950,40 @@ const app = {
             return;
         }
 
-        const node = this.getNodeByPath(this.state.currentNodePath);
-        if (!node || !node.children || node.children.length === 0) {
+        const getRunResults = (opNode) => {
+            if (!opNode || !opNode.children) return [];
+            const proc = opNode.children.find(c => c.title && this.safeAtob(c.title) === 'Processed');
+            return proc ? (proc.children || []) : opNode.children;
+        };
+
+        const currentPath = this.state.currentNodePath;
+        const selectedDataPath = this.state.selectedDataPath;
+        const selectedOpPath = this.state.selectedOpPath;
+
+        let runs = [];
+        let selectedIdx = 0;
+
+        if (selectedDataPath !== '') {
+            const opNode = this.getNodeByPath(selectedOpPath);
+            runs = getRunResults(opNode);
+            selectedIdx = runs.findIndex(r => r === this.getNodeByPath(selectedDataPath));
+            if (selectedIdx === -1) selectedIdx = 0;
+        } else {
+            const opNode = this.getNodeByPath(currentPath);
+            runs = getRunResults(opNode);
+            selectedIdx = this.state.selectedOutputRunIndex !== undefined ? this.state.selectedOutputRunIndex : 0;
+            if (selectedIdx >= runs.length) {
+                selectedIdx = 0;
+                this.state.selectedOutputRunIndex = 0;
+            }
+        }
+
+        if (runs.length === 0) {
             outputEl.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
             return;
         }
 
-        let selectedIdx = this.state.selectedOutputRunIndex !== undefined ? this.state.selectedOutputRunIndex : 0;
-        if (selectedIdx >= node.children.length) {
-            selectedIdx = 0;
-            this.state.selectedOutputRunIndex = 0;
-        }
-
-        const child = node.children[selectedIdx];
+        const child = runs[selectedIdx];
         let receivedText = child.content ? (() => { try { return atob(child.content); } catch { return child.content; } })() : '';
         let artifacts = [];
 
@@ -3665,14 +3999,14 @@ const app = {
             } catch(e) {}
         }
 
-        const runOptions = node.children.map((c, idx) => {
+        const runOptions = runs.map((c, idx) => {
             const title = c.title ? this.safeAtob(c.title) : `Run ${idx + 1}`;
             return `<option value="${idx}" ${idx === selectedIdx ? 'selected' : ''}>${this.escapeHtml(title)}</option>`;
         }).join('');
 
         let html = `
             <div class="output-toolbar">
-                <span class="output-label">${t('Output')} (${node.children.length})</span>
+                <span class="output-label">${t('Output')} (${runs.length})</span>
                 <button class="output-save-btn" onclick="app.saveCurrentOutput()">${t('Save')}</button>
                 <button class="output-discard-btn" onclick="app.discardCurrentOutput()">${t('Discard')}</button>
                 <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
@@ -3696,10 +4030,10 @@ const app = {
 
         html += `
             <div style="display:flex;flex-direction:column;gap:10px;padding:8px;height:calc(100% - 75px);overflow-y:auto;">
-                <div style="flex:1;display:flex;flex-direction:column;min-height:150px;">
-                    <div style="font-size:10px;font-weight:bold;color:#858585;margin-bottom:4px;border-bottom:1px solid #333;padding-bottom:2px;">受信データ (Received Output)</div>
-                    <pre class="output-display" style="margin:0;flex:1;background:#1e1e1e;border:1px solid #2d2d2d;padding:6px;font-family:monospace;white-space:pre-wrap;font-size:11px;overflow-y:auto;">${this.escapeHtml(receivedText)}</pre>
-                </div>
+                <details class="output-history-received-details" style="margin-bottom: 8px;">
+                    <summary style="font-size: 10px; font-weight: bold; color: #858585; cursor: pointer; outline: none; user-select: none; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</summary>
+                    <pre class="output-display" style="margin: 4px 0 0 0; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto; max-height: 250px;">${this.escapeHtml(receivedText)}</pre>
+                </details>
                 ${artifactsHtml ? `<div id="output-artifacts" style="font-size:11px">${artifactsHtml}</div>` : `<div id="output-artifacts"></div>`}
             </div>
         `;
@@ -3707,7 +4041,22 @@ const app = {
     },
 
     onOutputRunSelected(value) {
-        this.state.selectedOutputRunIndex = parseInt(value);
+        const idx = parseInt(value);
+        this.state.selectedOutputRunIndex = idx;
+
+        if (this.state.selectedDataPath !== '') {
+            const opNode = this.getNodeByPath(this.state.selectedOpPath);
+            if (opNode && opNode.children) {
+                const processedIdx = opNode.children.findIndex(c => c.title && this.safeAtob(c.title) === 'Processed');
+                if (processedIdx !== -1) {
+                    const newPath = this.state.selectedOpPath + '/' + processedIdx + '/' + idx;
+                    this.selectNode(newPath);
+                    return;
+                }
+            }
+        }
+
+        this.renderInput();
         this.renderOutput();
     },
 
