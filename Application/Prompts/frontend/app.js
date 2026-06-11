@@ -16,7 +16,7 @@ const app = {
         viewMode: 'node', // "node" | "pipeline"
         selectedStep: -1, // selected pipeline step index
         currentRunId: '',
-        activeTreeTab: 'node',
+        activeTreeTab: 'pipeline',
         fileTree: [],
         projects: [],
         activeProject: 'default',
@@ -1435,12 +1435,12 @@ const app = {
 
     switchTreeTab(tab) {
         this.state.activeTreeTab = tab;
-        const nodeBtn = document.getElementById('btn-tree-tab-node');
+        const nodeBtn = document.getElementById('btn-tree-tab-pipeline');
         const fileBtn = document.getElementById('btn-tree-tab-file');
         const nodeContent = document.getElementById('tree-content');
         const fileContent = document.getElementById('file-tree-content');
-        
-        if (tab === 'node') {
+
+        if (tab === 'pipeline' || tab === 'node') {
             nodeBtn?.classList.add('active');
             fileBtn?.classList.remove('active');
             if (nodeContent) nodeContent.style.display = '';
@@ -1536,8 +1536,28 @@ const app = {
         const safePath = this.escapeHtml(path);
         const hasChildren = node.children && node.children.length > 0;
         const collapsed = this.state.collapsedPaths.has(path);
-        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') +
-                    (this.state.currentNodePath === path ? ' selected' : '') +
+
+        // Compute color class based on relationship to selected node
+        const currentPath = this.state.currentNodePath;
+        let colorCls = '';
+        if (currentPath === path) {
+            colorCls = ' selected';
+        } else {
+            // Parent of currently selected node (= input source)
+            if (currentPath !== '') {
+                const parentOfCurrent = currentPath.lastIndexOf('/') === 0
+                    ? '' : currentPath.substring(0, currentPath.lastIndexOf('/'));
+                if (path === parentOfCurrent) colorCls = ' selected-input';
+            }
+            // Direct child of currently selected node (= result)
+            if (!colorCls && path !== '') {
+                const nodeParent = path.lastIndexOf('/') === 0
+                    ? '' : path.substring(0, path.lastIndexOf('/'));
+                if (nodeParent === currentPath) colorCls = ' selected-result';
+            }
+        }
+
+        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') + colorCls +
                     (collapsed ? ' collapsed' : '');
         const collapseBtn = hasChildren
             ? `<span class="tree-collapse-btn" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapsed ? '▶' : '▼'}</span>`

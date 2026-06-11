@@ -149,6 +149,7 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .tree-node.selected-input { background: #2a6b2a; }
 .tree-node.selected-result { background: #8a5a1a; }
 .tree-node.selected-data { background: #8a2a2a; }
+.tree-node.completed { background: #1a4f1a; color: #68d391; }
 .tree-node.leaf:before { content: '📋 '; }
 .tree-node.branch:before { content: '📂 '; }
 .tree-node.collapsed.branch:before { content: '📁 '; }
