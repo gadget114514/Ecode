@@ -96,6 +96,7 @@ class PipelineRunner {
             type: s.type,
             input: '',
             output: '',
+            outputAttachments: [],
             parallelBranches: {},
             retries: 0,
             iterations: 0,
@@ -207,6 +208,7 @@ class PipelineRunner {
                     (resp) => {
                         if (idx < this.historySteps.length) {
                             this.historySteps[idx].output = resp.content;
+                            this.historySteps[idx].outputAttachments = resp.outputAttachments || [];
                             this.historySteps[idx].status = 'completed';
                         }
                         this.postBridge('step_done', {
@@ -672,6 +674,7 @@ class PipelineRunner {
                     type: step.type,
                     input: hist.input || '',
                     output: hist.output || '',
+                    outputAttachments: hist.outputAttachments || [],
                     artifacts: hist.artifacts || [],
                     tokens: hist.completionTokens || 0
                 };

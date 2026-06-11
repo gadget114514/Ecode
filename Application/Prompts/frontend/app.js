@@ -3987,14 +3987,15 @@ const app = {
         let receivedText = child.content ? (() => { try { return atob(child.content); } catch { return child.content; } })() : '';
         let artifacts = [];
 
+        let outputAttachments = child.attachments || [];
         if (child.pipelineMeta) {
             try {
                 const meta = JSON.parse(child.pipelineMeta);
                 if (meta && meta.steps && meta.steps.length > 0) {
-                    // Use last step's output as received data
                     const lastStep = meta.steps[meta.steps.length - 1];
                     receivedText = lastStep.output || receivedText;
                     artifacts = lastStep.artifacts || [];
+                    outputAttachments = lastStep.outputAttachments || outputAttachments;
                 }
             } catch(e) {}
         }
@@ -4023,20 +4024,9 @@ const app = {
             html += `<div class="eval-badge" style="margin: 0 8px 8px 8px;">★ ${this.escapeHtml(child.evaluation)}</div>`;
         }
 
-        const artifactsHtml = artifacts.length > 0
-            ? `<div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px">生産物 (Artifacts)</div>` +
-              artifacts.map(a => `<div style="font-size:11px;padding:2px 0">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
-            : '';
-
-        html += `
-            <div style="display:flex;flex-direction:column;gap:10px;padding:8px;height:calc(100% - 75px);overflow-y:auto;">
-                <details class="output-history-received-details" style="margin-bottom: 8px;">
-                    <summary style="font-size: 10px; font-weight: bold; color: #858585; cursor: pointer; outline: none; user-select: none; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</summary>
-                    <pre class="output-display" style="margin: 4px 0 0 0; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto; max-height: 250px;">${this.escapeHtml(receivedText)}</pre>
-                </details>
-                ${artifactsHtml ? `<div id="output-artifacts" style="font-size:11px">${artifactsHtml}</div>` : `<div id="output-artifacts"></div>`}
-            </div>
-        `;
+        html += `<div style="padding:8px;height:calc(100% - 75px);overflow-y:auto;">
+            ${this.renderOutputGrid(receivedText, outputAttachments, artifacts)}
+        </div>`;
         outputEl.innerHTML = html;
     },
 
@@ -4058,6 +4048,114 @@ const app = {
 
         this.renderInput();
         this.renderOutput();
+    },
+
+    // ── Output media grid ───────────────────────────────────────────
+    renderOutputGrid(text, attachments, artifacts) {
+        const cards = [];
+
+        // Text card
+        if (text && text.trim()) {
+            const preview = this.escapeHtml(text.trim().substring(0, 120).replace(/\n/g, ' '));
+            const encoded = encodeURIComponent(text);
+            cards.push(`
+                <div class="output-card" onclick="app.showMediaViewer('text',decodeURIComponent('${encoded}'),'テキスト出力')">
+                    <div class="output-card-icon">📄</div>
+                    <div class="output-card-preview">${preview}</div>
+                    <div class="output-card-label">テキスト出力</div>
+                </div>`);
+        }
+
+        // Attachment cards (outputAttachments from AI response)
+        (attachments || []).forEach((a, i) => {
+            const mime = a.mimetype || '';
+            const label = this.escapeHtml(a.file || `attachment-${i}`);
+            if (mime.startsWith('image/')) {
+                const src = `data:${mime};base64,${a.content || ''}`;
+                cards.push(`
+                    <div class="output-card" onclick="app.showMediaViewer('image','${src}','${label}')">
+                        <img class="output-thumb" src="${src}" onerror="this.src=''">
+                        <div class="output-card-label">${label}</div>
+                    </div>`);
+            } else if (mime.startsWith('video/')) {
+                const src = `data:${mime};base64,${a.content || ''}`;
+                cards.push(`
+                    <div class="output-card" onclick="app.showMediaViewer('video','${src}','${label}')">
+                        <div class="output-card-icon">🎬</div>
+                        <div class="output-card-label">${label}</div>
+                    </div>`);
+            } else if (mime.startsWith('audio/')) {
+                const src = `data:${mime};base64,${a.content || ''}`;
+                cards.push(`
+                    <div class="output-card" onclick="app.showMediaViewer('audio','${src}','${label}')">
+                        <div class="output-card-icon">🎵</div>
+                        <div class="output-card-label">${label}</div>
+                    </div>`);
+            } else {
+                const content = a.content ? atob(a.content) : '';
+                const encoded = encodeURIComponent(content);
+                cards.push(`
+                    <div class="output-card" onclick="app.showMediaViewer('text',decodeURIComponent('${encoded}'),'${label}')">
+                        <div class="output-card-icon">📎</div>
+                        <div class="output-card-label">${label}</div>
+                    </div>`);
+            }
+        });
+
+        // Artifact cards (file paths)
+        (artifacts || []).forEach(a => {
+            const label = this.escapeHtml(a.label || a.path || '');
+            const ext = (a.path || '').split('.').pop().toLowerCase();
+            const imgExts = ['png','jpg','jpeg','gif','webp','bmp','svg'];
+            const vidExts = ['mp4','webm','mov','avi','mkv'];
+            const audExts = ['mp3','wav','ogg','flac','m4a'];
+            let icon = '🔗';
+            let viewer = `app.openArtifact(${JSON.stringify(a)})`;
+            if (imgExts.includes(ext)) icon = '🖼';
+            else if (vidExts.includes(ext)) icon = '🎬';
+            else if (audExts.includes(ext)) icon = '🎵';
+            cards.push(`
+                <div class="output-card" onclick="${viewer}">
+                    <div class="output-card-icon">${icon}</div>
+                    <div class="output-card-label">${label}</div>
+                </div>`);
+        });
+
+        if (cards.length === 0) return `<div class="empty" style="font-size:12px;color:#555">出力なし</div>`;
+        return `<div class="output-grid">${cards.join('')}</div>`;
+    },
+
+    showMediaViewer(type, src, label) {
+        document.getElementById('media-viewer-overlay')?.remove();
+        let body = '';
+        if (type === 'text') {
+            body = `<pre class="media-viewer-text">${this.escapeHtml(src)}</pre>
+                    <button class="media-viewer-copy" onclick="navigator.clipboard.writeText(decodeURIComponent(encodeURIComponent(document.querySelector('.media-viewer-text').textContent))).then(()=>app.addLog('📋 Copied'))">📋 コピー</button>`;
+        } else if (type === 'image') {
+            body = `<img src="${src}" class="media-viewer-img" alt="${this.escapeHtml(label)}">`;
+        } else if (type === 'video') {
+            body = `<video src="${src}" controls class="media-viewer-video"></video>`;
+        } else if (type === 'audio') {
+            body = `<audio src="${src}" controls class="media-viewer-audio"></audio>`;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.id = 'media-viewer-overlay';
+        overlay.className = 'media-viewer-overlay';
+        overlay.innerHTML = `
+            <div class="media-viewer-box">
+                <div class="media-viewer-header">
+                    <span>${this.escapeHtml(label)}</span>
+                    <button class="media-viewer-close" onclick="app.closeMediaViewer()">✕</button>
+                </div>
+                <div class="media-viewer-body">${body}</div>
+            </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) this.closeMediaViewer(); });
+        document.body.appendChild(overlay);
+    },
+
+    closeMediaViewer() {
+        document.getElementById('media-viewer-overlay')?.remove();
     },
 
     renderPipelineOutput(el) {
