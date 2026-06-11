@@ -2577,6 +2577,14 @@ const app = {
     onStepDone(payload) {
         this.addLog(`✅ Step ${payload.index} done` + (payload.tokens ? ` (${payload.tokens} tokens)` : ''));
         if (payload.status === 'completed') this.state.pipelineRunning = false;
+        // Store outputAttachments so next step's input pane can show them
+        if (Array.isArray(payload.outputAttachments) && this.state.pipelineSteps) {
+            const step = this.state.pipelineSteps[payload.index];
+            if (step) {
+                step.outputAttachments = payload.outputAttachments;
+                if (this.state.viewMode === 'pipeline') this.renderInput();
+            }
+        }
     },
 
     highlightStep(payload) {
@@ -3702,11 +3710,15 @@ const app = {
         const step = this.state.pipelineSteps[si];
         const inputText = step.input || '(pending)';
         const sourceLabel = si === 0 ? `元入力 ({content})` : `Step ${si} 出力 ({result})`;
-        // Previous step artifacts
-        const prevArtifacts = (si > 0 && this.state.pipelineSteps[si - 1].artifacts) || [];
-        const artifactsHtml = prevArtifacts.length > 0
-            ? prevArtifacts.map(a => `<div style="font-size:11px;padding:2px 4px">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
+        // Previous step output media (outputAttachments) → show as media grid
+        const prevStep = si > 0 ? this.state.pipelineSteps[si - 1] : null;
+        const prevOutputAttachments = (prevStep && prevStep.outputAttachments) || [];
+        const prevArtifacts = (prevStep && prevStep.artifacts) || [];
+        const prevMediaHtml = (prevOutputAttachments.length > 0 || prevArtifacts.length > 0)
+            ? `<div style="margin-top:6px;font-size:10px;color:#888;margin-bottom:3px">前ステップ出力メディア:</div>
+               ${this.renderOutputGrid('', prevOutputAttachments, prevArtifacts)}`
             : '';
+        const artifactsHtml = '';
         // Step-specific attachments from pipelineMeta
         const stepAttachments = step.attachments || [];
         const stepAttachHtml = stepAttachments.length > 0
@@ -3722,7 +3734,7 @@ const app = {
                     <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
                 </div>
                 <pre class="input-display" style="margin:0;background:#1a1a1a;border:1px solid #2d2d2d;padding:6px;white-space:pre-wrap;font-size:11px;max-height:120px;overflow-y:auto">${this.escapeHtml(inputText)}</pre>
-                ${artifactsHtml ? `<div style="margin-top:4px;font-size:10px;color:#888">前ステップ生産物:</div>${artifactsHtml}` : ''}
+                ${prevMediaHtml}
             </div>
             <div>
                 <div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px;display:flex;align-items:center;justify-content:space-between">

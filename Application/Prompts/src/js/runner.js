@@ -213,7 +213,8 @@ class PipelineRunner {
                         }
                         this.postBridge('step_done', {
                             index: idx,
-                            tokens: 0 // Stub or extract if provider gives it
+                            tokens: 0,
+                            outputAttachments: resp.outputAttachments || []
                         });
                         this.runNextStep();
                     },
