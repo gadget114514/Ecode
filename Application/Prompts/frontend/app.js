@@ -2547,6 +2547,8 @@ const app = {
     appendStreamOutput(payload) {
         this.addLog(`[Step ${payload.stepIndex}] ${payload.text || '...'}`);
         this.state.streamedOutput = (this.state.streamedOutput || '') + (payload.text || '');
+        // In pipeline mode text is not shown; just accumulate for meta record
+        if (this.state.viewMode === 'pipeline') return;
 
         const outputEl = document.getElementById('output-content');
         if (outputEl) {
@@ -3733,7 +3735,6 @@ const app = {
                     <span>${sourceLabel}</span>
                     <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
                 </div>
-                <pre class="input-display" style="margin:0;background:#1a1a1a;border:1px solid #2d2d2d;padding:6px;white-space:pre-wrap;font-size:11px;max-height:120px;overflow-y:auto">${this.escapeHtml(inputText)}</pre>
                 ${prevMediaHtml}
             </div>
             <div>
@@ -4187,14 +4188,15 @@ const app = {
             ? `<div style="font-size:10px;color:#888;margin:8px 8px 3px;border-bottom:1px solid #333;padding-bottom:2px">生産物 (Artifacts)</div>` +
               artifacts.map(a => `<div style="font-size:11px;padding:2px 8px">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
             : '';
+        const outputAttachments = step.outputAttachments || [];
         el.innerHTML = `
             <div class="output-toolbar">
                 <span class="output-label">${t('Step')} ${si + 1} ${t('Output')}${step.completed ? '' : ' ⏳'}</span>
                 ${step.completed ? `<button class="output-save-btn" onclick="app.savePipelineOutput(${si})">${t('Save')}</button>
                 <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>` : ''}
             </div>
-            <pre class="output-display" id="pipeline-output-${si}">${this.escapeHtml(outputText)}</pre>
-            <div id="pipeline-artifacts-${si}">${artifactsHtml}</div>`;
+            <div style="padding:8px">${this.renderOutputGrid('', outputAttachments, artifacts)}</div>
+            <div id="pipeline-artifacts-${si}"></div>`;
     },
 
     // ── Input Source Dialog ────────────────────────────────────────
