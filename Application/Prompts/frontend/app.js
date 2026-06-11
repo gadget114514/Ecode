@@ -1522,6 +1522,9 @@ const app = {
         if (!el) return;
         const tab = this.state.tabs[this.state.activeTab];
         if (!tab || !tab.root) { el.innerHTML = '<div class="empty">No data</div>'; return; }
+        // Pre-compute whether the currently selected node is a leaf (data node)
+        const selNode = this.getNodeByPath(this.state.currentNodePath);
+        this._selectedIsLeaf = selNode ? (!selNode.children || selNode.children.length === 0) : false;
         el.innerHTML = this.buildTreeHTML(tab.root, '');
         
         // Also sync file tree selections if visible
@@ -1539,18 +1542,20 @@ const app = {
 
         // Compute color class based on relationship to selected node
         const currentPath = this.state.currentNodePath;
+        const selectedIsLeaf = this._selectedIsLeaf;
         let colorCls = '';
         if (currentPath === path) {
-            colorCls = ' selected';
+            // Selected node: data (leaf) node = selected-data, operation (branch) node = selected
+            colorCls = selectedIsLeaf ? ' selected-data' : ' selected';
         } else {
-            // Parent of currently selected node (= input source)
+            // Parent of currently selected node (= input/operation source)
             if (currentPath !== '') {
                 const parentOfCurrent = currentPath.lastIndexOf('/') === 0
                     ? '' : currentPath.substring(0, currentPath.lastIndexOf('/'));
                 if (path === parentOfCurrent) colorCls = ' selected-input';
             }
-            // Direct child of currently selected node (= result)
-            if (!colorCls && path !== '') {
+            // Direct child of currently selected operation node (= result)
+            if (!colorCls && !selectedIsLeaf && path !== '') {
                 const nodeParent = path.lastIndexOf('/') === 0
                     ? '' : path.substring(0, path.lastIndexOf('/'));
                 if (nodeParent === currentPath) colorCls = ' selected-result';
@@ -3445,7 +3450,16 @@ const app = {
             return;
         }
 
-        const node = this.getNodeByPath(this.state.currentNodePath);
+        // If the selected node is a data/leaf node, show the parent operation node's prompt
+        let promptNodePath = this.state.currentNodePath;
+        const selNode = this.getNodeByPath(promptNodePath);
+        if (selNode && (!selNode.children || selNode.children.length === 0) && promptNodePath !== '') {
+            const parent = promptNodePath.lastIndexOf('/') === 0
+                ? '' : promptNodePath.substring(0, promptNodePath.lastIndexOf('/'));
+            promptNodePath = parent;
+        }
+
+        const node = this.getNodeByPath(promptNodePath);
         if (!node) {
             promptEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
             return;
