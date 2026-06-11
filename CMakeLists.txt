@@ -301,6 +301,11 @@ add_ecode_test(test_localization
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Localization.cpp
 )
 
+add_ecode_test(test_mock_ai_server
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_mock_ai_server.cpp
+)
+target_link_libraries(test_mock_ai_server PRIVATE ws2_32)
+
 add_ecode_test(test_buffer_stress
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_buffer_stress.cpp
     ${TEST_BASE_SOURCES}
@@ -387,6 +392,7 @@ foreach(tgt
     test_buffer_stress test_cursor_move test_memorymappedfile
     test_fileutils test_editor_buffer_ops test_piecetable_advanced
     test_telnetd_iac test_localmsg_cli test_localmsg_server
+    test_mock_ai_server
 )
     set_target_properties(${tgt} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}")
 endforeach()

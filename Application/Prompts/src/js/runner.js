@@ -672,6 +672,7 @@ class PipelineRunner {
                     type: step.type,
                     input: hist.input || '',
                     output: hist.output || '',
+                    artifacts: hist.artifacts || [],
                     tokens: hist.completionTokens || 0
                 };
                 for (const [k, v] of Object.entries(step.params || {})) {

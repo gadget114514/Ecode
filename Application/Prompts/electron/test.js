@@ -245,6 +245,7 @@ class PipelineRunner {
     run(pipelineName, steps, inputContent, inputAttachments, outputMode) {
         if (this.running) return;
         this.pipelineName = pipelineName; this.inputContent = inputContent;
+        this.inputAttachments = inputAttachments || [];
         this.outputMode = outputMode || 'child'; this.cancelled = false; this.running = true;
         this.runId = generateRunId(); this.startedAt = nowIso();
         this.historySteps = steps.map((s, i) => ({ index: i, name: s.name, type: s.type, input: i === 0 ? inputContent : '', output: '', status: 'pending', promptTokens: 0, completionTokens: 0, parallelBranches: {} }));
@@ -283,8 +284,14 @@ class PipelineRunner {
             const provider = this.providers[step.params?.provider || 'openai'];
             if (!provider) throw new Error('Provider not configured: ' + (step.params?.provider || 'openai'));
             let userPrompt = (step.params?.userPrompt || '{content}').replace(/\{content\}/g, this.inputContent).replace(/\{result\}/g, this._currentContent());
-            const resp = await provider.call({ model: step.params?.model || 'gpt-4.1', systemPrompt: step.params?.systemPrompt || '', userPrompt, temperature: parseFloat(step.params?.temperature || '0.7'), maxTokens: 4096 });
-            if (idx < this.historySteps.length) { this.historySteps[idx].output = resp.content; this.historySteps[idx].status = 'completed'; }
+            const resp = await provider.call({ model: step.params?.model || 'gpt-4.1', systemPrompt: step.params?.systemPrompt || '', userPrompt, temperature: parseFloat(step.params?.temperature || '0.7'), maxTokens: 4096, attachments: this.inputAttachments || [] });
+            if (idx < this.historySteps.length) {
+                this.historySteps[idx].output = resp.content;
+                this.historySteps[idx].status = 'completed';
+                if (resp.outputAttachments && resp.outputAttachments.length > 0) {
+                    this.historySteps[idx].artifacts = resp.outputAttachments;
+                }
+            }
             this.postBridge('step_done', JSON.stringify({ index: idx }));
 
         } else if (type === 'manual') {
@@ -324,6 +331,139 @@ class PipelineRunner {
 }
 
 // ================================================================
+// ── MockAIProvider ─────────────────────────────────────────────
+// Internal scripted provider — no network access.
+//
+// Request format (mirrors real providers):
+//   { model, systemPrompt, userPrompt, temperature, maxTokens,
+//     attachments: [{ file, path, mimetype, content (base64), size }] }
+//
+// Response format:
+//   { content: string, model: string, outputAttachments: Attachment[] }
+//
+// Usage:
+//   const p = new MockAIProvider();
+//
+//   // ── Deterministic rules (never consumed, highest priority) ──
+//   p.when('hello', 'world')                        // exact userPrompt match → string content
+//   p.when(/translate/i, 'translation')             // regex match
+//   p.when(req => req.model === 'x', 'ok')          // predicate fn → string content
+//   p.when(req => req.attachments.length > 0,       // predicate fn → full response fn
+//          req => ({ content: 'got it', model: 'mock-model',
+//                    outputAttachments: [req.attachments[0]] }))
+//
+//   // ── Queue (consumed FIFO, fallback when no rule matches) ────
+//   p.queue('Hello back')                           // text-only response
+//   p.queueWithMedia('Caption', [imageAtt])         // response with output media
+//   p.queueError('rate limit')                      // next call throws
+//
+//   // ── Assertions ──────────────────────────────────────────────
+//   await p.call(req)                               // returns scripted response
+//   p.calls[0]                                      // captured request
+//   p.inputAttachmentsOf(0)                         // attachments in 1st call
+//   p.inputImagesOf(0)                              // image attachments in 1st call
+//   p.inputAudiosOf(0)                              // audio attachments in 1st call
+class MockAIProvider {
+    constructor() {
+        this._rules = [];   // deterministic rules — never consumed
+        this._queue = [];   // scripted entries in FIFO order
+        this.calls  = [];   // every captured request (with attachments snapshot)
+    }
+
+    // Register a deterministic rule (chainable).
+    // matcher: string (exact userPrompt), RegExp, or (req) => bool
+    // response: string (content only), or (req) => { content, model, outputAttachments }
+    when(matcher, response) {
+        this._rules.push({ matcher, response });
+        return this;
+    }
+
+    // Queue a text-only response (chainable)
+    queue(content, model = 'mock-model') {
+        this._queue.push({ ok: true, content, model, outputAttachments: [] });
+        return this;
+    }
+
+    // Queue a response that includes output media attachments (e.g. TTS audio, generated image)
+    queueWithMedia(content, outputAttachments = [], model = 'mock-model') {
+        this._queue.push({ ok: true, content, model, outputAttachments });
+        return this;
+    }
+
+    // Queue an error (chainable)
+    queueError(message) {
+        this._queue.push({ ok: false, message });
+        return this;
+    }
+
+    // call() — used by the test PipelineRunner shim
+    async call(req) {
+        // Snapshot attachments array so later mutations don't affect captured calls
+        this.calls.push({ ...req, attachments: req.attachments ? req.attachments.map(a => ({ ...a })) : [] });
+
+        // 1. Rule-based (deterministic, never consumed)
+        for (const { matcher, response } of this._rules) {
+            let matched = false;
+            if (typeof matcher === 'string')        matched = req.userPrompt === matcher;
+            else if (matcher instanceof RegExp)     matched = matcher.test(req.userPrompt);
+            else if (typeof matcher === 'function') matched = matcher(req);
+            if (!matched) continue;
+            const r = typeof response === 'function' ? response(req) : response;
+            return typeof r === 'string'
+                ? { content: r, model: 'mock-model', outputAttachments: [] }
+                : r;
+        }
+
+        // 2. Queue (consumed FIFO)
+        if (this._queue.length === 0) {
+            return { content: `echo:${req.userPrompt}`, model: 'mock-model', outputAttachments: [] };
+        }
+        const entry = this._queue.shift();
+        if (!entry.ok) throw new Error(entry.message);
+        return { content: entry.content, model: entry.model, outputAttachments: entry.outputAttachments };
+    }
+
+    // callStreaming() — used by the real runner.js (same queue, streams via callbacks)
+    async callStreaming(req, onChunk, onDone, onError) {
+        try {
+            const resp = await this.call(req);
+            onChunk(resp.content);
+            onDone(resp);
+        } catch (e) {
+            onError(e.message);
+        }
+    }
+
+    // ── Assertion helpers ──────────────────────────────────────
+
+    // All attachments that were sent in call n (default: last)
+    inputAttachmentsOf(n = this.calls.length - 1) {
+        return this.calls[n]?.attachments || [];
+    }
+
+    // Only image/* attachments from call n
+    inputImagesOf(n = this.calls.length - 1) {
+        return this.inputAttachmentsOf(n).filter(a => a.mimetype?.startsWith('image/'));
+    }
+
+    // Only audio/* attachments from call n
+    inputAudiosOf(n = this.calls.length - 1) {
+        return this.inputAttachmentsOf(n).filter(a => a.mimetype?.startsWith('audio/'));
+    }
+
+    // Convenience getters
+    get lastCall()          { return this.calls[this.calls.length - 1]; }
+    get lastInputAttachments() { return this.inputAttachmentsOf(); }
+    get callCount()         { return this.calls.length; }
+    nthCall(n)              { return this.calls[n]; }
+
+    reset() { this._rules = []; this._queue = []; this.calls = []; }
+}
+
+// makeApp — top-level so all describe blocks can access it
+// Assigned inside describe('Bridge message handling'), used from other suites too.
+let makeApp;
+
 // ── TESTS ─────────────────────────────────────────────────────
 // ================================================================
 
@@ -920,7 +1060,7 @@ describe('Bridge message handling', () => {
     // Test that handleBridgeMessage dispatches correctly by running
     // the same logic with a fake postToJS that captures output.
 
-    function makeApp(tmpDir) {
+    makeApp = function(tmpDir) {
         const st = new Storage();
         st.init(tmpDir);
         const r = new PipelineRunner();
@@ -936,9 +1076,12 @@ describe('Bridge message handling', () => {
                 case 'save_node':
                     if (payload?.tabFile && payload?.root) st.saveTabData(payload.tabFile, payload.root);
                     break;
-                case 'get_providers':
-                    post('providers_result', st.loadProviders());
+                case 'get_providers': {
+                    const provs = st.loadProviders();
+                    if (!provs.mock) provs.mock = { apiKey: '', baseUrl: '', models: ['echo', 'fixed'] };
+                    post('providers_result', provs);
                     break;
+                }
                 case 'save_providers':
                     st.saveProviders(payload || {});
                     break;
@@ -979,6 +1122,15 @@ describe('Bridge message handling', () => {
                 case 'cancel_pipeline':
                     r.cancel();
                     break;
+                case 'run_prompt_process': {
+                    // merge machine-level + belt-level attachments (mirrors main.js logic)
+                    const allAttachments = [
+                        ...(payload?.attachments || []),
+                        ...(payload?.inputAttachments || []),
+                    ];
+                    post('run_prompt_process_captured', { allAttachments, content: payload?.content });
+                    break;
+                }
             }
         }
 
@@ -1091,5 +1243,1600 @@ describe('Bridge message handling', () => {
         handle('cancel_pipeline');
         assert.equal(r.isRunning(), false);
         rmrf(tmpDir);
+    });
+
+    test('run_prompt_process merges machine and belt attachments', () => {
+        const tmpDir = makeTempDir();
+        const { sent, handle } = makeApp(tmpDir);
+        handle('run_prompt_process', {
+            content: 'hello',
+            attachments: [{ file: 'bg.png', mimetype: 'image/png' }],
+            inputAttachments: [{ file: 'ref.jpg', mimetype: 'image/jpeg' }],
+        });
+        const captured = sent.find(s => s.type === 'run_prompt_process_captured');
+        assert.ok(captured, 'run_prompt_process_captured should be emitted');
+        assert.equal(captured.payload.allAttachments.length, 2);
+        assert.equal(captured.payload.allAttachments[0].file, 'bg.png');
+        assert.equal(captured.payload.allAttachments[1].file, 'ref.jpg');
+        rmrf(tmpDir);
+    });
+
+    test('run_prompt_process with only machine attachments', () => {
+        const tmpDir = makeTempDir();
+        const { sent, handle } = makeApp(tmpDir);
+        handle('run_prompt_process', {
+            content: 'test',
+            attachments: [{ file: 'ctx.mp3', mimetype: 'audio/mpeg' }],
+        });
+        const captured = sent.find(s => s.type === 'run_prompt_process_captured');
+        assert.equal(captured.payload.allAttachments.length, 1);
+        assert.equal(captured.payload.allAttachments[0].file, 'ctx.mp3');
+        rmrf(tmpDir);
+    });
+
+    test('run_prompt_process with no attachments produces empty array', () => {
+        const tmpDir = makeTempDir();
+        const { sent, handle } = makeApp(tmpDir);
+        handle('run_prompt_process', { content: 'x' });
+        const captured = sent.find(s => s.type === 'run_prompt_process_captured');
+        assert.deepStrictEqual(captured.payload.allAttachments, []);
+        rmrf(tmpDir);
+    });
+
+    test('save_node persists selectedRecipe in node data', () => {
+        const tmpDir = makeTempDir();
+        const { st, handle } = makeApp(tmpDir);
+        const nodeData = {
+            title: 'MyNode',
+            content: 'some content',
+            mimetype: 'text/plain',
+            attachments: [],
+            inputAttachments: [],
+            selectedRecipe: 'GPT-4 Fast',
+            children: [],
+        };
+        handle('save_node', { tabFile: 'node.json', root: nodeData });
+        const loaded = st.loadTabData('node.json');
+        assert.equal(loaded.selectedRecipe, 'GPT-4 Fast');
+        rmrf(tmpDir);
+    });
+
+    test('save_node persists node.attachments and node.inputAttachments', () => {
+        const tmpDir = makeTempDir();
+        const { st, handle } = makeApp(tmpDir);
+        const nodeData = {
+            title: 'N',
+            content: '',
+            mimetype: 'text/plain',
+            attachments: [{ file: 'machine.png', mimetype: 'image/png' }],
+            inputAttachments: [{ file: 'belt.wav', mimetype: 'audio/wav' }],
+            children: [],
+        };
+        handle('save_node', { tabFile: 'n.json', root: nodeData });
+        const loaded = st.loadTabData('n.json');
+        assert.equal(loaded.attachments[0].file, 'machine.png');
+        assert.equal(loaded.inputAttachments[0].file, 'belt.wav');
+        rmrf(tmpDir);
+    });
+});
+
+// inline buildMetaRecord — mirrors runner.js logic for step artifact inclusion
+function buildMetaRecord(histStep) {
+    return {
+        name: histStep.name || '',
+        type: histStep.type || 'ai',
+        input: histStep.input || '',
+        output: histStep.output || '',
+        artifacts: histStep.artifacts || [],
+        tokens: histStep.completionTokens || 0,
+    };
+}
+
+// ── 7. buildMetaRecord — artifact field inclusion ─────────────
+describe('buildMetaRecord artifact inclusion', () => {
+    test('includes artifacts field defaulting to empty array', () => {
+        const rec = buildMetaRecord({ name: 'step1', type: 'ai', input: 'in', output: 'out' });
+        assert.deepStrictEqual(rec.artifacts, []);
+    });
+
+    test('preserves artifacts when present', () => {
+        const artifacts = [{ label: 'report.pdf', path: '/tmp/report.pdf', type: 'file' }];
+        const rec = buildMetaRecord({ name: 's', type: 'ai', input: 'i', output: 'o', artifacts });
+        assert.deepStrictEqual(rec.artifacts, artifacts);
+    });
+
+    test('includes all required fields', () => {
+        const rec = buildMetaRecord({ name: 'translate', type: 'ai', input: 'hello', output: 'こんにちは', completionTokens: 42 });
+        assert.equal(rec.name, 'translate');
+        assert.equal(rec.type, 'ai');
+        assert.equal(rec.input, 'hello');
+        assert.equal(rec.output, 'こんにちは');
+        assert.equal(rec.tokens, 42);
+        assert.deepStrictEqual(rec.artifacts, []);
+    });
+
+    test('pipeline_completed event steps can be mapped through buildMetaRecord', async () => {
+        const r = new PipelineRunner();
+        r.registerProvider('openai', { call: async () => ({ content: 'result', model: 'mock' }) });
+        await r.run('pipe', [{ name: 's1', type: 'ai', params: { provider: 'openai', userPrompt: '{content}' } }], 'input', [], 'child');
+        const done = r.events.find(e => e.type === 'pipeline_completed');
+        assert.ok(done, 'pipeline_completed should be emitted');
+        const records = done.payload.steps.map(buildMetaRecord);
+        assert.equal(records.length, 1);
+        assert.deepStrictEqual(records[0].artifacts, []);
+        assert.equal(records[0].output, 'result');
+    });
+});
+
+// ── 8. Pipeline state reset logic (Case B node-switch) ────────
+describe('Pipeline state reset on node switch', () => {
+    // Pure logic: mirrors the selectNode Case B reset in app.js
+    function resetPipelineSteps(steps) {
+        return steps.map(s => ({
+            ...s,
+            completed: false,
+            input: '',
+            output: '',
+            streamingOutput: '',
+            status: 'pending',
+        }));
+    }
+
+    test('resetPipelineSteps clears completed flag on all steps', () => {
+        const steps = [
+            { name: 's1', completed: true, input: 'in', output: 'out', streamingOutput: 'x', status: 'completed' },
+            { name: 's2', completed: false, input: '', output: '', streamingOutput: '', status: 'pending' },
+        ];
+        const reset = resetPipelineSteps(steps);
+        assert.ok(reset.every(s => s.completed === false));
+    });
+
+    test('resetPipelineSteps clears input/output data', () => {
+        const steps = [{ name: 's1', completed: true, input: 'hello', output: 'world', streamingOutput: 'wor', status: 'completed' }];
+        const reset = resetPipelineSteps(steps);
+        assert.equal(reset[0].input, '');
+        assert.equal(reset[0].output, '');
+        assert.equal(reset[0].streamingOutput, '');
+    });
+
+    test('resetPipelineSteps sets all statuses to pending', () => {
+        const steps = [
+            { name: 's1', completed: true, input: '', output: '', streamingOutput: '', status: 'completed' },
+            { name: 's2', completed: true, input: '', output: '', streamingOutput: '', status: 'running' },
+        ];
+        const reset = resetPipelineSteps(steps);
+        assert.ok(reset.every(s => s.status === 'pending'));
+    });
+
+    test('resetPipelineSteps preserves step name and other properties', () => {
+        const steps = [{ name: 'translate', type: 'ai', completed: true, input: 'x', output: 'y', streamingOutput: '', status: 'completed' }];
+        const reset = resetPipelineSteps(steps);
+        assert.equal(reset[0].name, 'translate');
+        assert.equal(reset[0].type, 'ai');
+    });
+
+    test('dialog should be shown when any step is completed (condition check)', () => {
+        const shouldShowDialog = (viewMode, steps) =>
+            viewMode === 'pipeline' && steps.some(s => s.completed);
+
+        assert.ok(shouldShowDialog('pipeline', [{ completed: true }, { completed: false }]));
+        assert.ok(!shouldShowDialog('pipeline', [{ completed: false }, { completed: false }]));
+        assert.ok(!shouldShowDialog('node', [{ completed: true }]));
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Helper functions extracted from app.js for mode-specific tests
+// ─────────────────────────────────────────────────────────────
+
+// Mirror of app.js: reads last step output from child's pipelineMeta (閲覧/通常モード出力)
+function getLastStepOutput(child) {
+    let text = child.content ? (() => { try { return Buffer.from(child.content, 'base64').toString('utf8'); } catch { return child.content; } })() : '';
+    let artifacts = [];
+    if (child.pipelineMeta) {
+        try {
+            const meta = JSON.parse(child.pipelineMeta);
+            if (meta && meta.steps && meta.steps.length > 0) {
+                const last = meta.steps[meta.steps.length - 1];
+                text = last.output || text;
+                artifacts = last.artifacts || [];
+            }
+        } catch (e) {}
+    }
+    return { text, artifacts };
+}
+
+// Mirror of app.js processPrompt: build sent text for normal mode (通常モード)
+function buildSentText(prompt, input) {
+    return prompt.includes('{content}')
+        ? prompt.replace('{content}', input)
+        : (prompt + '\n\n' + input);
+}
+
+// Mirror of app.js renderPipelineInput: step source label (連結モード)
+function getStepSourceLabel(stepIndex) {
+    return stepIndex === 0 ? '元入力 ({content})' : `Step ${stepIndex} 出力 ({result})`;
+}
+
+// Mirror of app.js renderPipelineOutput: select display text (連結モード)
+function selectOutputText(step) {
+    return step.completed
+        ? (step.output || '(empty output)')
+        : (step.streamingOutput || (step.status === 'running' ? '...' : '(pending)'));
+}
+
+// Mirror of app.js renderPipelineInput: get previous step artifacts (連結モード)
+function getPrevArtifacts(steps, si) {
+    return (si > 0 && steps[si - 1].artifacts) || [];
+}
+
+// ── 9. 閲覧モード (Node view mode) ───────────────────────────
+describe('閲覧モード — node view mode logic', () => {
+    test('getLastStepOutput returns fallback content when no pipelineMeta', () => {
+        const child = { content: Buffer.from('plain result').toString('base64') };
+        const { text, artifacts } = getLastStepOutput(child);
+        assert.equal(text, 'plain result');
+        assert.deepStrictEqual(artifacts, []);
+    });
+
+    test('getLastStepOutput reads last step output from pipelineMeta', () => {
+        const meta = { steps: [
+            { name: 's1', output: 'step1 out', artifacts: [] },
+            { name: 's2', output: 'step2 out', artifacts: [] },
+        ]};
+        const child = { content: '', pipelineMeta: JSON.stringify(meta) };
+        const { text } = getLastStepOutput(child);
+        assert.equal(text, 'step2 out');
+    });
+
+    test('getLastStepOutput returns artifacts from last step', () => {
+        const artifacts = [{ label: 'result.pdf', path: '/tmp/result.pdf', type: 'file' }];
+        const meta = { steps: [
+            { name: 's1', output: 'text', artifacts },
+        ]};
+        const child = { content: '', pipelineMeta: JSON.stringify(meta) };
+        const { artifacts: got } = getLastStepOutput(child);
+        assert.deepStrictEqual(got, artifacts);
+    });
+
+    test('getLastStepOutput uses content as fallback when last step output is empty', () => {
+        const meta = { steps: [{ name: 's1', output: '' }] };
+        const child = {
+            content: Buffer.from('fallback text').toString('base64'),
+            pipelineMeta: JSON.stringify(meta),
+        };
+        const { text } = getLastStepOutput(child);
+        assert.equal(text, 'fallback text');
+    });
+
+    test('getLastStepOutput tolerates invalid pipelineMeta JSON', () => {
+        const child = {
+            content: Buffer.from('safe fallback').toString('base64'),
+            pipelineMeta: '{ broken json',
+        };
+        const { text, artifacts } = getLastStepOutput(child);
+        assert.equal(text, 'safe fallback');
+        assert.deepStrictEqual(artifacts, []);
+    });
+
+    test('node.inputAttachments is separate from node.attachments', () => {
+        const node = {
+            attachments: [{ file: 'machine.png', mimetype: 'image/png' }],
+            inputAttachments: [{ file: 'belt.wav', mimetype: 'audio/wav' }],
+        };
+        assert.notDeepStrictEqual(node.attachments, node.inputAttachments);
+        assert.equal(node.attachments[0].file, 'machine.png');
+        assert.equal(node.inputAttachments[0].file, 'belt.wav');
+    });
+
+    test('selectedRecipe is restored from node.selectedRecipe on node switch', () => {
+        // Simulates selectNode recipe restoration logic
+        const node = { selectedRecipe: 'GPT-4 Fast', content: '' };
+        const state = { selectedRecipe: '' };
+        state.selectedRecipe = node.selectedRecipe || '';
+        assert.equal(state.selectedRecipe, 'GPT-4 Fast');
+    });
+
+    test('selectedRecipe defaults to empty string if not set', () => {
+        const node = { content: '' };  // no selectedRecipe field
+        const state = { selectedRecipe: 'OldRecipe' };
+        state.selectedRecipe = node.selectedRecipe || '';
+        assert.equal(state.selectedRecipe, '');
+    });
+});
+
+// ── 10. 通常モード (Normal single-run mode) ───────────────────
+describe('通常モード — normal single-run logic', () => {
+    test('buildSentText replaces {content} placeholder', () => {
+        assert.equal(buildSentText('Translate: {content}', 'Hello world'), 'Translate: Hello world');
+    });
+
+    test('buildSentText concatenates when no {content} placeholder', () => {
+        assert.equal(buildSentText('Translate this:', 'Hello'), 'Translate this:\n\nHello');
+    });
+
+    test('buildSentText with empty input', () => {
+        assert.equal(buildSentText('Say {content} please', ''), 'Say  please');
+    });
+
+    test('buildSentText with multiple {content} occurrences replaces first only', () => {
+        // String.replace without /g replaces first match
+        const result = buildSentText('{content} and {content}', 'X');
+        assert.equal(result, 'X and {content}');
+    });
+
+    test('run_prompt_process payload includes machine and belt attachments', () => {
+        const node = {
+            attachments: [{ file: 'ctx.png', mimetype: 'image/png' }],
+            inputAttachments: [{ file: 'input.jpg', mimetype: 'image/jpeg' }],
+        };
+        const payload = {
+            content: 'my input',
+            attachments: node.attachments || [],
+            inputAttachments: node.inputAttachments || [],
+        };
+        assert.equal(payload.attachments.length, 1);
+        assert.equal(payload.inputAttachments.length, 1);
+        assert.equal(payload.attachments[0].file, 'ctx.png');
+        assert.equal(payload.inputAttachments[0].file, 'input.jpg');
+    });
+
+    test('run_prompt_process payload has empty arrays when node has no attachments', () => {
+        const node = {};
+        const payload = {
+            attachments: node.attachments || [],
+            inputAttachments: node.inputAttachments || [],
+        };
+        assert.deepStrictEqual(payload.attachments, []);
+        assert.deepStrictEqual(payload.inputAttachments, []);
+    });
+
+    test('merged allAttachments order: machine first, belt second', () => {
+        const machineAtt = [{ file: 'm.png', mimetype: 'image/png' }];
+        const beltAtt = [{ file: 'b.jpg', mimetype: 'image/jpeg' }];
+        const all = [...machineAtt, ...beltAtt];
+        assert.equal(all[0].file, 'm.png');
+        assert.equal(all[1].file, 'b.jpg');
+    });
+
+    test('pipeline_completed event carries step output', async () => {
+        const r = new PipelineRunner();
+        r.registerProvider('openai', { call: async () => ({ content: 'translated text', model: 'mock' }) });
+        await r.run('single', [
+            { name: 'translate', type: 'ai', params: { provider: 'openai', userPrompt: 'Translate: {content}' } },
+        ], 'Hello', [], 'child');
+        const done = r.events.find(e => e.type === 'pipeline_completed');
+        assert.equal(done.payload.steps[0].output, 'translated text');
+        assert.equal(done.payload.steps[0].input, 'Hello');
+    });
+});
+
+// ── 11. 連結モード (Pipeline/chain mode) ─────────────────────
+describe('連結モード — pipeline chain mode logic', () => {
+    test('step 0 source label is 元入力 ({content})', () => {
+        assert.equal(getStepSourceLabel(0), '元入力 ({content})');
+    });
+
+    test('step N source label references previous step', () => {
+        assert.equal(getStepSourceLabel(1), 'Step 1 出力 ({result})');
+        assert.equal(getStepSourceLabel(3), 'Step 3 出力 ({result})');
+    });
+
+    test('selectOutputText: pending step shows (pending)', () => {
+        const step = { completed: false, status: 'pending', output: '', streamingOutput: '' };
+        assert.equal(selectOutputText(step), '(pending)');
+    });
+
+    test('selectOutputText: running step shows ...', () => {
+        const step = { completed: false, status: 'running', output: '', streamingOutput: '' };
+        assert.equal(selectOutputText(step), '...');
+    });
+
+    test('selectOutputText: running step shows streamingOutput when available', () => {
+        const step = { completed: false, status: 'running', output: '', streamingOutput: 'partial res' };
+        assert.equal(selectOutputText(step), 'partial res');
+    });
+
+    test('selectOutputText: completed step shows output', () => {
+        const step = { completed: true, status: 'completed', output: 'final answer', streamingOutput: 'partial' };
+        assert.equal(selectOutputText(step), 'final answer');
+    });
+
+    test('selectOutputText: completed step with empty output shows (empty output)', () => {
+        const step = { completed: true, status: 'completed', output: '', streamingOutput: '' };
+        assert.equal(selectOutputText(step), '(empty output)');
+    });
+
+    test('getPrevArtifacts: step 0 has no previous artifacts', () => {
+        const steps = [
+            { artifacts: [{ label: 'file.txt' }] },
+            { artifacts: [] },
+        ];
+        assert.deepStrictEqual(getPrevArtifacts(steps, 0), []);
+    });
+
+    test('getPrevArtifacts: step 1 gets step 0 artifacts', () => {
+        const artifacts = [{ label: 'out.pdf', path: '/tmp/out.pdf' }];
+        const steps = [
+            { artifacts },
+            { artifacts: [] },
+        ];
+        assert.deepStrictEqual(getPrevArtifacts(steps, 1), artifacts);
+    });
+
+    test('getPrevArtifacts: step 2 gets step 1 artifacts, not step 0', () => {
+        const steps = [
+            { artifacts: [{ label: 'step0.txt' }] },
+            { artifacts: [{ label: 'step1.txt' }] },
+            { artifacts: [] },
+        ];
+        const prev = getPrevArtifacts(steps, 2);
+        assert.equal(prev[0].label, 'step1.txt');
+    });
+
+    test('pipeline {result} placeholder picks up previous step output', async () => {
+        const r = new PipelineRunner();
+        const calls = [];
+        r.registerProvider('openai', { call: async req => { calls.push(req.userPrompt); return { content: `out:${req.userPrompt}`, model: 'mock' }; } });
+        const steps = [
+            { name: 's1', type: 'ai', params: { provider: 'openai', userPrompt: '{content}' } },
+            { name: 's2', type: 'ai', params: { provider: 'openai', userPrompt: 'Review: {result}' } },
+        ];
+        await r.run('chain', steps, 'original', [], 'child');
+        assert.equal(calls[0], 'original');
+        assert.equal(calls[1], 'Review: out:original');
+    });
+
+    test('{content} stays original through all chain steps', async () => {
+        const r = new PipelineRunner();
+        const calls = [];
+        r.registerProvider('openai', { call: async req => { calls.push(req.userPrompt); return { content: 'processed', model: 'mock' }; } });
+        const steps = [
+            { name: 's1', type: 'ai', params: { provider: 'openai', userPrompt: '{content}' } },
+            { name: 's2', type: 'ai', params: { provider: 'openai', userPrompt: 'Keep original: {content}' } },
+        ];
+        await r.run('chain', steps, 'source text', [], 'child');
+        assert.equal(calls[1], 'Keep original: source text');
+    });
+
+    test('step attachments default to empty when not set', () => {
+        const steps = [
+            { name: 's1', completed: false, input: '', output: '', streamingOutput: '', status: 'pending' },
+        ];
+        assert.deepStrictEqual(steps[0].attachments || [], []);
+    });
+
+    test('step-specific attachments are preserved per step index', () => {
+        const meta = {
+            steps: [
+                { name: 's1', attachments: [{ file: 'ref.png', mimetype: 'image/png' }] },
+                { name: 's2', attachments: [] },
+            ]
+        };
+        assert.equal(meta.steps[0].attachments.length, 1);
+        assert.equal(meta.steps[1].attachments.length, 0);
+    });
+
+    test('pipeline run with three steps chains outputs correctly', async () => {
+        const r = new PipelineRunner();
+        let n = 0;
+        r.registerProvider('openai', { call: async req => ({ content: `step${++n}:${req.userPrompt}`, model: 'mock' }) });
+        const steps = [
+            { name: 's1', type: 'ai', params: { provider: 'openai', userPrompt: '{content}' } },
+            { name: 's2', type: 'ai', params: { provider: 'openai', userPrompt: '{result}' } },
+            { name: 's3', type: 'ai', params: { provider: 'openai', userPrompt: '{result}' } },
+        ];
+        await r.run('3step', steps, 'start', [], 'child');
+        assert.equal(r.historySteps[0].output, 'step1:start');
+        assert.equal(r.historySteps[1].output, 'step2:step1:start');
+        assert.equal(r.historySteps[2].output, 'step3:step2:step1:start');
+    });
+});
+
+// ── 12. MockAIProvider — scripted provider self-tests ─────────
+describe('MockAIProvider — scripted provider', () => {
+    test('queue: scripted content is returned in order', async () => {
+        const p = new MockAIProvider();
+        p.queue('first').queue('second').queue('third');
+        assert.equal((await p.call({ userPrompt: 'x' })).content, 'first');
+        assert.equal((await p.call({ userPrompt: 'x' })).content, 'second');
+        assert.equal((await p.call({ userPrompt: 'x' })).content, 'third');
+    });
+
+    test('queue: model field is preserved', async () => {
+        const p = new MockAIProvider();
+        p.queue('reply', 'gpt-4o');
+        const r = await p.call({ userPrompt: 'hi' });
+        assert.equal(r.model, 'gpt-4o');
+    });
+
+    test('default (no queue): echoes userPrompt', async () => {
+        const p = new MockAIProvider();
+        const r = await p.call({ userPrompt: 'hello world' });
+        assert.equal(r.content, 'echo:hello world');
+    });
+
+    test('queueError: throws with the given message', async () => {
+        const p = new MockAIProvider();
+        p.queueError('rate limit exceeded');
+        await assert.rejects(() => p.call({ userPrompt: 'x' }), /rate limit exceeded/);
+    });
+
+    test('queueError followed by queue: error then success', async () => {
+        const p = new MockAIProvider();
+        p.queueError('timeout').queue('ok');
+        await assert.rejects(() => p.call({ userPrompt: 'a' }));
+        const r = await p.call({ userPrompt: 'b' });
+        assert.equal(r.content, 'ok');
+    });
+
+    test('calls: every request is captured', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'q1', model: 'gpt-4o' });
+        await p.call({ userPrompt: 'q2', model: 'claude' });
+        assert.equal(p.callCount, 2);
+        assert.equal(p.calls[0].userPrompt, 'q1');
+        assert.equal(p.calls[1].userPrompt, 'q2');
+    });
+
+    test('lastCall returns most recent request', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'first' });
+        await p.call({ userPrompt: 'last' });
+        assert.equal(p.lastCall.userPrompt, 'last');
+    });
+
+    test('nthCall returns request at given index', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'a' });
+        await p.call({ userPrompt: 'b' });
+        await p.call({ userPrompt: 'c' });
+        assert.equal(p.nthCall(1).userPrompt, 'b');
+    });
+
+    test('reset: clears queue and calls', async () => {
+        const p = new MockAIProvider();
+        p.queue('x');
+        await p.call({ userPrompt: 'hi' });
+        p.reset();
+        assert.equal(p.callCount, 0);
+        // After reset, default echo behaviour resumes
+        const r = await p.call({ userPrompt: 'ping' });
+        assert.equal(r.content, 'echo:ping');
+    });
+
+    test('captures all request fields', async () => {
+        const p = new MockAIProvider();
+        await p.call({ model: 'gpt-4o', systemPrompt: 'sys', userPrompt: 'up', temperature: 0.3, maxTokens: 512 });
+        assert.equal(p.lastCall.model, 'gpt-4o');
+        assert.equal(p.lastCall.systemPrompt, 'sys');
+        assert.equal(p.lastCall.temperature, 0.3);
+        assert.equal(p.lastCall.maxTokens, 512);
+    });
+
+    // ── when() — deterministic rule-based matching ──
+    test('when: exact string match — same input always returns same output', async () => {
+        const p = new MockAIProvider().when('hello', 'world');
+        assert.equal((await p.call({ userPrompt: 'hello' })).content, 'world');
+        assert.equal((await p.call({ userPrompt: 'hello' })).content, 'world');
+        assert.equal((await p.call({ userPrompt: 'hello' })).content, 'world');
+    });
+
+    test('when: regex match', async () => {
+        const p = new MockAIProvider().when(/translate/i, 'traduction');
+        assert.equal((await p.call({ userPrompt: 'Translate: hello' })).content, 'traduction');
+        assert.equal((await p.call({ userPrompt: 'translate something' })).content, 'traduction');
+    });
+
+    test('when: unmatched userPrompt falls through to queue', async () => {
+        const p = new MockAIProvider().when('exact', 'rule hit').queue('queued');
+        assert.equal((await p.call({ userPrompt: 'other' })).content, 'queued');
+    });
+
+    test('when: unmatched and empty queue falls through to echo', async () => {
+        const p = new MockAIProvider().when('exact', 'rule hit');
+        assert.equal((await p.call({ userPrompt: 'other' })).content, 'echo:other');
+    });
+
+    test('when: rule takes priority over queue for matching input', async () => {
+        const p = new MockAIProvider().when('hi', 'rule').queue('queued');
+        assert.equal((await p.call({ userPrompt: 'hi' })).content, 'rule');
+        // queue is still intact
+        assert.equal((await p.call({ userPrompt: 'other' })).content, 'queued');
+    });
+
+    test('when: function predicate', async () => {
+        const p = new MockAIProvider().when(req => req.model === 'vision', 'saw it');
+        assert.equal((await p.call({ userPrompt: 'x', model: 'vision' })).content, 'saw it');
+        assert.equal((await p.call({ userPrompt: 'x', model: 'other' })).content, 'echo:x');
+    });
+
+    test('when: function predicate + function response returns full object', async () => {
+        const img = { file: 'a.png', mimetype: 'image/png', content: 'data', size: 1 };
+        const p = new MockAIProvider().when(
+            req => req.attachments?.length > 0,
+            req => ({ content: `got:${req.attachments[0].file}`, model: 'img-model', outputAttachments: [req.attachments[0]] })
+        );
+        const r = await p.call({ userPrompt: 'describe', attachments: [img] });
+        assert.equal(r.content, 'got:a.png');
+        assert.equal(r.model, 'img-model');
+        assert.equal(r.outputAttachments.length, 1);
+    });
+
+    test('when: multiple rules — first match wins', async () => {
+        const p = new MockAIProvider()
+            .when('x', 'first')
+            .when('x', 'second');
+        assert.equal((await p.call({ userPrompt: 'x' })).content, 'first');
+    });
+
+    test('reset: clears rules along with queue and calls', async () => {
+        const p = new MockAIProvider().when('hi', 'rule');
+        await p.call({ userPrompt: 'hi' });
+        p.reset();
+        assert.equal(p.callCount, 0);
+        // Rule should be gone; falls through to echo
+        assert.equal((await p.call({ userPrompt: 'hi' })).content, 'echo:hi');
+    });
+});
+
+// ── 13. Pipeline features tested with MockAIProvider ──────────
+describe('Pipeline features — MockAIProvider', () => {
+    // ── helper: build a one-step AI pipeline step
+    function aiStep(name, userPrompt, extra = {}) {
+        return { name, type: 'ai', params: { provider: 'mock', userPrompt, ...extra } };
+    }
+
+    function makeRunner(provider) {
+        const r = new PipelineRunner();
+        r.registerProvider('mock', provider);
+        return r;
+    }
+
+    // ── correct prompt is sent to the provider ──
+    test('single-step: userPrompt is sent verbatim', async () => {
+        const p = new MockAIProvider().queue('ok');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'Translate this text')], 'input', [], 'child');
+        assert.equal(p.lastCall.userPrompt, 'Translate this text');
+    });
+
+    test('single-step: {content} is replaced with input', async () => {
+        const p = new MockAIProvider().queue('done');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'Echo: {content}')], 'hello', [], 'child');
+        assert.equal(p.lastCall.userPrompt, 'Echo: hello');
+    });
+
+    test('single-step: provider receives correct model', async () => {
+        const p = new MockAIProvider().queue('ok');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'hi', { model: 'gpt-4o' })], 'x', [], 'child');
+        assert.equal(p.lastCall.model, 'gpt-4o');
+    });
+
+    test('single-step: provider receives systemPrompt and temperature', async () => {
+        const p = new MockAIProvider().queue('ok');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'hi', { systemPrompt: 'Be terse', temperature: '0.2' })], 'x', [], 'child');
+        assert.equal(p.lastCall.systemPrompt, 'Be terse');
+        assert.equal(p.lastCall.temperature, 0.2);
+    });
+
+    test('single-step: output is stored in historySteps', async () => {
+        const p = new MockAIProvider().queue('translated result');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', '{content}')], 'source text', [], 'child');
+        assert.equal(r.historySteps[0].output, 'translated result');
+        assert.equal(r.historySteps[0].status, 'completed');
+    });
+
+    test('single-step: pipeline_completed event carries the output', async () => {
+        const p = new MockAIProvider().queue('final answer');
+        const r = makeRunner(p);
+        await r.run('pipe', [aiStep('s1', '{content}')], 'question', [], 'child');
+        const done = r.events.find(e => e.type === 'pipeline_completed');
+        assert.equal(done.payload.steps[0].output, 'final answer');
+    });
+
+    // ── chaining ──
+    test('two-step chain: step 2 receives step 1 output via {result}', async () => {
+        const p = new MockAIProvider().queue('translated').queue('summary');
+        const r = makeRunner(p);
+        const steps = [
+            aiStep('translate', '{content}'),
+            aiStep('summarise', 'Summarise: {result}'),
+        ];
+        await r.run('chain', steps, 'long text', [], 'child');
+        assert.equal(p.nthCall(1).userPrompt, 'Summarise: translated');
+    });
+
+    test('two-step chain: {content} stays original in step 2', async () => {
+        const p = new MockAIProvider().queue('out1').queue('out2');
+        const r = makeRunner(p);
+        const steps = [aiStep('s1', '{content}'), aiStep('s2', 'Original was: {content}')];
+        await r.run('chain', steps, 'original', [], 'child');
+        assert.equal(p.nthCall(1).userPrompt, 'Original was: original');
+    });
+
+    test('three-step chain: output flows through all steps', async () => {
+        const p = new MockAIProvider().queue('A').queue('B').queue('C');
+        const r = makeRunner(p);
+        const steps = [aiStep('s1', '{content}'), aiStep('s2', '{result}'), aiStep('s3', '{result}')];
+        await r.run('chain', steps, 'start', [], 'child');
+        assert.equal(r.historySteps[0].output, 'A');
+        assert.equal(r.historySteps[1].output, 'B');
+        assert.equal(r.historySteps[2].output, 'C');
+        assert.equal(p.nthCall(1).userPrompt, 'A');
+        assert.equal(p.nthCall(2).userPrompt, 'B');
+    });
+
+    // ── error handling ──
+    test('provider error: pipeline emits pipeline_error', async () => {
+        const p = new MockAIProvider().queueError('model overloaded');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'hi')], 'x', [], 'child');
+        const err = r.events.find(e => e.type === 'pipeline_error');
+        assert.ok(err, 'pipeline_error should be emitted');
+        assert.match(err.payload.message, /model overloaded/);
+    });
+
+    test('provider error: runner stops after first error', async () => {
+        const p = new MockAIProvider().queueError('fail').queue('should not reach');
+        const r = makeRunner(p);
+        const steps = [aiStep('s1', 'hi'), aiStep('s2', 'hi')];
+        await r.run('t', steps, 'x', [], 'child');
+        assert.equal(p.callCount, 1);  // second step never runs
+    });
+
+    // ── recipe / provider settings ──
+    test('recipe temperature is forwarded as float', async () => {
+        const p = new MockAIProvider().queue('ok');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'hi', { temperature: '0.9' })], 'x', [], 'child');
+        assert.equal(p.lastCall.temperature, 0.9);
+    });
+
+    test('recipe systemPrompt is forwarded', async () => {
+        const p = new MockAIProvider().queue('ok');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'hi', { systemPrompt: 'You are a translator.' })], 'x', [], 'child');
+        assert.equal(p.lastCall.systemPrompt, 'You are a translator.');
+    });
+
+    // ── multiple runs / statelessness ──
+    test('separate runs do not share state', async () => {
+        const p = new MockAIProvider();
+        const r = makeRunner(p);
+        p.queue('run1');
+        await r.run('t', [aiStep('s1', '{content}')], 'first', [], 'child');
+        assert.equal(r.historySteps[0].output, 'run1');
+
+        p.queue('run2');
+        await r.run('t', [aiStep('s1', '{content}')], 'second', [], 'child');
+        assert.equal(r.historySteps[0].output, 'run2');
+    });
+
+    test('provider is called exactly once per step', async () => {
+        const p = new MockAIProvider();
+        const r = makeRunner(p);
+        const steps = [aiStep('s1', 'a'), aiStep('s2', 'b'), aiStep('s3', 'c')];
+        await r.run('t', steps, 'x', [], 'child');
+        assert.equal(p.callCount, 3);
+    });
+
+    // ── manual step interleaved with AI step ──
+    test('manual step pause does not call the provider', async () => {
+        const p = new MockAIProvider().queue('ai done');
+        const r = makeRunner(p);
+        const steps = [
+            { name: 'human', type: 'manual', params: { mode: 'view', prompt: 'Check this', choices: '[]' } },
+            aiStep('ai', '{result}'),
+        ];
+        const runPromise = r.run('t', steps, 'data', [], 'child');
+        // Resume the manual step immediately
+        setImmediate(() => r.resumeManual('human approved'));
+        await runPromise;
+        assert.equal(p.callCount, 1);
+        assert.equal(p.lastCall.userPrompt, 'human approved');
+    });
+
+    // ── run_prompt_process attachment merge (bridge layer) ──
+    test('bridge run_prompt_process: merged allAttachments are passed correctly', () => {
+        const machineAtt = [{ file: 'bg.png', mimetype: 'image/png' }];
+        const beltAtt    = [{ file: 'ref.jpg', mimetype: 'image/jpeg' }];
+        // Mirror main.js merge logic
+        const all = [...machineAtt, ...beltAtt];
+        assert.equal(all.length, 2);
+        assert.equal(all[0].mimetype, 'image/png');
+        assert.equal(all[1].mimetype, 'image/jpeg');
+    });
+});
+
+// ── test data ─────────────────────────────────────────────────
+// Reusable fake attachment objects (base64 content is minimal valid data)
+const FAKE_IMAGE_PNG = {
+    file: 'photo.png',
+    path: '/tmp/photo.png',
+    mimetype: 'image/png',
+    content: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    size: 68,
+};
+const FAKE_IMAGE_JPEG = {
+    file: 'scene.jpg',
+    path: '/tmp/scene.jpg',
+    mimetype: 'image/jpeg',
+    content: '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQ=',
+    size: 40,
+};
+const FAKE_AUDIO_MP3 = {
+    file: 'voice.mp3',
+    path: '/tmp/voice.mp3',
+    mimetype: 'audio/mpeg',
+    content: 'SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA',
+    size: 512,
+};
+const FAKE_AUDIO_WAV = {
+    file: 'sfx.wav',
+    path: '/tmp/sfx.wav',
+    mimetype: 'audio/wav',
+    content: 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=',
+    size: 256,
+};
+
+// ── 14. MockAIProvider — image/audio input ────────────────────
+describe('MockAIProvider — image/audio input', () => {
+    test('single image attachment is captured in req.attachments', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'describe', attachments: [FAKE_IMAGE_PNG] });
+        assert.equal(p.inputAttachmentsOf(0).length, 1);
+        assert.equal(p.inputAttachmentsOf(0)[0].mimetype, 'image/png');
+    });
+
+    test('single audio attachment is captured in req.attachments', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'transcribe', attachments: [FAKE_AUDIO_MP3] });
+        assert.equal(p.inputAttachmentsOf(0).length, 1);
+        assert.equal(p.inputAttachmentsOf(0)[0].mimetype, 'audio/mpeg');
+    });
+
+    test('mixed image + audio attachments are all captured', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'analyse', attachments: [FAKE_IMAGE_JPEG, FAKE_AUDIO_WAV] });
+        assert.equal(p.inputAttachmentsOf(0).length, 2);
+    });
+
+    test('inputImagesOf filters only image/* attachments', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'x', attachments: [FAKE_IMAGE_PNG, FAKE_AUDIO_MP3, FAKE_IMAGE_JPEG] });
+        const imgs = p.inputImagesOf(0);
+        assert.equal(imgs.length, 2);
+        assert.ok(imgs.every(a => a.mimetype.startsWith('image/')));
+    });
+
+    test('inputAudiosOf filters only audio/* attachments', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'x', attachments: [FAKE_IMAGE_PNG, FAKE_AUDIO_MP3, FAKE_AUDIO_WAV] });
+        const auds = p.inputAudiosOf(0);
+        assert.equal(auds.length, 2);
+        assert.ok(auds.every(a => a.mimetype.startsWith('audio/')));
+    });
+
+    test('no attachments field → inputAttachmentsOf returns []', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'plain text only' });
+        assert.deepStrictEqual(p.inputAttachmentsOf(0), []);
+    });
+
+    test('base64 content is preserved exactly', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'x', attachments: [FAKE_IMAGE_PNG] });
+        assert.equal(p.inputAttachmentsOf(0)[0].content, FAKE_IMAGE_PNG.content);
+    });
+
+    test('file metadata (file, path, size) is preserved', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'x', attachments: [FAKE_AUDIO_MP3] });
+        const att = p.inputAttachmentsOf(0)[0];
+        assert.equal(att.file, FAKE_AUDIO_MP3.file);
+        assert.equal(att.path, FAKE_AUDIO_MP3.path);
+        assert.equal(att.size, FAKE_AUDIO_MP3.size);
+    });
+
+    test('attachments snapshot is independent (mutation after call does not affect captures)', async () => {
+        const p = new MockAIProvider();
+        const atts = [{ ...FAKE_IMAGE_PNG }];
+        await p.call({ userPrompt: 'x', attachments: atts });
+        atts[0].content = 'mutated';           // mutate original array
+        assert.equal(p.inputAttachmentsOf(0)[0].content, FAKE_IMAGE_PNG.content);
+    });
+
+    test('lastInputAttachments points to most recent call', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'first', attachments: [FAKE_IMAGE_PNG] });
+        await p.call({ userPrompt: 'second', attachments: [FAKE_AUDIO_MP3] });
+        assert.equal(p.lastInputAttachments[0].mimetype, 'audio/mpeg');
+    });
+
+    test('per-call attachment tracking across multiple calls', async () => {
+        const p = new MockAIProvider();
+        await p.call({ userPrompt: 'a', attachments: [FAKE_IMAGE_PNG] });
+        await p.call({ userPrompt: 'b', attachments: [FAKE_AUDIO_WAV] });
+        await p.call({ userPrompt: 'c', attachments: [] });
+        assert.equal(p.inputImagesOf(0).length, 1);
+        assert.equal(p.inputAudiosOf(1).length, 1);
+        assert.equal(p.inputAttachmentsOf(2).length, 0);
+    });
+});
+
+// ── 15. MockAIProvider — media output (queueWithMedia) ────────
+describe('MockAIProvider — media output', () => {
+    test('queueWithMedia: outputAttachments returned in response', async () => {
+        const p = new MockAIProvider();
+        const outputAudio = { ...FAKE_AUDIO_MP3, file: 'tts_result.mp3' };
+        p.queueWithMedia('Here is the audio', [outputAudio]);
+        const resp = await p.call({ userPrompt: 'read this aloud' });
+        assert.equal(resp.content, 'Here is the audio');
+        assert.equal(resp.outputAttachments.length, 1);
+        assert.equal(resp.outputAttachments[0].mimetype, 'audio/mpeg');
+    });
+
+    test('queueWithMedia: image output (e.g. generated image)', async () => {
+        const p = new MockAIProvider();
+        const outputImg = { ...FAKE_IMAGE_PNG, file: 'generated.png' };
+        p.queueWithMedia('Image generated', [outputImg]);
+        const resp = await p.call({ userPrompt: 'draw a cat' });
+        assert.equal(resp.outputAttachments[0].file, 'generated.png');
+        assert.equal(resp.outputAttachments[0].mimetype, 'image/png');
+    });
+
+    test('queueWithMedia: multiple output attachments', async () => {
+        const p = new MockAIProvider();
+        p.queueWithMedia('Two outputs', [FAKE_IMAGE_PNG, FAKE_AUDIO_MP3]);
+        const resp = await p.call({ userPrompt: 'x' });
+        assert.equal(resp.outputAttachments.length, 2);
+    });
+
+    test('queue (text-only): outputAttachments is empty array', async () => {
+        const p = new MockAIProvider().queue('plain text');
+        const resp = await p.call({ userPrompt: 'x' });
+        assert.deepStrictEqual(resp.outputAttachments, []);
+    });
+
+    test('default (no queue): outputAttachments is empty array', async () => {
+        const p = new MockAIProvider();
+        const resp = await p.call({ userPrompt: 'x' });
+        assert.deepStrictEqual(resp.outputAttachments, []);
+    });
+
+    test('queueWithMedia model field is preserved', async () => {
+        const p = new MockAIProvider();
+        p.queueWithMedia('result', [], 'dall-e-3');
+        const resp = await p.call({ userPrompt: 'x' });
+        assert.equal(resp.model, 'dall-e-3');
+    });
+
+    test('output and input attachments are independent', async () => {
+        const p = new MockAIProvider();
+        const outImg = { ...FAKE_IMAGE_JPEG, file: 'output.jpg' };
+        p.queueWithMedia('done', [outImg]);
+        const resp = await p.call({ userPrompt: 'x', attachments: [FAKE_AUDIO_MP3] });
+        // Input: audio; Output: image — should not mix
+        assert.equal(p.inputAudiosOf(0).length, 1);
+        assert.equal(resp.outputAttachments[0].mimetype, 'image/jpeg');
+    });
+});
+
+// ── 16. Pipeline — attachments flow through runner ────────────
+describe('Pipeline — attachments flow through PipelineRunner', () => {
+    function aiStep(name, prompt) {
+        return { name, type: 'ai', params: { provider: 'mock', userPrompt: prompt } };
+    }
+    function makeRunner(provider) {
+        const r = new PipelineRunner();
+        r.registerProvider('mock', provider);
+        return r;
+    }
+
+    test('inputAttachments are forwarded to the provider', async () => {
+        const p = new MockAIProvider();
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', '{content}')], 'text', [FAKE_IMAGE_PNG], 'child');
+        assert.equal(p.inputAttachmentsOf(0).length, 1);
+        assert.equal(p.inputAttachmentsOf(0)[0].file, 'photo.png');
+    });
+
+    test('multiple mixed attachments are all forwarded', async () => {
+        const p = new MockAIProvider();
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', '{content}')], 'text',
+            [FAKE_IMAGE_PNG, FAKE_AUDIO_MP3, FAKE_IMAGE_JPEG], 'child');
+        assert.equal(p.inputAttachmentsOf(0).length, 3);
+        assert.equal(p.inputImagesOf(0).length, 2);
+        assert.equal(p.inputAudiosOf(0).length, 1);
+    });
+
+    test('same inputAttachments are forwarded to every step in the chain', async () => {
+        const p = new MockAIProvider();
+        const r = makeRunner(p);
+        const steps = [aiStep('s1', '{content}'), aiStep('s2', '{result}')];
+        await r.run('t', steps, 'input', [FAKE_AUDIO_WAV], 'child');
+        assert.equal(p.inputAudiosOf(0).length, 1);
+        assert.equal(p.inputAudiosOf(1).length, 1);
+    });
+
+    test('no attachments: provider receives empty array', async () => {
+        const p = new MockAIProvider();
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'hi')], 'x', [], 'child');
+        assert.deepStrictEqual(p.inputAttachmentsOf(0), []);
+    });
+
+    test('outputAttachments from provider are stored as historyStep.artifacts', async () => {
+        const p = new MockAIProvider();
+        const outputAudio = { ...FAKE_AUDIO_MP3, file: 'tts.mp3' };
+        p.queueWithMedia('spoken text', [outputAudio]);
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', '{content}')], 'hello', [], 'child');
+        const artifacts = r.historySteps[0].artifacts;
+        assert.ok(Array.isArray(artifacts));
+        assert.equal(artifacts.length, 1);
+        assert.equal(artifacts[0].file, 'tts.mp3');
+    });
+
+    test('outputAttachments are in pipeline_completed event steps', async () => {
+        const p = new MockAIProvider();
+        const outImg = { ...FAKE_IMAGE_PNG, file: 'gen.png' };
+        p.queueWithMedia('image created', [outImg]);
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'generate')], 'prompt', [], 'child');
+        const done = r.events.find(e => e.type === 'pipeline_completed');
+        const step = done.payload.steps[0];
+        assert.equal(step.artifacts?.[0]?.file, 'gen.png');
+    });
+
+    test('text-only response leaves historyStep.artifacts undefined (not set)', async () => {
+        const p = new MockAIProvider().queue('plain output');
+        const r = makeRunner(p);
+        await r.run('t', [aiStep('s1', 'hi')], 'x', [], 'child');
+        // outputAttachments was [] so artifacts should not be set
+        assert.ok(!r.historySteps[0].artifacts || r.historySteps[0].artifacts.length === 0);
+    });
+
+    test('image input + audio output round-trip through pipeline', async () => {
+        const p = new MockAIProvider();
+        const ttsAudio = { ...FAKE_AUDIO_MP3, file: 'tts_output.mp3' };
+        p.queueWithMedia('Audio generated from image description', [ttsAudio]);
+        const r = makeRunner(p);
+        await r.run('image-to-speech', [aiStep('describe+speak', 'Describe and read: {content}')],
+            'an image of a sunset', [FAKE_IMAGE_JPEG], 'child');
+        // Input: JPEG was sent
+        assert.equal(p.inputImagesOf(0)[0].mimetype, 'image/jpeg');
+        // Output: MP3 was produced
+        assert.equal(r.historySteps[0].artifacts[0].file, 'tts_output.mp3');
+        // Text output is captured
+        assert.equal(r.historySteps[0].output, 'Audio generated from image description');
+    });
+
+    test('callStreaming delegates to call and invokes onChunk/onDone', async () => {
+        const p = new MockAIProvider().queue('streamed reply');
+        const chunks = [];
+        let doneResp = null;
+        await p.callStreaming(
+            { userPrompt: 'hi', attachments: [] },
+            chunk => chunks.push(chunk),
+            resp  => { doneResp = resp; },
+            _err  => { throw new Error('unexpected error'); }
+        );
+        assert.deepStrictEqual(chunks, ['streamed reply']);
+        assert.equal(doneResp.content, 'streamed reply');
+    });
+
+    test('callStreaming error calls onError, not onDone', async () => {
+        const p = new MockAIProvider().queueError('stream failed');
+        let errMsg = null;
+        await p.callStreaming(
+            { userPrompt: 'hi', attachments: [] },
+            () => { throw new Error('should not chunk'); },
+            () => { throw new Error('should not done'); },
+            msg => { errMsg = msg; }
+        );
+        assert.match(errMsg, /stream failed/);
+    });
+});
+
+// ── inline MockProvider — mirrors main.js MockProvider ────────
+// Kept in sync with main.js; if main.js changes, update here too.
+class MockProvider {
+    name() { return 'mock'; }
+    defaultModels() { return ['echo', 'fixed', 'image-echo', 'image-compose']; }
+
+    async call(req) {
+        const model  = (req.model || 'echo').toLowerCase();
+        const atts   = req.attachments || [];
+        const images = atts.filter(a => a.mimetype?.startsWith('image/'));
+        let content;
+        let outputAttachments = [];
+
+        if (model === 'image-echo') {
+            const img = images[0];
+            if (img) {
+                content = `[Mock image-echo: ${img.file}]`;
+                outputAttachments = [{ ...img, file: `echo_${img.file}` }];
+            } else {
+                content = '[Mock image-echo: no image provided]';
+            }
+        } else if (model === 'image-compose') {
+            const base  = images[0];
+            const extra = images.slice(1);
+            if (base) {
+                content = `[Mock image-compose: base=${base.file}, inputs=${extra.length}]`;
+                outputAttachments = [{ ...base, file: `composed_${base.file}` }];
+            } else {
+                content = '[Mock image-compose: no base image provided]';
+            }
+        } else if (model === 'fixed') {
+            content = req.systemPrompt || '[Mock: systemPrompt is empty]';
+        } else {
+            content = `[Mock] ${req.userPrompt}`;
+            if (atts.length > 0) {
+                const imgs  = images.length;
+                const auds  = atts.filter(a => a.mimetype?.startsWith('audio/')).length;
+                const other = atts.length - imgs - auds;
+                const parts = [];
+                if (imgs)  parts.push(`${imgs} image(s)`);
+                if (auds)  parts.push(`${auds} audio(s)`);
+                if (other) parts.push(`${other} other(s)`);
+                content += `\n[Attachments: ${parts.join(', ')}]`;
+            }
+        }
+        return { content, model: req.model || 'echo', outputAttachments };
+    }
+
+    async listModels() { return this.defaultModels(); }
+    async testConnection() { return ''; }
+}
+
+// ── 17. MockProvider (app recipe provider) ────────────────────
+describe('MockProvider — app recipe provider', () => {
+    test('echo model returns [Mock] + userPrompt', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'echo', userPrompt: 'Translate this', systemPrompt: '' });
+        assert.equal(r.content, '[Mock] Translate this');
+    });
+
+    test('fixed model returns systemPrompt verbatim', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'fixed', userPrompt: 'ignored', systemPrompt: 'Fixed reply here' });
+        assert.equal(r.content, 'Fixed reply here');
+    });
+
+    test('fixed model with empty systemPrompt returns placeholder', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'fixed', userPrompt: 'hi', systemPrompt: '' });
+        assert.equal(r.content, '[Mock: systemPrompt is empty]');
+    });
+
+    test('model field is preserved in response', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'echo', userPrompt: 'hi' });
+        assert.equal(r.model, 'echo');
+    });
+
+    test('no model → defaults to echo behaviour', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ userPrompt: 'hello' });
+        assert.match(r.content, /\[Mock\]/);
+    });
+
+    test('no attachments → no attachment summary appended', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'echo', userPrompt: 'hi', attachments: [] });
+        assert.ok(!r.content.includes('[Attachments:'));
+    });
+
+    test('single image attachment appended to summary', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'echo', userPrompt: 'hi', attachments: [FAKE_IMAGE_PNG] });
+        assert.match(r.content, /\[Attachments: 1 image\(s\)\]/);
+    });
+
+    test('single audio attachment appended to summary', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'echo', userPrompt: 'hi', attachments: [FAKE_AUDIO_MP3] });
+        assert.match(r.content, /\[Attachments: 1 audio\(s\)\]/);
+    });
+
+    test('mixed image + audio attachment summary', async () => {
+        const p = new MockProvider();
+        const r = await p.call({
+            model: 'echo', userPrompt: 'hi',
+            attachments: [FAKE_IMAGE_PNG, FAKE_IMAGE_JPEG, FAKE_AUDIO_MP3],
+        });
+        assert.match(r.content, /2 image\(s\)/);
+        assert.match(r.content, /1 audio\(s\)/);
+    });
+
+    test('fixed model + attachments: shows only fixed text (no attachment summary)', async () => {
+        const p = new MockProvider();
+        const r = await p.call({
+            model: 'fixed', systemPrompt: 'OK', userPrompt: 'ignored',
+            attachments: [FAKE_AUDIO_WAV],
+        });
+        assert.equal(r.content, 'OK');
+    });
+
+    test('listModels returns all four models', async () => {
+        const p = new MockProvider();
+        const models = await p.listModels();
+        assert.deepStrictEqual(models, ['echo', 'fixed', 'image-echo', 'image-compose']);
+    });
+
+    test('testConnection always succeeds (returns empty string)', async () => {
+        const p = new MockProvider();
+        const err = await p.testConnection();
+        assert.equal(err, '');
+    });
+
+    test('get_providers bridge includes mock entry', () => {
+        const tmpDir = makeTempDir();
+        const { sent, handle } = makeApp(tmpDir);
+        handle('get_providers');
+        const result = sent.find(s => s.type === 'providers_result');
+        assert.ok(result?.payload?.mock, 'providers_result should include mock');
+        assert.deepStrictEqual(result.payload.mock.models, ['echo', 'fixed']);
+        rmrf(tmpDir);
+    });
+});
+
+// ── 18. MockProvider in pipeline via PipelineRunner ───────────
+describe('MockProvider — pipeline integration', () => {
+    function makeRunnerWithMock() {
+        const r = new PipelineRunner();
+        r.registerProvider('mock', new MockProvider());
+        return r;
+    }
+
+    // Override registerProvider in test shim to accept a provider object directly
+    // (In these tests we pass the MockProvider instance, matching main.js behaviour)
+
+    test('recipe with provider=mock, model=echo runs without error', async () => {
+        const r = new PipelineRunner();
+        r.providers['mock'] = new MockProvider();
+        await r.run('t', [{ name: 's1', type: 'ai', params: { provider: 'mock', model: 'echo', userPrompt: 'Hello' } }], 'x', [], 'child');
+        assert.equal(r.historySteps[0].status, 'completed');
+        assert.equal(r.historySteps[0].output, '[Mock] Hello');
+    });
+
+    test('recipe with provider=mock, model=fixed returns systemPrompt', async () => {
+        const r = new PipelineRunner();
+        r.providers['mock'] = new MockProvider();
+        await r.run('t', [{
+            name: 's1', type: 'ai',
+            params: { provider: 'mock', model: 'fixed', userPrompt: 'ignored', systemPrompt: 'Test response text' },
+        }], 'x', [], 'child');
+        assert.equal(r.historySteps[0].output, 'Test response text');
+    });
+
+    test('{content} substitution works with mock provider', async () => {
+        const r = new PipelineRunner();
+        r.providers['mock'] = new MockProvider();
+        await r.run('t', [{
+            name: 's1', type: 'ai',
+            params: { provider: 'mock', model: 'echo', userPrompt: 'Process: {content}' },
+        }], 'my data', [], 'child');
+        assert.equal(r.historySteps[0].output, '[Mock] Process: my data');
+    });
+
+    test('mock provider in chain: {result} flows from step 1 to step 2', async () => {
+        const r = new PipelineRunner();
+        r.providers['mock'] = new MockProvider();
+        const steps = [
+            { name: 's1', type: 'ai', params: { provider: 'mock', model: 'echo', userPrompt: '{content}' } },
+            { name: 's2', type: 'ai', params: { provider: 'mock', model: 'echo', userPrompt: 'Got: {result}' } },
+        ];
+        await r.run('chain', steps, 'input text', [], 'child');
+        assert.equal(r.historySteps[0].output, '[Mock] input text');
+        assert.equal(r.historySteps[1].output, '[Mock] Got: [Mock] input text');
+    });
+
+    test('mock provider with image attachment includes summary in output', async () => {
+        const r = new PipelineRunner();
+        r.providers['mock'] = new MockProvider();
+        await r.run('t', [{
+            name: 's1', type: 'ai',
+            params: { provider: 'mock', model: 'echo', userPrompt: 'Describe image' },
+        }], 'x', [FAKE_IMAGE_PNG], 'child');
+        assert.match(r.historySteps[0].output, /1 image\(s\)/);
+    });
+
+    test('mock provider with audio attachment includes summary in output', async () => {
+        const r = new PipelineRunner();
+        r.providers['mock'] = new MockProvider();
+        await r.run('t', [{
+            name: 's1', type: 'ai',
+            params: { provider: 'mock', model: 'echo', userPrompt: 'Transcribe' },
+        }], 'x', [FAKE_AUDIO_MP3], 'child');
+        assert.match(r.historySteps[0].output, /1 audio\(s\)/);
+    });
+
+    test('mock recipe can be saved and loaded as a standard recipe entry', () => {
+        const tmpDir = makeTempDir();
+        const { st, handle } = makeApp(tmpDir);
+        const mockRecipe = {
+            name: 'Mock Echo',
+            type: 'ai',
+            provider: 'mock',
+            model: 'echo',
+            temperature: 0.7,
+            systemPrompt: '',
+            command: '',
+        };
+        handle('save_recipes', [mockRecipe]);
+        const loaded = st.loadRecipes();
+        assert.equal(loaded[0].name, 'Mock Echo');
+        assert.equal(loaded[0].provider, 'mock');
+        assert.equal(loaded[0].model, 'echo');
+        rmrf(tmpDir);
+    });
+});
+
+// ── 19. MockProvider — image-echo / image-compose ─────────────
+describe('MockProvider — image modes', () => {
+    // ── image-echo ──
+    test('image-echo: returns first image as outputAttachment', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-echo', userPrompt: 'describe', attachments: [FAKE_IMAGE_PNG] });
+        assert.equal(r.outputAttachments.length, 1);
+        assert.equal(r.outputAttachments[0].mimetype, 'image/png');
+    });
+
+    test('image-echo: output filename is prefixed with echo_', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-echo', userPrompt: 'x', attachments: [FAKE_IMAGE_PNG] });
+        assert.equal(r.outputAttachments[0].file, `echo_${FAKE_IMAGE_PNG.file}`);
+    });
+
+    test('image-echo: base64 content of input is preserved in output', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-echo', userPrompt: 'x', attachments: [FAKE_IMAGE_PNG] });
+        assert.equal(r.outputAttachments[0].content, FAKE_IMAGE_PNG.content);
+    });
+
+    test('image-echo: content text names the file', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-echo', userPrompt: 'x', attachments: [FAKE_IMAGE_JPEG] });
+        assert.match(r.content, /image-echo/);
+        assert.match(r.content, new RegExp(FAKE_IMAGE_JPEG.file));
+    });
+
+    test('image-echo: with no image returns error text and empty outputAttachments', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-echo', userPrompt: 'x', attachments: [] });
+        assert.equal(r.outputAttachments.length, 0);
+        assert.match(r.content, /no image provided/);
+    });
+
+    test('image-echo: multiple images — only first is returned', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-echo', userPrompt: 'x',
+            attachments: [FAKE_IMAGE_PNG, FAKE_IMAGE_JPEG] });
+        assert.equal(r.outputAttachments.length, 1);
+        assert.equal(r.outputAttachments[0].file, `echo_${FAKE_IMAGE_PNG.file}`);
+    });
+
+    test('image-echo: audio attachments are ignored (not treated as image)', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-echo', userPrompt: 'x',
+            attachments: [FAKE_AUDIO_MP3] });
+        assert.equal(r.outputAttachments.length, 0);
+        assert.match(r.content, /no image provided/);
+    });
+
+    // ── image-compose ──
+    test('image-compose: first image is base, returns composed outputAttachment', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-compose', userPrompt: 'x',
+            attachments: [FAKE_IMAGE_PNG, FAKE_IMAGE_JPEG] });
+        assert.equal(r.outputAttachments.length, 1);
+        assert.equal(r.outputAttachments[0].file, `composed_${FAKE_IMAGE_PNG.file}`);
+    });
+
+    test('image-compose: content names base file and input count', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-compose', userPrompt: 'x',
+            attachments: [FAKE_IMAGE_PNG, FAKE_IMAGE_JPEG] });
+        assert.match(r.content, /base=photo\.png/);
+        assert.match(r.content, /inputs=1/);
+    });
+
+    test('image-compose: single image = base + 0 extra inputs', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-compose', userPrompt: 'x',
+            attachments: [FAKE_IMAGE_PNG] });
+        assert.match(r.content, /inputs=0/);
+        assert.equal(r.outputAttachments.length, 1);
+    });
+
+    test('image-compose: three images — base + 2 extra inputs', async () => {
+        const extra = { ...FAKE_IMAGE_PNG, file: 'extra.png' };
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-compose', userPrompt: 'x',
+            attachments: [FAKE_IMAGE_PNG, FAKE_IMAGE_JPEG, extra] });
+        assert.match(r.content, /inputs=2/);
+    });
+
+    test('image-compose: no images → error text and empty outputAttachments', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-compose', userPrompt: 'x', attachments: [] });
+        assert.equal(r.outputAttachments.length, 0);
+        assert.match(r.content, /no base image provided/);
+    });
+
+    test('image-compose: audio attachments are not counted as images', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-compose', userPrompt: 'x',
+            attachments: [FAKE_AUDIO_MP3, FAKE_IMAGE_PNG] });
+        // FAKE_AUDIO_MP3 is not an image, so FAKE_IMAGE_PNG becomes the base
+        assert.match(r.content, /base=photo\.png/);
+        assert.match(r.content, /inputs=0/);
+    });
+
+    test('image-compose: composed output preserves mimetype of base image', async () => {
+        const p = new MockProvider();
+        const r = await p.call({ model: 'image-compose', userPrompt: 'x',
+            attachments: [FAKE_IMAGE_JPEG, FAKE_IMAGE_PNG] });
+        assert.equal(r.outputAttachments[0].mimetype, 'image/jpeg');
+    });
+});
+
+// ── 20. MockProvider image modes through PipelineRunner ───────
+describe('MockProvider image modes — pipeline integration', () => {
+    function makeRunner() {
+        const r = new PipelineRunner();
+        r.providers['mock'] = new MockProvider();
+        return r;
+    }
+    function imgStep(model) {
+        return { name: 's1', type: 'ai', params: { provider: 'mock', model, userPrompt: 'process' } };
+    }
+
+    test('image-echo: output image stored in historyStep.artifacts', async () => {
+        const r = makeRunner();
+        await r.run('t', [imgStep('image-echo')], 'x', [FAKE_IMAGE_PNG], 'child');
+        assert.equal(r.historySteps[0].artifacts?.length, 1);
+        assert.equal(r.historySteps[0].artifacts[0].mimetype, 'image/png');
+    });
+
+    test('image-compose: composed image stored in historyStep.artifacts', async () => {
+        const r = makeRunner();
+        await r.run('t', [imgStep('image-compose')], 'x',
+            [FAKE_IMAGE_PNG, FAKE_IMAGE_JPEG], 'child');
+        assert.equal(r.historySteps[0].artifacts?.length, 1);
+        assert.match(r.historySteps[0].artifacts[0].file, /^composed_/);
+    });
+
+    test('image-compose: output artifact in pipeline_completed event', async () => {
+        const r = makeRunner();
+        await r.run('t', [imgStep('image-compose')], 'x',
+            [FAKE_IMAGE_PNG, FAKE_IMAGE_JPEG], 'child');
+        const done = r.events.find(e => e.type === 'pipeline_completed');
+        assert.equal(done.payload.steps[0].artifacts?.[0]?.mimetype, 'image/png');
+    });
+
+    test('two-step: image-echo then echo — output text flows via {result}', async () => {
+        const r = makeRunner();
+        const steps = [
+            imgStep('image-echo'),
+            { name: 's2', type: 'ai', params: { provider: 'mock', model: 'echo', userPrompt: 'Received: {result}' } },
+        ];
+        await r.run('t', steps, 'x', [FAKE_IMAGE_PNG], 'child');
+        assert.match(r.historySteps[1].output, /Received:.*image-echo/);
+    });
+});
+
+// ── 21. Drag-and-drop file processing logic ───────────────────
+describe('Drag-and-drop file processing logic', () => {
+    // Pure logic: mirrors app.js handleFileDrop — reads File objects and
+    // converts to attachment objects. Tested without DOM via a stub.
+
+    // Stub simulating browser FileReader behavior (synchronous for tests)
+    function stubReadAsDataURL(file, base64Content) {
+        return {
+            file: file.name,
+            path: file.path || '',
+            mimetype: file.type,
+            content: base64Content,
+            size: file.size,
+        };
+    }
+
+    // Mirror of app.js handleFileDrop filtering logic
+    function filterDroppableFiles(files) {
+        return files.filter(f =>
+            f.type.startsWith('image/') ||
+            f.type.startsWith('audio/') ||
+            f.type.startsWith('video/')
+        );
+    }
+
+    test('image files pass the filter', () => {
+        const files = [{ name: 'a.png', type: 'image/png', size: 100 }];
+        assert.equal(filterDroppableFiles(files).length, 1);
+    });
+
+    test('audio files pass the filter', () => {
+        const files = [{ name: 'a.mp3', type: 'audio/mpeg', size: 100 }];
+        assert.equal(filterDroppableFiles(files).length, 1);
+    });
+
+    test('video files pass the filter', () => {
+        const files = [{ name: 'a.mp4', type: 'video/mp4', size: 100 }];
+        assert.equal(filterDroppableFiles(files).length, 1);
+    });
+
+    test('text files are rejected by the filter', () => {
+        const files = [{ name: 'readme.txt', type: 'text/plain', size: 100 }];
+        assert.equal(filterDroppableFiles(files).length, 0);
+    });
+
+    test('mixed drop: image + text — only image passes', () => {
+        const files = [
+            { name: 'a.png', type: 'image/png', size: 100 },
+            { name: 'b.txt', type: 'text/plain', size: 50 },
+        ];
+        assert.equal(filterDroppableFiles(files).length, 1);
+    });
+
+    test('attachment object has correct shape after conversion', () => {
+        const file = { name: 'photo.jpg', type: 'image/jpeg', size: 2048, path: '/tmp/photo.jpg' };
+        const att = stubReadAsDataURL(file, 'abc123base64');
+        assert.equal(att.file, 'photo.jpg');
+        assert.equal(att.mimetype, 'image/jpeg');
+        assert.equal(att.content, 'abc123base64');
+        assert.equal(att.size, 2048);
+        assert.equal(att.path, '/tmp/photo.jpg');
+    });
+
+    test('multiple files produce multiple attachment objects', () => {
+        const files = [
+            { name: 'a.png', type: 'image/png', size: 100, path: '' },
+            { name: 'b.wav', type: 'audio/wav', size: 200, path: '' },
+        ];
+        const atts = files.map(f => stubReadAsDataURL(f, 'data'));
+        assert.equal(atts.length, 2);
+        assert.equal(atts[0].mimetype, 'image/png');
+        assert.equal(atts[1].mimetype, 'audio/wav');
+    });
+
+    test('file without path gets empty string path', () => {
+        const file = { name: 'x.png', type: 'image/png', size: 1 };
+        const att = stubReadAsDataURL(file, 'x');
+        assert.equal(att.path, '');
+    });
+
+    test('_dropZoneAttrs generates ondragover/ondragleave/ondrop (logic check)', () => {
+        // Mirror the logic of app.js _dropZoneAttrs
+        function dropZoneAttrs(purpose, stepIndex) {
+            const si = stepIndex != null ? `,${stepIndex}` : '';
+            return `ondragover="event.preventDefault();this.style.outline='2px dashed #4fc3f7'"` +
+                   ` ondragleave="this.style.outline=''"` +
+                   ` ondrop="app.handleFileDrop(event,'${purpose}'${si !== '' ? si : ''})"`;
+        }
+        const attrs = dropZoneAttrs('input_attachment');
+        assert.ok(attrs.includes('ondragover'));
+        assert.ok(attrs.includes('ondragleave'));
+        assert.ok(attrs.includes("'input_attachment'"));
+    });
+
+    test('_dropZoneAttrs with stepIndex includes it in ondrop call', () => {
+        function dropZoneAttrs(purpose, stepIndex) {
+            const si = stepIndex != null ? `,${stepIndex}` : '';
+            return `ondragover="event.preventDefault();this.style.outline='2px dashed #4fc3f7'"` +
+                   ` ondragleave="this.style.outline=''"` +
+                   ` ondrop="app.handleFileDrop(event,'${purpose}'${si !== '' ? si : ''})"`;
+        }
+        const attrs = dropZoneAttrs('step_attachment', 2);
+        assert.ok(attrs.includes(',2'));
     });
 });

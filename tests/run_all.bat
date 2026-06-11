@@ -256,4 +256,12 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
+echo Running Mock AI Server Tests...
+..\bin\tests\Debug\test_mock_ai_server.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo Mock AI Server Tests FAILED
+    exit /b %ERRORLEVEL%
+)
+
+echo.
 echo === ALL TESTS PASSED ===

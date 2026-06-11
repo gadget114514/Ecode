@@ -122,6 +122,9 @@ const app = {
             case 'open_file_dialog_result':
                 this.onFileSelected(msg.payload);
                 break;
+            case 'file_dialog_result':
+                this.onMediaFileDialogResult(msg.payload);
+                break;
             case 'pipeline_completed':
                 this.onPipelineCompleted(msg.payload);
                 break;
@@ -1207,6 +1210,12 @@ const app = {
         const recipes = this.state.recipes || [];
         if (index < 0 || index >= recipes.length) return;
         this.state.selectedRecipe = recipes[index].name;
+        // Persist per-node recipe selection
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (node) {
+            node.selectedRecipe = this.state.selectedRecipe;
+            this.saveCurrentTab();
+        }
         this.renderPrompt();
         this.updateRecipeBadge();
         this.addLog(`📋 Recipe selected: ${this.state.selectedRecipe}`);
@@ -1223,6 +1232,11 @@ const app = {
         const idx = current ? names.indexOf(current) : -1;
         const nextIdx = (idx + 1) % names.length;
         this.state.selectedRecipe = names[nextIdx];
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (node) {
+            node.selectedRecipe = this.state.selectedRecipe;
+            this.saveCurrentTab();
+        }
         this.renderPrompt();
         this.updateRecipeBadge();
         this.addLog(`📋 Recipe: ${this.state.selectedRecipe}`);
@@ -1768,9 +1782,30 @@ const app = {
             window.speechSynthesis.cancel();
             this.clearAllSpeakingStyles();
         }
+        // Case B: switching nodes while pipeline has completed steps → warn user
+        if (
+            this.state.viewMode === 'pipeline' &&
+            this.state.currentNodePath !== path &&
+            this.state.pipelineSteps &&
+            this.state.pipelineSteps.some(s => s.completed)
+        ) {
+            if (!confirm('連結データを変更します。\n\n現在の実行状態・ステップ入出力データは破棄されます。続けますか？')) {
+                return;
+            }
+            // Reset pipeline runtime state
+            this.state.pipelineSteps = (this.state.pipelineSteps || []).map(s => ({
+                ...s, completed: false, input: '', output: '', streamingOutput: '', status: 'pending'
+            }));
+        }
         this.pushNav();
         this.state.currentNodePath = path;
         this.state.selectedOutputRunIndex = 0;
+        // Restore per-node selectedRecipe
+        const node = this.getNodeByPath(path);
+        if (node) {
+            this.state.selectedRecipe = node.selectedRecipe || '';
+            this.updateRecipeBadge();
+        }
         this.renderTree();
         this.renderList();
         this.loadEditor(path);
@@ -1964,7 +1999,9 @@ const app = {
                     provider: recipe.provider,
                     model: recipe.model,
                     systemPrompt: recipe.systemPrompt,
-                    temperature: recipe.temperature
+                    temperature: recipe.temperature,
+                    attachments: node.attachments || [],        // machine-level (演算ペイン)
+                    inputAttachments: node.inputAttachments || [] // belt-level (入力ペイン)
                 }
             });
             this.state.pipelineRunning = true;
@@ -3233,22 +3270,80 @@ const app = {
             inputEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
             return;
         }
-        // Processing template
-        const template = node.content ? (() => { try { return atob(node.content); } catch { return node.content; } })() : '';
-        // Input data (for {content} substitution)
+        // Input text: editable {content} for the belt
         const inputData = (node.children && node.children.length > 0)
             ? (() => { try { return atob(node.children[0].content || ''); } catch { return ''; } })()
             : '';
+        // Belt-level media attachments (inputAttachments, separate from machine-level node.attachments)
+        const inputAttachments = node.inputAttachments || [];
+        const attachHtml = inputAttachments.length > 0
+            ? inputAttachments.map((a, i) => {
+                const name = a.file || a.id || 'attachment';
+                return `<div class="list-item" style="display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 4px">
+                    <span style="flex:1">${this.escapeHtml(a.mimetype || '')}: ${this.escapeHtml(name)}${a.size ? ' (' + Math.round(a.size/1024) + 'KB)' : ''}</span>
+                    <button class="copy-btn" onclick="app.removeInputAttachment(${i})" title="削除">✕</button>
+                </div>`;
+            }).join('')
+            : `<div style="font-size:11px;color:#666;padding:4px">(なし)</div>`;
         inputEl.innerHTML = `
             <div style="margin-bottom:6px">
-                <div style="font-size:10px;color:#888;margin-bottom:2px">入力データ:</div>
+                <div style="font-size:10px;color:#888;margin-bottom:2px">入力テキスト ({content}):</div>
                 <textarea id="input-textarea" class="input-textarea" placeholder="${t('NoInput')}">${this.escapeHtml(inputData)}</textarea>
             </div>
-            <div class="input-source-bar">
-                <span class="input-source-label">${t('Source')}</span>
-                <span class="input-source-value">${t('PreviousStep')}</span>
-                <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
+            <div>
+                <div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px;display:flex;align-items:center;justify-content:space-between">
+                    <span>追加メディア入力 (Belt attachments)</span>
+                    <button class="copy-btn" onclick="app.addInputAttachment()" style="font-size:10px;padding:1px 6px">＋</button>
+                </div>
+                <div id="input-attachments-list" ${this._dropZoneAttrs('input_attachment')}
+                     style="min-height:32px;border:1px dashed #3c3c3c;border-radius:3px;padding:2px">${attachHtml}</div>
             </div>`;
+    },
+
+    // ── Drag-and-drop file handling ──────────────────────────────
+    // Called from ondrop attributes on attachment drop zones.
+    // purpose: 'machine_attachment' | 'input_attachment' | 'step_attachment'
+    handleFileDrop(event, purpose, stepIndex) {
+        event.preventDefault();
+        event.stopPropagation();
+        const el = event.currentTarget;
+        el.style.outline = '';
+        const files = Array.from(event.dataTransfer.files)
+            .filter(f => f.type.startsWith('image/') || f.type.startsWith('audio/') || f.type.startsWith('video/'));
+        if (files.length === 0) return;
+        Promise.all(files.map(f => new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = e => resolve({
+                file: f.name,
+                path: f.path || '',
+                mimetype: f.type,
+                content: e.target.result.split(',')[1],
+                size: f.size,
+            });
+            reader.readAsDataURL(f);
+        }))).then(attachments => {
+            this.onMediaFileDialogResult({ purpose, stepIndex, attachments });
+        });
+    },
+
+    _dropZoneAttrs(purpose, stepIndex) {
+        const si = stepIndex != null ? `,${stepIndex}` : '';
+        return `ondragover="event.preventDefault();this.style.outline='2px dashed #4fc3f7'"` +
+               ` ondragleave="this.style.outline=''"` +
+               ` ondrop="app.handleFileDrop(event,'${purpose}'${si !== '' ? si : ''})"`;
+    },
+
+    addInputAttachment() {
+        this.postMessage({ type: 'open_file_dialog', payload: { filter: 'media', purpose: 'input_attachment' } });
+    },
+
+    removeInputAttachment(index) {
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) return;
+        if (!node.inputAttachments) node.inputAttachments = [];
+        node.inputAttachments.splice(index, 1);
+        this.saveCurrentTab();
+        this.renderInput();
     },
 
     renderPipelineInput(el) {
@@ -3259,17 +3354,64 @@ const app = {
             return;
         }
         const step = this.state.pipelineSteps[si];
-        const inputText = step.input || '(no input yet)';
+        const inputText = step.input || '(pending)';
+        const sourceLabel = si === 0 ? `元入力 ({content})` : `Step ${si} 出力 ({result})`;
+        // Previous step artifacts
+        const prevArtifacts = (si > 0 && this.state.pipelineSteps[si - 1].artifacts) || [];
+        const artifactsHtml = prevArtifacts.length > 0
+            ? prevArtifacts.map(a => `<div style="font-size:11px;padding:2px 4px">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
+            : '';
+        // Step-specific attachments from pipelineMeta
+        const stepAttachments = step.attachments || [];
+        const stepAttachHtml = stepAttachments.length > 0
+            ? stepAttachments.map((a, i) => `<div class="list-item" style="display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 4px">
+                <span style="flex:1">${this.escapeHtml(a.mimetype || '')}: ${this.escapeHtml(a.file || a.id || '')}</span>
+                <button class="copy-btn" onclick="app.removeStepAttachment(${si},${i})" title="削除">✕</button>
+              </div>`).join('')
+            : `<div style="font-size:11px;color:#666;padding:4px">(添付なし)</div>`;
         el.innerHTML = `
-            <div class="input-header">
-                <span class="input-step-badge">${t('Step')} ${si + 1}</span>
-                <span class="input-step-name">${this.escapeHtml(step.name)}</span>
+            <div style="margin-bottom:6px">
+                <div style="font-size:10px;color:#888;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between">
+                    <span>${sourceLabel}</span>
+                    <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
+                </div>
+                <pre class="input-display" style="margin:0;background:#1a1a1a;border:1px solid #2d2d2d;padding:6px;white-space:pre-wrap;font-size:11px;max-height:120px;overflow-y:auto">${this.escapeHtml(inputText)}</pre>
+                ${artifactsHtml ? `<div style="margin-top:4px;font-size:10px;color:#888">前ステップ生産物:</div>${artifactsHtml}` : ''}
             </div>
-            <div class="input-source-bar">
-                <span class="input-source-value">${this.escapeHtml(step.source || t('PreviousStep'))}</span>
-                <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
-            </div>
-            <pre class="input-display">${this.escapeHtml(inputText)}</pre>`;
+            <div>
+                <div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px;display:flex;align-items:center;justify-content:space-between">
+                    <span>固有追加入力 (Attachments)</span>
+                    <button class="copy-btn" onclick="app.addStepAttachment(${si})" style="font-size:10px;padding:1px 6px">＋</button>
+                </div>
+                <div id="step-attachments-${si}" ${this._dropZoneAttrs('step_attachment', si)}
+                     style="min-height:32px;border:1px dashed #3c3c3c;border-radius:3px;padding:2px">${stepAttachHtml}</div>
+            </div>`;
+    },
+
+    addStepAttachment(stepIndex) {
+        this.postMessage({ type: 'open_file_dialog', payload: { filter: 'media', purpose: 'step_attachment', stepIndex } });
+    },
+
+    removeStepAttachment(stepIndex, attachIndex) {
+        const step = this.state.pipelineSteps && this.state.pipelineSteps[stepIndex];
+        if (!step || !step.attachments) return;
+        step.attachments.splice(attachIndex, 1);
+        // Persist to pipelineMeta
+        this._savePipelineStepAttachments(stepIndex);
+        this.renderInput();
+    },
+
+    _savePipelineStepAttachments(stepIndex) {
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node || !node.pipelineMeta) return;
+        try {
+            const meta = JSON.parse(node.pipelineMeta);
+            if (meta && meta.steps && meta.steps[stepIndex]) {
+                meta.steps[stepIndex].attachments = (this.state.pipelineSteps[stepIndex] || {}).attachments || [];
+                node.pipelineMeta = JSON.stringify(meta);
+                this.saveCurrentTab();
+            }
+        } catch (e) {}
     },
 
     renderPrompt() {
@@ -3321,16 +3463,50 @@ const app = {
             recipeHtml += `<div style="font-size:10px;color:#888;margin-bottom:6px">Config > Recipes でレシピを追加</div>`;
         }
 
+        // Machine-level attachments (node.attachments = images/audio/video for prompt context)
+        const machineAttachments = node.attachments || [];
+        const machineAttachHtml = machineAttachments.length > 0
+            ? machineAttachments.map((a, i) => {
+                const name = a.file || a.id || 'attachment';
+                const icon = (a.mimetype || '').startsWith('image/') ? '🖼' : (a.mimetype || '').startsWith('audio/') ? '🎵' : (a.mimetype || '').startsWith('video/') ? '🎬' : '📎';
+                return `<div class="list-item" style="display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 4px">
+                    <span style="flex:1">${icon} ${this.escapeHtml(name)}${a.size ? ' (' + Math.round(a.size/1024) + 'KB)' : ''}</span>
+                    <button class="copy-btn" onclick="app.removeMachineAttachment(${i})" title="削除">✕</button>
+                </div>`;
+            }).join('')
+            : `<div style="font-size:11px;color:#666;padding:4px">(なし)</div>`;
+
         promptEl.innerHTML = `
             <button class="btn-primary prompt-editor-process-btn" onclick="app.processPrompt()" style="width:100%;padding:4px;font-size:11px;margin-bottom:6px">▶ 処理実行</button>
             <div style="margin-bottom:6px">
                 <div style="font-size:10px;color:#888;margin-bottom:2px">プロンプト:</div>
                 <textarea id="node-content" class="input-textarea" placeholder="{content} で入力を参照" style="min-height:100px">${this.escapeHtml(promptText)}</textarea>
             </div>
-            ${recipeHtml}`;
+            ${recipeHtml}
+            <div style="margin-top:6px">
+                <div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px;display:flex;align-items:center;justify-content:space-between">
+                    <span>演算添付 (Machine attachments)</span>
+                    <button class="copy-btn" onclick="app.addMachineAttachment()" style="font-size:10px;padding:1px 6px">＋</button>
+                </div>
+                <div id="machine-attachments-list" ${this._dropZoneAttrs('machine_attachment')}
+                     style="min-height:32px;border:1px dashed #3c3c3c;border-radius:3px;padding:2px">${machineAttachHtml}</div>
+            </div>`;
 
         // Render pipeline meta if available
         this.renderPipelineMeta(node);
+    },
+
+    addMachineAttachment() {
+        this.postMessage({ type: 'open_file_dialog', payload: { filter: 'media', purpose: 'machine_attachment' } });
+    },
+
+    removeMachineAttachment(index) {
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) return;
+        if (!node.attachments) node.attachments = [];
+        node.attachments.splice(index, 1);
+        this.saveCurrentTab();
+        this.renderPrompt();
     },
 
     editNodePipelineMeta() {
@@ -3439,15 +3615,17 @@ const app = {
         }
 
         const child = node.children[selectedIdx];
-        let sentText = 'N/A';
         let receivedText = child.content ? (() => { try { return atob(child.content); } catch { return child.content; } })() : '';
+        let artifacts = [];
 
         if (child.pipelineMeta) {
             try {
                 const meta = JSON.parse(child.pipelineMeta);
-                if (meta && meta.steps && meta.steps[0]) {
-                    sentText = meta.steps[0].input || 'N/A';
-                    receivedText = meta.steps[0].output || receivedText;
+                if (meta && meta.steps && meta.steps.length > 0) {
+                    // Use last step's output as received data
+                    const lastStep = meta.steps[meta.steps.length - 1];
+                    receivedText = lastStep.output || receivedText;
+                    artifacts = lastStep.artifacts || [];
                 }
             } catch(e) {}
         }
@@ -3464,7 +3642,6 @@ const app = {
                 <button class="output-discard-btn" onclick="app.discardCurrentOutput()">${t('Discard')}</button>
                 <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
             </div>
-            
             <div class="output-run-selector-row" style="margin: 8px; display: flex; align-items: center; gap: 8px; font-size: 11px;">
                 <label for="output-run-selector" style="font-weight: bold; color: #858585;">実行履歴 (History):</label>
                 <select id="output-run-selector" onchange="app.onOutputRunSelected(this.value)" style="background: #252526; color: #ccc; border: 1px solid #3c3c3c; padding: 2px; font-size: 11px; flex: 1;">
@@ -3477,16 +3654,18 @@ const app = {
             html += `<div class="eval-badge" style="margin: 0 8px 8px 8px;">★ ${this.escapeHtml(child.evaluation)}</div>`;
         }
 
+        const artifactsHtml = artifacts.length > 0
+            ? `<div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px">生産物 (Artifacts)</div>` +
+              artifacts.map(a => `<div style="font-size:11px;padding:2px 0">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
+            : '';
+
         html += `
-            <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 75px); overflow-y: auto;">
-                <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
-                    <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
-                    <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(sentText)}</pre>
+            <div style="display:flex;flex-direction:column;gap:10px;padding:8px;height:calc(100% - 75px);overflow-y:auto;">
+                <div style="flex:1;display:flex;flex-direction:column;min-height:150px;">
+                    <div style="font-size:10px;font-weight:bold;color:#858585;margin-bottom:4px;border-bottom:1px solid #333;padding-bottom:2px;">受信データ (Received Output)</div>
+                    <pre class="output-display" style="margin:0;flex:1;background:#1e1e1e;border:1px solid #2d2d2d;padding:6px;font-family:monospace;white-space:pre-wrap;font-size:11px;overflow-y:auto;">${this.escapeHtml(receivedText)}</pre>
                 </div>
-                <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
-                    <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
-                    <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(receivedText)}</pre>
-                </div>
+                ${artifactsHtml ? `<div id="output-artifacts" style="font-size:11px">${artifactsHtml}</div>` : `<div id="output-artifacts"></div>`}
             </div>
         `;
         outputEl.innerHTML = html;
@@ -3505,18 +3684,23 @@ const app = {
             return;
         }
         const step = this.state.pipelineSteps[si];
-        if (!step.completed) {
-            el.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
-            return;
-        }
-        const outputText = step.output || '(empty output)';
+        // Show streaming output while running, completed output when done
+        const outputText = step.completed
+            ? (step.output || '(empty output)')
+            : (step.streamingOutput || (step.status === 'running' ? '...' : '(pending)'));
+        const artifacts = step.artifacts || [];
+        const artifactsHtml = artifacts.length > 0
+            ? `<div style="font-size:10px;color:#888;margin:8px 8px 3px;border-bottom:1px solid #333;padding-bottom:2px">生産物 (Artifacts)</div>` +
+              artifacts.map(a => `<div style="font-size:11px;padding:2px 8px">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
+            : '';
         el.innerHTML = `
             <div class="output-toolbar">
-                <span class="output-label">${t('Step')} ${si + 1} ${t('Output')}</span>
-                <button class="output-save-btn" onclick="app.savePipelineOutput(${si})">${t('Save')}</button>
-                <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
+                <span class="output-label">${t('Step')} ${si + 1} ${t('Output')}${step.completed ? '' : ' ⏳'}</span>
+                ${step.completed ? `<button class="output-save-btn" onclick="app.savePipelineOutput(${si})">${t('Save')}</button>
+                <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>` : ''}
             </div>
-            <pre class="output-display">${this.escapeHtml(outputText)}</pre>`;
+            <pre class="output-display" id="pipeline-output-${si}">${this.escapeHtml(outputText)}</pre>
+            <div id="pipeline-artifacts-${si}">${artifactsHtml}</div>`;
     },
 
     // ── Input Source Dialog ────────────────────────────────────────
@@ -3574,6 +3758,41 @@ const app = {
         if (!name) return;
         this.postMessage({ type: 'select_input_source', payload: { stepIndex: this.state.selectedStep, source: 'chest', chestName: name } });
         document.getElementById('input-source-modal')?.classList.remove('visible');
+    },
+
+    onMediaFileDialogResult(payload) {
+        if (!payload || !payload.attachments || payload.attachments.length === 0) return;
+        const purpose = payload.purpose;
+        const attachments = payload.attachments;
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) return;
+
+        if (purpose === 'machine_attachment') {
+            if (!node.attachments) node.attachments = [];
+            node.attachments.push(...attachments);
+            this.saveCurrentTab();
+            this.renderPrompt();
+        } else if (purpose === 'input_attachment') {
+            if (!node.inputAttachments) node.inputAttachments = [];
+            node.inputAttachments.push(...attachments);
+            this.saveCurrentTab();
+            this.renderInput();
+        } else if (purpose === 'step_attachment') {
+            const si = payload.stepIndex;
+            if (si == null || !this.state.pipelineSteps || !this.state.pipelineSteps[si]) return;
+            const step = this.state.pipelineSteps[si];
+            if (!step.attachments) step.attachments = [];
+            step.attachments.push(...attachments);
+            this._savePipelineStepAttachments(si);
+            this.renderInput();
+        }
+    },
+
+    openArtifact(artifact) {
+        if (!artifact) return;
+        if (artifact.path) {
+            this.postMessage({ type: 'open_artifact', payload: artifact });
+        }
     },
 
     // ── Chest Operations ───────────────────────────────────────────
