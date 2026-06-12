@@ -6,6 +6,8 @@ const app = {
         activeTab: 0,
         currentNode: null,
         currentNodePath: '',
+        selectedOpPath: '',
+        selectedDataPath: '',
         language: 'en',
         pipelineRunning: false,
         testMode: false,
@@ -44,13 +46,11 @@ const app = {
     },
 
     setupBridge() {
-        window.__promptsBridge.addEventListener('message', (e) => {
-            try {
-                const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-                this.handleBridge(msg);
-            } catch (err) {
-                console.error('[Prompts] Bridge error:', err);
-            }
+        const bridge = window.__promptsBridge || window.chrome?.webview;
+        if (!bridge) { console.error('No IPC bridge available'); return; }
+        bridge.addEventListener('message', (e) => {
+            const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+            this.handleBridge(msg);
         });
     },
 
@@ -125,6 +125,9 @@ const app = {
                 break;
             case 'open_file_dialog_result':
                 this.onFileSelected(msg.payload);
+                break;
+            case 'file_dialog_result':
+                this.onMediaFileDialogResult(msg.payload);
                 break;
             case 'pipeline_completed':
                 this.onPipelineCompleted(msg.payload);
@@ -232,9 +235,6 @@ const app = {
             case 'save_run_state':
                 this.postMessage({ type: 'save_run_state', payload: msg.payload });
                 break;
-            case 'http_log':
-                this.addHttpLog(msg.payload);
-                break;
             case 'incomplete_run_detected':
                 this.state.incompleteRuns = msg.payload.runs || [];
                 this.showIncompleteRuns();
@@ -251,13 +251,12 @@ const app = {
     },
 
     postMessage(obj) {
-        if (window.__promptsBridge) {
-            window.__promptsBridge.postMessage(obj);
-        }
+        const bridge = window.__promptsBridge || window.chrome?.webview;
+        if (bridge) bridge.postMessage(obj);
     },
 
     sendInitData() {
-        window.__promptsBridge.postMessage({
+        this.postMessage({
             type: 'init_complete',
             language: this.state.language
         });
@@ -342,7 +341,7 @@ const app = {
     },
 
     openFile() {
-        window.__promptsBridge.postMessage({ type: 'open_file_dialog', filter: 'JSON|*.json' });
+        this.postMessage({ type: 'open_file_dialog', filter: 'JSON|*.json' });
     },
 
     onFileSelected(path) {
@@ -364,11 +363,7 @@ const app = {
         this.addLog('💾 Save requested');
         this.updateNode();
     },
-    saveFileAs() {
-        this.addLog('💾 Save As requested');
-        this.updateNode();
-        this.postMessage({ type: 'save_file_as' });
-    },
+    saveFileAs() { this.addLog('💾 Save As requested'); },
     onPipelineCompleted(meta) {
         this.state.pipelineRunning = false;
         this.addLog(`✅ Pipeline "${meta.pipelineName}" completed`);
@@ -378,13 +373,10 @@ const app = {
             catch { return btoa(str); }
         };
 
-        const now = new Date();
-        const pad = n => String(n).padStart(2, '0');
-        const timeLabel = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-
         const outputContent = meta.outputContent || '';
+        const autoTitle = outputContent.replace(/\s+/g, ' ').trim().substring(0, 50) + (outputContent.length > 50 ? '...' : '');
         const outputNode = {
-            title: safeB64(timeLabel),
+            title: safeB64(autoTitle || meta.pipelineName),
             content: safeB64(outputContent),
             mimetype: 'text/plain',
             attachments: [],
@@ -393,26 +385,30 @@ const app = {
         };
 
         const tab = this.state.tabs[this.state.activeTab];
-        const currentNode = this.getNodeByPath(this.state.currentNodePath);
-        if (tab && currentNode) {
-            if (!currentNode.children) currentNode.children = [];
-            let processedFolder = currentNode.children.find(c => {
-                const t = c.title ? (() => { try { return atob(c.title); } catch { return c.title; } })() : '';
-                return t === 'Processed';
+        const opNodePath = this.state.selectedOpPath || this.state.currentNodePath;
+        const opNode = this.getNodeByPath(opNodePath);
+        if (tab && opNode) {
+            if (!opNode.children) opNode.children = [];
+            // Find "Processed" child
+            let processedNode = null;
+            opNode.children.forEach(child => {
+                if (child.title && this.safeAtob(child.title) === 'Processed') {
+                    processedNode = child;
+                }
             });
-            if (!processedFolder) {
-                const safeB64Title = (() => { try { return btoa(unescape(encodeURIComponent('Processed'))); } catch { return btoa('Processed'); } })();
-                processedFolder = { title: safeB64Title, content: '', mimetype: 'text/plain', attachments: [], children: [] };
-                currentNode.children.push(processedFolder);
+            if (processedNode) {
+                if (!processedNode.children) processedNode.children = [];
+                processedNode.children.unshift(outputNode);
+                this.addLog(`📦 Child node saved under Processed: "${meta.pipelineName}"`);
+            } else {
+                opNode.children.unshift(outputNode);
+                this.addLog(`📦 Child node saved: "${meta.pipelineName}"`);
             }
-            if (!processedFolder.children) processedFolder.children = [];
-            processedFolder.children.unshift(outputNode);
             this.renderTree();
             this.renderList();
             if (tab.file && tab.root) {
                 this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
             }
-            this.addLog(`📦 Result saved under Processed`);
         }
         this.state.selectedOutputRunIndex = 0;
         this.renderOutput();
@@ -782,16 +778,57 @@ const app = {
         }
     },
 
-    showConfig() {
-        console.log('[Prompts] showConfig called');
-        const panel = document.getElementById('config-panel');
-        if (!panel) {
-            console.error('[Prompts] config-panel element not found');
-            this.addLog('⚠ Config panel not found');
-            return;
+    isDataNodePath(path) {
+        if (!path) return false;
+        const parts = path.split('/');
+        for (let i = 1; i < parts.length; i++) {
+            const ancestorPath = parts.slice(0, i).join('/');
+            const ancestorNode = this.getNodeByPath(ancestorPath);
+            if (ancestorNode && ancestorNode.title && this.safeAtob(ancestorNode.title) === 'Processed') {
+                return true;
+            }
         }
+        return false;
+    },
+
+    getLogicalOpPath(path) {
+        if (!path) return '';
+        const parts = path.split('/');
+        for (let i = 1; i < parts.length; i++) {
+            const ancestorPath = parts.slice(0, i).join('/');
+            const ancestorNode = this.getNodeByPath(ancestorPath);
+            if (ancestorNode && ancestorNode.title && this.safeAtob(ancestorNode.title) === 'Processed') {
+                return parts.slice(0, i - 1).join('/');
+            }
+        }
+        return path;
+    },
+
+    isAncestor(ancestor, descendant) {
+        if (!ancestor || !descendant) return false;
+        const a = ancestor.split('/').filter(p => p !== '');
+        const d = descendant.split('/').filter(p => p !== '');
+        if (a.length >= d.length) return false;
+        return a.every((p, i) => p === d[i]);
+    },
+
+    getDOMElementForPath(path) {
+        if (path === '') return null;
+        const escapedPath = path.replace(/'/g, "\\'");
+        const els = document.querySelectorAll('.tree-node');
+        for (let i = 0; i < els.length; i++) {
+            const attr = els[i].getAttribute('onclick') || '';
+            if (attr.includes(`selectNode('${escapedPath}')`) || attr.includes(`selectNode("${escapedPath}")`)) {
+                return els[i];
+            }
+        }
+        return null;
+    },
+
+    showConfig() {
+        const panel = document.getElementById('config-panel');
+        if (!panel) return;
         panel.classList.add('visible');
-        console.log('[Prompts] config-panel visible class added');
         this.postMessage({ type: 'get_providers' });
         this.initConfigDrag();
         this.addLog('⚙ Config opened');
@@ -812,15 +849,9 @@ const app = {
     },
 
     showRecipeManager() {
-        console.log('[Prompts] showRecipeManager called');
         const modal = document.getElementById('recipe-modal');
-        if (!modal) {
-            console.error('[Prompts] recipe-modal element not found');
-            this.addLog('⚠ Recipe modal not found');
-            return;
-        }
+        if (!modal) return;
         modal.classList.add('visible');
-        console.log('[Prompts] recipe-modal visible class added');
         this.postMessage({ type: 'get_providers' });
         this.renderRecipeManager();
     },
@@ -1243,6 +1274,12 @@ const app = {
         const recipes = this.state.recipes || [];
         if (index < 0 || index >= recipes.length) return;
         this.state.selectedRecipe = recipes[index].name;
+        // Persist per-node recipe selection on logical parent op node
+        const node = this.getNodeByPath(this.state.selectedOpPath || this.state.currentNodePath);
+        if (node) {
+            node.selectedRecipe = this.state.selectedRecipe;
+            this.saveCurrentTab();
+        }
         this.renderPrompt();
         this.updateRecipeBadge();
         this.addLog(`📋 Recipe selected: ${this.state.selectedRecipe}`);
@@ -1259,6 +1296,11 @@ const app = {
         const idx = current ? names.indexOf(current) : -1;
         const nextIdx = (idx + 1) % names.length;
         this.state.selectedRecipe = names[nextIdx];
+        const node = this.getNodeByPath(this.state.selectedOpPath || this.state.currentNodePath);
+        if (node) {
+            node.selectedRecipe = this.state.selectedRecipe;
+            this.saveCurrentTab();
+        }
         this.renderPrompt();
         this.updateRecipeBadge();
         this.addLog(`📋 Recipe: ${this.state.selectedRecipe}`);
@@ -1429,6 +1471,8 @@ const app = {
             case 'new_tab':         this.newTab(); break;
             case 'save':            this.saveFile(); break;
             case 'save_as':         this.saveFileAs(); break;
+            case 'import_zip':      this.addLog('📦 Import ZIP — coming soon'); break;
+            case 'export_node':     this.addLog('📤 Export Node — coming soon'); break;
             case 'run_pipeline':    this.runPipeline(); break;
             case 'pipeline_manager': this.showPipelineManager(); break;
             case 'pipeline_history': this.showHistory(); break;
@@ -1444,110 +1488,31 @@ const app = {
         }
     },
 
-    _stripProcessedNodes(node) {
-        if (!node || !node.children) return;
-        node.children = node.children.filter(c => {
-            const title = c.title ? (() => { try { return atob(c.title); } catch { return c.title; } })() : '';
-            if (title === 'Processed') return false;
-            this._stripProcessedNodes(c);
-            return true;
-        });
-    },
-
     onSaveAsResult(path) {
         const tab = this.state.tabs[this.state.activeTab];
         if (tab && path) {
             tab.file = path.split('/').pop().split('\\').pop();
-            const cleanRoot = JSON.parse(JSON.stringify(tab.root));
-            this._stripProcessedNodes(cleanRoot);
-            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: cleanRoot } });
-            this.addLog('💾 Saved as: ' + path + ' (Processed excluded)');
+            this.addLog('💾 Saved as: ' + path);
         }
-    },
-
-    exportPipeline() {
-        const node = this.getNodeByPath(this.state.currentNodePath);
-        if (!node || !node.children || node.children.length === 0) {
-            this.addLog('⚠ エクスポートするパイプラインステップがありません');
-            return;
-        }
-        const safeAtob = str => { try { return atob(str); } catch { return str; } };
-        const steps = node.children.map(c => ({
-            title: c.title ? safeAtob(c.title) : '',
-            prompt: c.content ? safeAtob(c.content) : '',
-        }));
-        const pipelineData = { version: 1, steps };
-        const json = JSON.stringify(pipelineData, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'pipeline_' + Date.now() + '.pipeline.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        this.addLog(`📤 Pipeline exported: ${steps.length} steps`);
-    },
-
-    importPipeline() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json,.pipeline.json';
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    const data = JSON.parse(ev.target.result);
-                    const steps = data.steps || [];
-                    if (steps.length === 0) { this.addLog('⚠ No steps in pipeline file'); return; }
-                    const node = this.getNodeByPath(this.state.currentNodePath);
-                    if (!node) { this.addLog('⚠ Select a parent node first'); return; }
-                    if (!node.children) node.children = [];
-                    const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
-                    steps.forEach(s => {
-                        node.children.push({
-                            title: safeB64(s.title || ''),
-                            content: safeB64(s.prompt || ''),
-                            mimetype: 'text/plain',
-                            attachments: [],
-                            children: [],
-                        });
-                    });
-                    this.renderTree();
-                    this.addLog(`📥 Pipeline imported: ${steps.length} steps`);
-                    const tab = this.state.tabs[this.state.activeTab];
-                    if (tab && tab.file && tab.root) {
-                        this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
-                    }
-                } catch (err) {
-                    this.addLog('⚠ Failed to import pipeline: ' + err.message);
-                }
-            };
-            reader.readAsText(file);
-        };
-        input.click();
     },
 
     switchTreeTab(tab) {
         this.state.activeTreeTab = tab;
-        const pipelineBtn = document.getElementById('btn-tree-tab-pipeline');
+        const nodeBtn = document.getElementById('btn-tree-tab-pipeline');
         const fileBtn = document.getElementById('btn-tree-tab-file');
-        const pipelineContent = document.getElementById('tree-content');
+        const nodeContent = document.getElementById('tree-content');
         const fileContent = document.getElementById('file-tree-content');
-        
-        if (tab === 'pipeline') {
-            pipelineBtn?.classList.add('active');
+
+        if (tab === 'pipeline' || tab === 'node') {
+            nodeBtn?.classList.add('active');
             fileBtn?.classList.remove('active');
-            if (pipelineContent) pipelineContent.style.display = '';
+            if (nodeContent) nodeContent.style.display = '';
             if (fileContent) fileContent.style.display = 'none';
             this.renderTree();
         } else {
-            pipelineBtn?.classList.remove('active');
+            nodeBtn?.classList.remove('active');
             fileBtn?.classList.add('active');
-            if (pipelineContent) pipelineContent.style.display = 'none';
+            if (nodeContent) nodeContent.style.display = 'none';
             if (fileContent) fileContent.style.display = '';
             this.requestFileTree();
         }
@@ -1608,7 +1573,156 @@ const app = {
                 this.renderTree();
                 this.renderList();
                 if (root && root.children && root.children.length > 0) {
-                    this.selectNode('0'); // Select first child by default
+                    this.selectNode(''); // Select root node by default
+                }
+            }
+        }
+    },
+
+    checkNodeColorInvariants() {
+        const tab = this.state.tabs[this.state.activeTab];
+        if (!tab || !tab.root) return;
+
+        const checkNode = (node, path) => {
+            const isRoot = path === '';
+            const nodeTitle = node.title ? this.safeAtob(node.title) : '';
+            const isProcessed = nodeTitle === 'Processed';
+
+            // 1. Virtual state logic check
+            let colorCls = '';
+            const selectedOpPath = this.state.selectedOpPath;
+            const selectedDataPath = this.state.selectedDataPath;
+
+            if (!isRoot && !isProcessed) {
+                if (selectedDataPath !== '' && path === selectedDataPath) {
+                    const isViewingMode = selectedOpPath !== '' && this.isAncestor(selectedOpPath, selectedDataPath);
+                    if (isViewingMode) {
+                        colorCls = 'selected-result';
+                    } else {
+                        colorCls = 'selected-data';
+                    }
+                } else if (selectedDataPath !== '' && path === this.getLogicalOpPath(selectedDataPath)) {
+                    colorCls = 'selected-input';
+                } else if (selectedOpPath !== '' && path === selectedOpPath) {
+                    colorCls = 'selected';
+                } else if (selectedOpPath !== '') {
+                    if (this.isDataNodePath(path) && this.getLogicalOpPath(path) === selectedOpPath) {
+                        colorCls = 'selected-result';
+                    }
+                }
+            }
+
+            if (isRoot || isProcessed) {
+                if (colorCls) {
+                    console.error(`Runtime node color invariant violation (logic): Root/Processed node at path "${path}" has color class "${colorCls}"`);
+                }
+            } else if (this.isDataNodePath(path)) {
+                if (colorCls === 'selected' || colorCls === 'selected-input') {
+                    console.error(`Runtime node color invariant violation (logic): Data node at path "${path}" has op-node color class "${colorCls}"`);
+                }
+            } else {
+                if (colorCls === 'selected-data' || colorCls === 'selected-result') {
+                    console.error(`Runtime node color invariant violation (logic): Op-node at path "${path}" has data node color class "${colorCls}"`);
+                }
+            }
+
+            // 2. Real DOM element check
+            if (path !== '') {
+                const el = this.getDOMElementForPath(path);
+
+                if (el) {
+                    const classes = el.className.split(' ');
+                    if (isProcessed) {
+                        if (classes.includes('selected') || classes.includes('selected-input') ||
+                            classes.includes('selected-data') || classes.includes('selected-result')) {
+                            console.error(`Runtime node color invariant violation (DOM): Processed node at "${path}" has color classes in DOM: ${el.className}`);
+                        }
+                    } else if (this.isDataNodePath(path)) {
+                        if (classes.includes('selected') || classes.includes('selected-input')) {
+                            console.error(`Runtime node color invariant violation (DOM): Data node at "${path}" has op-node color classes in DOM: ${el.className}`);
+                        }
+                    } else {
+                        if (classes.includes('selected-data') || classes.includes('selected-result')) {
+                            console.error(`Runtime node color invariant violation (DOM): Op-node at "${path}" has data node color classes in DOM: ${el.className}`);
+                        }
+                    }
+                }
+            }
+
+            if (node.children) {
+                node.children.forEach((child, i) => {
+                    checkNode(child, path === '' ? String(i) : path + '/' + i);
+                });
+            }
+        };
+
+        checkNode(tab.root, '');
+
+        // 3. Runtime mode check (閲覧モード vs 連結モード) based on parent-child relationship
+        const selectedOpPath = this.state.selectedOpPath;
+        const selectedDataPath = this.state.selectedDataPath;
+
+        if (selectedOpPath !== '' && selectedDataPath !== '') {
+            const hasParentChildRelation = this.isAncestor(selectedOpPath, selectedDataPath);
+            const opEl = this.getDOMElementForPath(selectedOpPath);
+            const dataEl = this.getDOMElementForPath(selectedDataPath);
+
+            let opOk = true;
+            let dataOk = true;
+            let opError = '';
+            let dataError = '';
+
+            if (hasParentChildRelation) {
+                // Viewing Mode (閲覧モード):
+                // Step node has selected-input (green) class, no selected (blue) class
+                // Data node has selected-result (orange) class, no selected-data (red) class
+                if (opEl) {
+                    const classes = opEl.className.split(' ');
+                    if (!classes.includes('selected-input') || classes.includes('selected')) {
+                        opOk = false;
+                        opError = `Op Node classes expected: [selected-input], actual: [${opEl.className}]`;
+                    }
+                }
+                if (dataEl) {
+                    const classes = dataEl.className.split(' ');
+                    if (!classes.includes('selected-result') || classes.includes('selected-data')) {
+                        dataOk = false;
+                        dataError = `Data Node classes expected: [selected-result], actual: [${dataEl.className}]`;
+                    }
+                }
+
+                if (opOk && dataOk) {
+                    this.addLog('🔍 Runtime Check (Viewing Mode): OK (Op: Green, Data: Orange)');
+                } else {
+                    const errMsg = [opError, dataError].filter(Boolean).join('; ');
+                    this.addLog(`❌ Runtime Check (Viewing Mode) FAILED: ${errMsg}`);
+                    console.error(`Runtime mode check violation (Viewing Mode): ${errMsg}`);
+                }
+            } else {
+                // Linking Mode (連結モード):
+                // Step node has selected (blue) class, no selected-input (green) class
+                // Data node has selected-data (red) class, no selected-result (orange) class
+                if (opEl) {
+                    const classes = opEl.className.split(' ');
+                    if (!classes.includes('selected') || classes.includes('selected-input')) {
+                        opOk = false;
+                        opError = `Op Node classes expected: [selected], actual: [${opEl.className}]`;
+                    }
+                }
+                if (dataEl) {
+                    const classes = dataEl.className.split(' ');
+                    if (!classes.includes('selected-data') || classes.includes('selected-result')) {
+                        dataOk = false;
+                        dataError = `Data Node classes expected: [selected-data], actual: [${dataEl.className}]`;
+                    }
+                }
+
+                if (opOk && dataOk) {
+                    this.addLog('🔍 Runtime Check (Linking Mode): OK (Op: Blue, Data: Red)');
+                } else {
+                    const errMsg = [opError, dataError].filter(Boolean).join('; ');
+                    this.addLog(`❌ Runtime Check (Linking Mode) FAILED: ${errMsg}`);
+                    console.error(`Runtime mode check violation (Linking Mode): ${errMsg}`);
                 }
             }
         }
@@ -1616,73 +1730,72 @@ const app = {
 
     // Tree rendering
     renderTree() {
+        if (this.state.viewMode === 'pipeline') {
+            this.renderPipelineSteps();
+            return;
+        }
         const el = document.getElementById('tree-content');
         if (!el) return;
         const tab = this.state.tabs[this.state.activeTab];
         if (!tab || !tab.root) { el.innerHTML = '<div class="empty">No data</div>'; return; }
-        const children = tab.root.children || [];
-        if (children.length === 0) {
-            el.innerHTML = '<div class="empty">No pipeline nodes</div>';
-            return;
-        }
-        let html = '';
-        children.forEach((child, i) => {
-            html += this.buildTreeHTML(child, String(i));
-        });
-        el.innerHTML = html;
+        // Pre-compute whether the currently selected node is a leaf (data node)
+        const selNode = this.getNodeByPath(this.state.currentNodePath);
+        this._selectedIsLeaf = selNode ? (!selNode.children || selNode.children.length === 0) : false;
+        el.innerHTML = this.buildTreeHTML(tab.root, '');
         
+        // Also sync file tree selections if visible
         if (this.state.activeTreeTab === 'file') {
             this.renderFileTree();
         }
+
+        // Run runtime invariants validation
+        this.checkNodeColorInvariants();
     },
 
     buildTreeHTML(node, path) {
-        const safeAtob = str => { try { return atob(str); } catch { return str; } };
-        const nodeTitle = node.title ? safeAtob(node.title) : '';
-        const isProcessed = nodeTitle === 'Processed';
-
         let html = '';
-        const display = this.escapeHtml(nodeTitle || this.getTitleFallback(node));
+        const display = this.escapeHtml(node.title ? this.safeAtob(node.title) : this.getTitleFallback(node));
         const safePath = this.escapeHtml(path);
         const hasChildren = node.children && node.children.length > 0;
         const collapsed = this.state.collapsedPaths.has(path);
-        const isSelected = this.state.currentNodePath === path;
 
-        if (isProcessed) {
-            const itemCls = 'tree-processed-header' + (collapsed ? ' collapsed' : '');
-            const collapseBtn = hasChildren
-                ? `<span class="tree-collapse-btn" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapsed ? '▶' : '▼'}</span>`
-                : '<span class="tree-collapse-btn-spacer"></span>';
-            html += `<div class="${itemCls}" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapseBtn}📦 Processed (${hasChildren ? node.children.length : 0})</div>`;
-            if (hasChildren && !collapsed) {
-                html += '<div class="tree-children">';
-                node.children.forEach((child, i) => {
-                    const childPath = path + '/' + i;
-                    const childDisplay = this.escapeHtml(child.title ? safeAtob(child.title) : this.getTitleFallback(child));
-                    const childSelected = this.state.currentResultNodePath === childPath;
-                    const childCls = 'tree-node leaf result-node' + (childSelected ? ' selected-result' : '');
-                    html += `<div class="${childCls}" onclick="app.selectNode('${this.escapeHtml(childPath)}')">📋 ${childDisplay}</div>`;
-                });
-                html += '</div>';
-            }
-            return html;
-        }
+        // Compute color class based on relationship to selected node
+        const selectedOpPath = this.state.selectedOpPath;
+        const selectedDataPath = this.state.selectedDataPath;
+        let colorCls = '';
 
-        let selectedCls = '';
-        if (isSelected) {
-            const parts = path.split('/').filter(p => p !== '');
-            if (parts.length >= 2) {
-                const parentPath = parts.slice(0, -1).join('/');
-                const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
-                if (parent && parent.title) {
-                    const parentTitle = safeAtob(parent.title);
-                    selectedCls = parentTitle === 'Processed' ? ' selected-result' : ' selected-input';
+        const isRoot = path === '';
+        const nodeTitle = node.title ? this.safeAtob(node.title) : '';
+        const isProcessed = nodeTitle === 'Processed';
+
+        if (!isRoot && !isProcessed) {
+            if (selectedDataPath !== '' && path === selectedDataPath) {
+                const isViewingMode = selectedOpPath !== '' && this.isAncestor(selectedOpPath, selectedDataPath);
+                if (isViewingMode) {
+                    colorCls = ' selected-result';
+                } else {
+                    colorCls = ' selected-data';
+                }
+            } else if (selectedDataPath !== '' && path === this.getLogicalOpPath(selectedDataPath)) {
+                colorCls = ' selected-input';
+            } else if (selectedOpPath !== '' && path === selectedOpPath) {
+                colorCls = ' selected';
+            } else if (selectedOpPath !== '') {
+                if (this.isDataNodePath(path) && this.getLogicalOpPath(path) === selectedOpPath) {
+                    colorCls = ' selected-result';
                 }
             }
-            if (!selectedCls) selectedCls = ' selected-input';
         }
-        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') +
-                    selectedCls +
+
+        let extraCls = '';
+        if (selectedOpPath !== '' && path === selectedOpPath) {
+            extraCls += ' current-op';
+        }
+        if (selectedDataPath !== '' && path === selectedDataPath) {
+            extraCls += ' current-data';
+        }
+
+        const cls = 'tree-node' + (hasChildren ? ' branch' : ' leaf') + colorCls + extraCls +
                     (collapsed ? ' collapsed' : '');
         const collapseBtn = hasChildren
             ? `<span class="tree-collapse-btn" onclick="event.stopPropagation();app.treeToggleCollapse('${safePath}')">${collapsed ? '▶' : '▼'}</span>`
@@ -1733,11 +1846,10 @@ const app = {
         }
 
         items += `<div class="ctx-item" onclick="app.treeCtxAddChild('${path}');app.hideTreeContextMenu()">➕ 子ノードを追加</div>`;
-        items += '<div class="ctx-sep"></div>';
-        items += `<div class="ctx-item" onclick="app.treeCtxRename('${path}');app.hideTreeContextMenu()">✏️ 名前変更</div>`;
-        items += '<div class="ctx-sep"></div>';
         if (!isRoot) {
             items += `<div class="ctx-item" onclick="app.treeCtxAddSibling('${path}');app.hideTreeContextMenu()">➕ 兄弟ノードを追加</div>`;
+            items += '<div class="ctx-sep"></div>';
+            items += `<div class="ctx-item" onclick="app.treeCtxRename('${path}');app.hideTreeContextMenu()">✏️ 名前変更</div>`;
             items += '<div class="ctx-sep"></div>';
             if (idx > 0) {
                 items += `<div class="ctx-item" onclick="app.treeCtxMoveUp('${path}');app.hideTreeContextMenu()">⬆ 上に移動</div>`;
@@ -1760,26 +1872,9 @@ const app = {
         if (menu) menu.style.display = 'none';
     },
 
-    addRootNode() {
-        const tab = this.state.tabs[this.state.activeTab];
-        if (!tab || !tab.root) return;
-        if (!tab.root.children) tab.root.children = [];
-        tab.root.children.push({ title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] });
-        const idx = tab.root.children.length - 1;
-        this.state.currentNodePath = String(idx);
-        this.renderTree();
-        this.renderList();
-        this.loadEditor(this.state.currentNodePath);
-        this.saveCurrentTab();
-        this.addLog('➕ ルートノードを追加しました');
-    },
-
     treeCtxAddChild(path) {
         const node = this.getNodeByPath(path);
-        if (!node) {
-            this.addRootNode();
-            return;
-        }
+        if (!node) return;
         if (!node.children) node.children = [];
         node.children.push({ title: '', content: '', mimetype: 'text/plain', attachments: [], children: [] });
         this.state.collapsedPaths.delete(path);
@@ -1815,7 +1910,7 @@ const app = {
         const parentPath = parts.slice(0, -1).join('/');
         const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
         if (!parent || !parent.children || idx >= parent.children.length) return;
-        if (!window.confirm('このノードを削除しますか？')) return;
+        if (!confirm('このノードを削除しますか？')) return;
         parent.children.splice(idx, 1);
         this.state.currentNodePath = parentPath ? '/' + parentPath : '';
         this.renderTree();
@@ -1859,39 +1954,18 @@ const app = {
     },
 
     treeCtxRename(path) {
-        console.log('[treeCtxRename] path:', path);
-        const node = this.getNodeByPath(path);
-        if (!node) { console.log('[treeCtxRename] node not found'); return; }
-        console.log('[treeCtxRename] node.title:', node.title);
-        this._renamePath = path;
-        const safeAtob = str => { try { return atob(str); } catch { return str; } };
-        const current = node.title ? safeAtob(node.title) : '';
-        const input = document.getElementById('rename-input');
-        if (input) input.value = current;
-        const modal = document.getElementById('rename-modal');
-        if (modal) modal.classList.add('visible');
-    },
-
-    renameConfirm() {
-        const modal = document.getElementById('rename-modal');
-        if (modal) modal.classList.remove('visible');
-        const path = this._renamePath;
-        if (!path) return;
         const node = this.getNodeByPath(path);
         if (!node) return;
-        const input = document.getElementById('rename-input');
-        if (!input || !input.value.trim()) return;
+        const current = node.title ? atob(node.title) : '';
+        const newName = prompt('ノード名を入力してください:', current);
+        if (newName === null) return;
         const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
-        node.title = safeB64(input.value.trim());
+        node.title = safeB64(newName);
         this.renderTree();
         this.renderList();
         this.loadEditor(path);
         this.saveCurrentTab();
-        this.addLog(`✏️ ノード名を変更: "${input.value.trim()}"`);
-    },
-
-    renameCancel() {
-        document.getElementById('rename-modal')?.classList.remove('visible');
+        this.addLog('✏️ ノード名を変更しました');
     },
 
     saveCurrentTab() {
@@ -1967,56 +2041,62 @@ const app = {
             window.speechSynthesis.cancel();
             this.clearAllSpeakingStyles();
         }
-        this.pushNav();
-
-        // Check if the node is a child of "Processed"
-        const parts = path.split('/').filter(p => p !== '');
-        let isResult = false;
-
-        if (parts.length >= 2) {
-            const parentPath = parts.slice(0, -1).join('/');
-            const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
-            if (parent && parent.title) {
-                const parentTitle = (() => { try { return atob(parent.title); } catch { return parent.title; } })();
-                if (parentTitle === 'Processed') {
-                    isResult = true;
-                }
+        // Case B: switching nodes while pipeline has completed steps → warn user
+        if (
+            this.state.viewMode === 'pipeline' &&
+            this.state.currentNodePath !== path &&
+            this.state.pipelineSteps &&
+            this.state.pipelineSteps.some(s => s.completed)
+        ) {
+            if (!confirm('連結データを変更します。\n\n現在の実行状態・ステップ入出力データは破棄されます。続けますか？')) {
+                return;
             }
+            // Reset pipeline runtime state
+            this.state.pipelineSteps = (this.state.pipelineSteps || []).map(s => ({
+                ...s, completed: false, input: '', output: '', streamingOutput: '', status: 'pending'
+            }));
         }
+        this.pushNav();
+        this.state.currentNodePath = path;
+        this.state.selectedOutputRunIndex = 0;
 
-        if (isResult) {
-            this.state.currentResultNodePath = path;
+        const node = this.getNodeByPath(path);
+        if (node) {
+            const nodeTitle = node.title ? this.safeAtob(node.title) : '';
+            const isProcessed = nodeTitle === 'Processed';
+            const isRoot = path === '';
 
-            const node = this.getNodeByPath(path);
-            if (node && node.content) {
-                const nodeContent = (() => { try { return atob(node.content); } catch { return node.content; } })();
-                const greenNode = this.getNodeByPath(this.state.currentNodePath);
-                if (greenNode && greenNode.children && greenNode.children.length > 0) {
-                    const firstChild = greenNode.children[0];
-                    const firstChildTitle = firstChild.title ? (() => { try { return atob(firstChild.title); } catch { return firstChild.title; } })() : '';
-                    if (firstChildTitle !== 'Processed') {
-                        firstChild.content = node.content;
-                    }
+            if (isRoot || isProcessed) {
+                this.state.selectedOpPath = '';
+                this.state.selectedDataPath = '';
+            } else if (this.isDataNodePath(path)) {
+                if (this.state.selectedDataPath === path) {
+                    this.state.selectedDataPath = '';
+                } else {
+                    this.state.selectedDataPath = path;
                 }
-                const inputTa = document.getElementById('input-textarea');
-                if (inputTa) {
-                    inputTa.value = nodeContent;
-                }
-                this.addLog('📋 Processed result set as input of selected op node');
-                const tab = this.state.tabs[this.state.activeTab];
-                if (tab && tab.file && tab.root) {
-                    this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+            } else {
+                if (this.state.selectedOpPath === path) {
+                    this.state.selectedOpPath = '';
+                } else {
+                    this.state.selectedOpPath = path;
                 }
             }
         } else {
-            this.state.currentNodePath = path;
-            this.state.currentResultNodePath = null;
+            this.state.selectedOpPath = '';
+            this.state.selectedDataPath = '';
         }
 
-        this.state.selectedOutputRunIndex = 0;
+        // Restore per-node selectedRecipe from the logical parent step node if data node is selected
+        const opNodePath = this.state.selectedOpPath || path;
+        const opNode = this.getNodeByPath(opNodePath);
+        if (opNode) {
+            this.state.selectedRecipe = opNode.selectedRecipe || '';
+            this.updateRecipeBadge();
+        }
         this.renderTree();
         this.renderList();
-        this.loadEditor(this.state.currentNodePath);
+        this.loadEditor(path);
     },
 
     // Evaluation badge HTML helper
@@ -2111,36 +2191,6 @@ const app = {
         return node;
     },
 
-    isResultNode(path) {
-        if (!path) return false;
-        const parts = path.split('/').filter(p => p !== '');
-        if (parts.length >= 2) {
-            const parentPath = parts.slice(0, -1).join('/');
-            const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
-            if (parent && parent.title) {
-                const parentTitle = (() => { try { return atob(parent.title); } catch { return parent.title; } })();
-                return parentTitle === 'Processed';
-            }
-        }
-        return false;
-    },
-
-    onInputChanged(value) {
-        const node = this.getNodeByPath(this.state.currentNodePath);
-        if (node && node.children && node.children.length > 0) {
-            const firstChild = node.children[0];
-            const title = firstChild.title ? (() => { try { return atob(firstChild.title); } catch { return firstChild.title; } })() : '';
-            if (title !== 'Processed') {
-                const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
-                firstChild.content = safeB64(value);
-                const tab = this.state.tabs[this.state.activeTab];
-                if (tab && tab.file && tab.root) {
-                    this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
-                }
-            }
-        }
-    },
-
     copyItemText(index) {
         const node = this.getNodeByPath(this.state.currentNodePath);
         if (!node || !node.children || index >= node.children.length) return;
@@ -2173,7 +2223,8 @@ const app = {
     },
 
     updateNode() {
-        const node = this.getNodeByPath(this.state.currentNodePath);
+        const nodePath = this.state.selectedOpPath || this.state.currentNodePath;
+        const node = this.getNodeByPath(nodePath);
         if (!node) return;
         const title = document.getElementById('node-title');
         const content = document.getElementById('node-content');
@@ -2200,56 +2251,24 @@ const app = {
                 return;
             }
 
-            const parts = this.state.currentNodePath.split('/').filter(p => p !== '');
-            const parentPath = parts.slice(0, -1).join('/');
-            const parent = this.getNodeByPath(parentPath ? '/' + parentPath : '');
-            if (!parent || !parent.children || parent.children.length === 0) {
-                this.addLog('⚠ パイプラインを実行する兄弟ノードがありません');
-                return;
-            }
-
-            const currentIdx = parts.length > 0 ? parseInt(parts[parts.length - 1]) : 0;
-            if (isNaN(currentIdx)) {
-                this.addLog('⚠ 無効なノードパス');
-                return;
-            }
-
-            const siblings = parent.children.slice(currentIdx);
-            if (siblings.length === 0) {
-                this.addLog('⚠ 実行するステップがありません');
-                return;
-            }
-
+            const prompt = document.getElementById('node-content')?.value || '';
             const input = document.getElementById('input-textarea')?.value || '';
-            const tab = this.state.tabs[this.state.activeTab];
             const recipe = this.getRecipeSettings();
 
-            const safeAtob = str => { try { return atob(str); } catch { return str; } };
-            const pipelineSiblings = siblings.filter(s => {
-                const t = s.title ? safeAtob(s.title) : '';
-                return t !== 'Processed';
-            });
-            if (pipelineSiblings.length === 0) {
-                this.addLog('⚠ パイプラインステップがありません');
-                return;
-            }
-            const steps = pipelineSiblings.map((s, i) => ({
-                name: s.title ? safeAtob(s.title) : ('Step ' + (currentIdx + i + 1)),
-                prompt: s.content ? safeAtob(s.content) : '',
-            }));
+            const tab = this.state.tabs[this.state.activeTab];
+            const sentText = prompt.includes('{content}') ? prompt.replace('{content}', input) : (prompt + '\n\n' + input);
 
-            const firstSent = steps[0].prompt.includes('{content}') ? steps[0].prompt.replace('{content}', input) : (steps[0].prompt + '\n\n' + input);
             this.state.streamedOutput = '';
             const outputEl = document.getElementById('output-content');
             if (outputEl) {
                 outputEl.innerHTML = `
                     <div class="output-toolbar">
-                        <span class="output-label">Pipeline: ${steps.length} steps</span>
+                        <span class="output-label">Processing Output...</span>
                     </div>
                     <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 35px); overflow-y: auto;">
                         <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
                             <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
-                            <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(firstSent)}</pre>
+                            <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(sentText)}</pre>
                         </div>
                         <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
                             <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
@@ -2259,20 +2278,23 @@ const app = {
                 `;
             }
 
-            console.log('[Prompts] processPrompt sibling pipeline:', { steps, input, recipe });
             this.postMessage({
-                type: 'run_sibling_pipeline',
+                type: 'run_prompt_process',
                 payload: {
-                    steps,
+                    nodeId: this.state.currentNodePath || '',
+                    tabFile: tab ? tab.file : '',
                     content: input,
+                    userPrompt: prompt,
                     provider: recipe.provider,
                     model: recipe.model,
                     systemPrompt: recipe.systemPrompt,
                     temperature: recipe.temperature,
+                    attachments: node.attachments || [],        // machine-level (演算ペイン)
+                    inputAttachments: node.inputAttachments || [] // belt-level (入力ペイン)
                 }
             });
             this.state.pipelineRunning = true;
-            this.addLog(`▶ Sibling pipeline: ${steps.length} steps (${recipe.provider}/${recipe.model || '(default)'})`);
+            this.addLog(`▶ Processing prompt using ${recipe.provider}/${recipe.model || '(default)'}`);
         } else {
             this.runPipeline();
         }
@@ -2288,10 +2310,6 @@ const app = {
         this.renderTree();
         this.renderList();
         this.addLog('➕ Child added');
-        const tab = this.state.tabs[this.state.activeTab];
-        if (tab && tab.file && tab.root) {
-            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
-        }
     },
 
     removeNode() {
@@ -2309,10 +2327,6 @@ const app = {
         this.renderList();
         this.loadEditor(this.state.currentNodePath);
         this.addLog('🗑 Node removed');
-        const tab = this.state.tabs[this.state.activeTab];
-        if (tab && tab.file && tab.root) {
-            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
-        }
     },
 
     navRoot() {
@@ -2372,7 +2386,7 @@ const app = {
     },
 
     cancelPipeline() {
-            window.__promptsBridge.postMessage({ type: 'cancel_pipeline' });
+        this.postMessage({ type: 'cancel_pipeline' });
         this.state.pipelineRunning = false;
         this.addLog('✕ Pipeline canceled');
     },
@@ -2430,6 +2444,60 @@ const app = {
         if (menu) menu.style.display = 'none';
     },
 
+    showTreeContextMenu(event, path) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const menu = document.getElementById('tree-context-menu');
+        if (!menu) return;
+        
+        const node = this.getNodeByPath(path);
+        if (!node) return;
+        const currentTitle = node.title ? this.safeAtob(node.title) : this.getTitleFallback(node);
+        
+        menu.style.left = event.clientX + 'px';
+        menu.style.top = event.clientY + 'px';
+        menu.style.display = 'block';
+        
+        const escTitle = this.escapeHtml(currentTitle);
+        menu.innerHTML = `
+            <div class="ctx-item" onclick="app.renameNode('${path}', '${escTitle}'); app.hideTreeContextMenu()">✏️ 名前の変更...</div>
+            <div class="ctx-item" onclick="app.selectNode('${path}'); app.addChild(); app.hideTreeContextMenu()">➕ 子ノードを追加</div>
+            <div class="ctx-item" onclick="app.selectNode('${path}'); app.removeNode(); app.hideTreeContextMenu()" style="color: #ff4a4a;">🗑️ 削除</div>
+        `;
+    },
+    
+    hideTreeContextMenu() {
+        const menu = document.getElementById('tree-context-menu');
+        if (menu) menu.style.display = 'none';
+    },
+    
+    renameNode(path, oldTitle) {
+        const node = this.getNodeByPath(path);
+        if (!node) return;
+        const newTitle = prompt('ノードの名前を変更:', oldTitle);
+        if (newTitle === null) return; // Cancelled
+        const trimmed = newTitle.trim();
+        if (trimmed === '') return;
+        
+        const safeB64 = str => { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } };
+        node.title = safeB64(trimmed);
+        
+        this.renderTree();
+        this.renderList();
+        
+        // Also refresh the prompt editor if the renamed node is the currently active one
+        if (this.state.currentNodePath === path) {
+            this.loadEditor(path);
+        }
+        
+        const tab = this.state.tabs[this.state.activeTab];
+        if (tab && tab.file && tab.root) {
+            this.postMessage({ type: 'save_node', payload: { tabFile: tab.file, root: tab.root } });
+        }
+        this.addLog(`✏️ Node renamed to: "${trimmed}"`);
+    },
+
     copyLogEntry(text) {
         if (!text) return;
         navigator.clipboard.writeText(text).then(() => {
@@ -2456,54 +2524,6 @@ const app = {
     clearLogs() {
         const el = document.getElementById('messages-content');
         if (el) el.innerHTML = '';
-        const httpEl = document.getElementById('http-log-content');
-        if (httpEl) httpEl.innerHTML = '';
-    },
-
-    switchMsgTab(tab) {
-        document.querySelectorAll('.msg-tab').forEach(b => b.classList.toggle('msg-tab-active', b.dataset.tab === tab));
-        const logEl = document.getElementById('messages-content');
-        const httpEl = document.getElementById('http-log-content');
-        if (logEl) logEl.style.display = tab === 'log' ? '' : 'none';
-        if (httpEl) httpEl.style.display = tab === 'http' ? '' : 'none';
-    },
-
-    addHttpLog(entry) {
-        const el = document.getElementById('http-log-content');
-        if (!el) return;
-        const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
-        const id = entry.id || '';
-        let html = '';
-        if (entry.type === 'request') {
-            const bodyPreview = entry.body ? entry.body.slice(0, 300) : '';
-            html = `<div style="padding:4px 6px;border-bottom:1px solid #2d2d2d;background:#1a3a1a;">
-                <span style="color:#888;font-size:10px">[${time}]</span>
-                <span style="color:#4ec94e;font-weight:bold">➡ REQ</span>
-                <span style="color:#aaa;margin-left:4px">${entry.method}</span>
-                <span style="color:#6cf;margin-left:4px">${this.escapeHtml(entry.url)}</span>
-                ${bodyPreview ? `<details style="margin-top:2px"><summary style="color:#888;font-size:10px;cursor:pointer">Body</summary><pre style="margin:2px 0 0 12px;font-size:10px;color:#aaa;white-space:pre-wrap">${this.escapeHtml(bodyPreview)}</pre></details>` : ''}
-            </div>`;
-        } else if (entry.type === 'response') {
-            const bodyPreview = entry.body ? entry.body.slice(0, 500) : '';
-            const statusColor = entry.statusCode >= 200 && entry.statusCode < 300 ? '#4ec94e' : '#e64';
-            html = `<div style="padding:4px 6px;border-bottom:1px solid #2d2d2d;background:#1a1a2e;">
-                <span style="color:#888;font-size:10px">[${time}]</span>
-                <span style="color:${statusColor};font-weight:bold">⬅ RES</span>
-                <span style="color:#fff;margin-left:4px">${entry.statusCode}</span>
-                <span style="color:#888;margin-left:4px;font-size:10px">${entry.duration}ms</span>
-                ${bodyPreview ? `<details style="margin-top:2px"><summary style="color:#888;font-size:10px;cursor:pointer">Body</summary><pre style="margin:2px 0 0 12px;font-size:10px;color:#aaa;white-space:pre-wrap">${this.escapeHtml(bodyPreview)}</pre></details>` : ''}
-            </div>`;
-        } else if (entry.type === 'error') {
-            html = `<div style="padding:4px 6px;border-bottom:1px solid #2d2d2d;background:#2e1a1a;">
-                <span style="color:#888;font-size:10px">[${time}]</span>
-                <span style="color:#e64;font-weight:bold">✖ ERR</span>
-                <span style="color:#f88;margin-left:4px">${this.escapeHtml(entry.error || '')}</span>
-            </div>`;
-        }
-        if (html) {
-            el.insertAdjacentHTML('beforeend', html);
-            el.scrollTop = el.scrollHeight;
-        }
     },
 
     // Search
@@ -2511,7 +2531,7 @@ const app = {
         clearTimeout(this.state.searchTimeout);
         if (query.length < 2) return;
         this.state.searchTimeout = setTimeout(() => {
-            window.__promptsBridge.postMessage({ type: 'search', query, scope: 'all_tabs' });
+            this.postMessage({ type: 'search', query, scope: 'all_tabs' });
         }, 300);
     },
 
@@ -2553,18 +2573,6 @@ const app = {
     onStepDone(payload) {
         this.addLog(`✅ Step ${payload.index} done` + (payload.tokens ? ` (${payload.tokens} tokens)` : ''));
         if (payload.status === 'completed') this.state.pipelineRunning = false;
-        if (payload.output) {
-            this.state.streamedOutput = payload.output;
-            const outputEl = document.getElementById('output-content');
-            if (outputEl) {
-                outputEl.innerHTML = `
-                    <div class="output-toolbar">
-                        <span class="output-label">Step ${payload.index} Output</span>
-                    </div>
-                    <pre class="output-display" style="margin:0;flex:1;background:#1e1e1e;border:1px solid #2d2d2d;padding:8px;font-family:monospace;white-space:pre-wrap;font-size:11px;overflow-y:auto;">${this.escapeHtml(payload.output)}</pre>
-                `;
-            }
-        }
     },
 
     highlightStep(payload) {
@@ -2895,6 +2903,9 @@ const app = {
                 item(t('MenuSave'),        'save',          'Ctrl+S') +
                 item(t('MenuSaveAs'),      'save_as',       'Ctrl+Shift+S') +
                 sep +
+                item('📦 ' + t('MenuImportZip'),  'import_zip') +
+                item('📤 ' + t('MenuExportNode'), 'export_node') +
+                sep +
                 item('🤖 ' + t('MenuWelcomeWizard'), 'welcome_wizard', 'F1') +
                 item('🔄 Reset Welcome Wizard',       'reset_wizard') +
                 item('🚀 ' + t('MenuSetupWizard'),   'setup_wizard')
@@ -2952,7 +2963,8 @@ const app = {
             open:           () => this.openFile(),
             save:           () => this.saveFile(),
             save_as:        () => this.saveFileAs(),
-
+            import_zip:     () => this.addLog('📦 Import ZIP — coming soon'),
+            export_node:    () => this.addLog('📤 Export Node — coming soon'),
             welcome_wizard: () => this.showWizard(),
             setup_wizard:   () => this.showSetupWizard(),
             undo:           () => document.execCommand('undo'),
@@ -3040,76 +3052,60 @@ const app = {
         this.postMessage({ type: 'history_detail', payload: { id } });
     },
 
-    showHistoryInPanes(record) {
-        this.closeHistory();
-        const steps = (record.steps || []);
-        const firstStep = steps[0] || {};
-        const lastStep = steps[steps.length - 1] || {};
-        const t = key => this.t(key);
-
-        const inputEl = document.getElementById('input-content');
-        if (inputEl) {
-            inputEl.innerHTML = `
-                <div style="margin-bottom:6px">
-                    <div style="font-size:10px;color:#888;margin-bottom:2px">入力データ:</div>
-                    <textarea class="input-textarea" readonly style="min-height:80px">${this.escapeHtml(firstStep.input || '')}</textarea>
-                </div>
-                <div class="input-source-bar">
-                    <span class="input-source-label">${t('Source')}</span>
-                    <span class="input-source-value">History</span>
-                </div>`;
-        }
-
-        const promptEl = document.getElementById('prompt-content');
-        if (promptEl) {
-            let html = `<div style="font-size:11px;color:#ccc;margin-bottom:4px;padding:4px;background:#2a2a2a;border-radius:3px;">
-                📋 ${this.escapeHtml(record.pipelineName || '')} — ${steps.length} steps</div>`;
-            steps.forEach((step, i) => {
-                const evalBadge = this.evalBadgeHtml(step.evaluation || '');
-                html += `<div class="history-step" style="margin-bottom:4px;">
-                    <div class="history-step-header" onclick="this.parentElement.classList.toggle('expanded')" style="cursor:pointer;padding:3px 6px;background:#252525;border-radius:3px;font-size:11px;">
-                        <span style="color:#888">${i + 1}.</span>
-                        <span style="color:#ccc">${evalBadge} ${this.escapeHtml(step.name || step.type || '')}</span>
-                        <span style="float:right;color:#555">▶</span>
-                    </div>
-                    <div class="history-step-body" style="display:none;padding:6px;font-size:10px;">
-                        <div style="color:#888;margin-bottom:2px">Input:</div>
-                        <pre style="margin:0 0 6px 0;white-space:pre-wrap;color:#aaa">${this.escapeHtml(step.input || '')}</pre>
-                        <div style="color:#888;margin-bottom:2px">Output:</div>
-                        <pre style="margin:0;white-space:pre-wrap;color:#aaa">${this.escapeHtml(step.output || '')}</pre>
-                    </div>
-                </div>`;
-            });
-            promptEl.innerHTML = html;
-        }
-
-        const outputEl = document.getElementById('output-content');
-        if (outputEl) {
-            outputEl.innerHTML = `
-                <div class="output-toolbar">
-                    <span class="output-label">${this.escapeHtml(record.pipelineName || '')}</span>
-                </div>
-                <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 35px); overflow-y: auto;">
-                    <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
-                        <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
-                        <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(firstStep.input || '')}</pre>
-                    </div>
-                    <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
-                        <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
-                        <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(lastStep.output || '')}</pre>
-                    </div>
-                </div>`;
-        }
-
-        this.addLog(`📋 Loaded history: ${record.pipelineName}`);
-    },
-
     onHistoryDetailResult(record) {
+        const detailView = document.getElementById('history-detail-view');
+        if (!detailView) return;
         if (!record || !record.pipelineName) {
-            this.addLog('⚠ History data not found');
+            detailView.innerHTML = '<div class="history-empty">データが見つかりません</div>';
             return;
         }
-        this.showHistoryInPanes(record);
+        const runId = record.id || '';
+        const runEval = record.evaluation || '';
+
+        const stepsHtml = (record.steps || []).map((step, i) => {
+            const stepEval = step.evaluation || '';
+            const stepEvalBtns = this.evalButtonsHtml(`${runId}|${i}`, 'step', stepEval);
+            const evalBadge = this.evalBadgeHtml(stepEval);
+            return `
+            <div class="history-step ${stepEval ? 'has-eval eval-' + stepEval : ''}">
+                <div class="history-step-header" onclick="this.parentElement.classList.toggle('expanded')">
+                    <span class="history-step-num">${i + 1}</span>
+                    <span class="history-step-name">${evalBadge}${this.escapeHtml(step.name || '')}</span>
+                    <span class="history-step-type">${this.escapeHtml(step.type || '')}</span>
+                    ${step.promptTokens || step.completionTokens ? `<span class="history-step-tokens">${(step.promptTokens||0)+(step.completionTokens||0)} tok</span>` : ''}
+                    <span class="history-step-eval-btns" onclick="event.stopPropagation()">${stepEvalBtns}</span>
+                    <span class="history-step-toggle">▶</span>
+                </div>
+                <div class="history-step-body">
+                    <div class="history-step-section">
+                        <div class="history-step-label">Input</div>
+                        <pre class="history-step-content">${this.escapeHtml(step.input || '')}</pre>
+                    </div>
+                    <div class="history-step-section">
+                        <div class="history-step-label">Output</div>
+                        <pre class="history-step-content">${this.escapeHtml(step.output || '')}</pre>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        const runEvalBtns = this.evalButtonsHtml(runId, 'run', runEval);
+        detailView.innerHTML = `
+            <div class="history-detail-nav">
+                <button class="btn-back" onclick="app.backToHistoryList()">← 一覧に戻る</button>
+            </div>
+            <div class="history-detail-header">
+                <div class="history-detail-name">${this.escapeHtml(record.pipelineName || '')}</div>
+                <div class="history-detail-meta">
+                    <span class="history-detail-date">${this.escapeHtml((record.startedAt || record.executedAt || '').replace('T',' ').replace('Z',''))}</span>
+                    <span class="history-detail-run-eval">${runEvalBtns}</span>
+                </div>
+            </div>
+            ${record.outputContent ? `<div class="history-detail-output">
+                <div class="history-step-label">最終出力</div>
+                <pre class="history-step-content">${this.escapeHtml(record.outputContent)}</pre>
+            </div>` : ''}
+            <div class="history-steps">${stepsHtml}</div>`;
     },
 
     backToHistoryList() {
@@ -3558,26 +3554,138 @@ const app = {
             return;
         }
 
-        const node = this.getNodeByPath(this.state.currentNodePath);
+        const currentPath = this.state.currentNodePath;
+        const node = this.getNodeByPath(currentPath);
         if (!node) {
             inputEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
             return;
         }
-        
-        const inputData = (node.children && node.children.length > 0)
-            ? (() => { try { return atob(node.children[0].content || ''); } catch { return ''; } })()
-            : '';
 
+        const getRunResults = (opNode) => {
+            if (!opNode || !opNode.children) return [];
+            const proc = opNode.children.find(c => c.title && this.safeAtob(c.title) === 'Processed');
+            return proc ? (proc.children || []) : opNode.children;
+        };
+
+        let inputData = '';
+        const selectedDataPath = this.state.selectedDataPath;
+        const selectedOpPath = this.state.selectedOpPath;
+
+        if (selectedDataPath !== '') {
+            const dataNode = this.getNodeByPath(selectedDataPath);
+            const isViewingMode = selectedOpPath !== '' && this.isAncestor(selectedOpPath, selectedDataPath);
+            if (isViewingMode) {
+                // Viewing Mode: keep input and output as they are
+                if (dataNode && dataNode.pipelineMeta) {
+                    try {
+                        const meta = JSON.parse(dataNode.pipelineMeta);
+                        if (meta && meta.steps && meta.steps.length > 0) {
+                            inputData = meta.steps[0].input || '';
+                        }
+                    } catch(e) {}
+                }
+                if (!inputData && dataNode && dataNode.content) {
+                    try { inputData = atob(dataNode.content); } catch { inputData = dataNode.content; }
+                }
+            } else {
+                // Linking Mode: write output of selectedDataPath (which is dataNode.content) to input of selectedOpPath
+                if (dataNode && dataNode.content) {
+                    try { inputData = atob(dataNode.content); } catch { inputData = dataNode.content; }
+                }
+            }
+        } else {
+            const runs = getRunResults(node);
+            if (runs.length > 0) {
+                let selectedIdx = this.state.selectedOutputRunIndex !== undefined ? this.state.selectedOutputRunIndex : 0;
+                if (selectedIdx >= runs.length) selectedIdx = 0;
+                const child = runs[selectedIdx];
+                if (child && child.pipelineMeta) {
+                    try {
+                        const meta = JSON.parse(child.pipelineMeta);
+                        if (meta && meta.steps && meta.steps.length > 0) {
+                            inputData = meta.steps[0].input || '';
+                        }
+                    } catch(e) {}
+                }
+                if (!inputData && child && child.content) {
+                    try { inputData = atob(child.content); } catch { inputData = child.content; }
+                }
+            } else {
+                if (node.content) {
+                    try { inputData = atob(node.content); } catch { inputData = node.content; }
+                }
+            }
+        }
+        // Belt-level media attachments (inputAttachments, separate from machine-level node.attachments)
+        const inputAttachments = node.inputAttachments || [];
+        const attachHtml = inputAttachments.length > 0
+            ? inputAttachments.map((a, i) => {
+                const name = a.file || a.id || 'attachment';
+                return `<div class="list-item" style="display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 4px">
+                    <span style="flex:1">${this.escapeHtml(a.mimetype || '')}: ${this.escapeHtml(name)}${a.size ? ' (' + Math.round(a.size/1024) + 'KB)' : ''}</span>
+                    <button class="copy-btn" onclick="app.removeInputAttachment(${i})" title="削除">✕</button>
+                </div>`;
+            }).join('')
+            : `<div style="font-size:11px;color:#666;padding:4px">(なし)</div>`;
         inputEl.innerHTML = `
             <div style="margin-bottom:6px">
-                <div style="font-size:10px;color:#888;margin-bottom:2px">入力データ:</div>
-                <textarea id="input-textarea" class="input-textarea" placeholder="${t('NoInput')}" oninput="app.onInputChanged(this.value)">${this.escapeHtml(inputData)}</textarea>
+                <div style="font-size:10px;color:#888;margin-bottom:2px">入力テキスト ({content}):</div>
+                <textarea id="input-textarea" class="input-textarea" placeholder="${t('NoInput')}">${this.escapeHtml(inputData)}</textarea>
             </div>
-            <div class="input-source-bar">
-                <span class="input-source-label">${t('Source')}</span>
-                <span class="input-source-value">${t('PreviousStep')}</span>
-                <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
+            <div>
+                <div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px;display:flex;align-items:center;justify-content:space-between">
+                    <span>追加メディア入力 (Belt attachments)</span>
+                    <button class="copy-btn" onclick="app.addInputAttachment()" style="font-size:10px;padding:1px 6px">＋</button>
+                </div>
+                <div id="input-attachments-list" ${this._dropZoneAttrs('input_attachment')}
+                     style="min-height:32px;border:1px dashed #3c3c3c;border-radius:3px;padding:2px">${attachHtml}</div>
             </div>`;
+    },
+
+    // ── Drag-and-drop file handling ──────────────────────────────
+    // Called from ondrop attributes on attachment drop zones.
+    // purpose: 'machine_attachment' | 'input_attachment' | 'step_attachment'
+    handleFileDrop(event, purpose, stepIndex) {
+        event.preventDefault();
+        event.stopPropagation();
+        const el = event.currentTarget;
+        el.style.outline = '';
+        const files = Array.from(event.dataTransfer.files)
+            .filter(f => f.type.startsWith('image/') || f.type.startsWith('audio/') || f.type.startsWith('video/'));
+        if (files.length === 0) return;
+        Promise.all(files.map(f => new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = e => resolve({
+                file: f.name,
+                path: f.path || '',
+                mimetype: f.type,
+                content: e.target.result.split(',')[1],
+                size: f.size,
+            });
+            reader.readAsDataURL(f);
+        }))).then(attachments => {
+            this.onMediaFileDialogResult({ purpose, stepIndex, attachments });
+        });
+    },
+
+    _dropZoneAttrs(purpose, stepIndex) {
+        const si = stepIndex != null ? `,${stepIndex}` : '';
+        return `ondragover="event.preventDefault();this.style.outline='2px dashed #4fc3f7'"` +
+               ` ondragleave="this.style.outline=''"` +
+               ` ondrop="app.handleFileDrop(event,'${purpose}'${si !== '' ? si : ''})"`;
+    },
+
+    addInputAttachment() {
+        this.postMessage({ type: 'open_file_dialog', payload: { filter: 'media', purpose: 'input_attachment' } });
+    },
+
+    removeInputAttachment(index) {
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) return;
+        if (!node.inputAttachments) node.inputAttachments = [];
+        node.inputAttachments.splice(index, 1);
+        this.saveCurrentTab();
+        this.renderInput();
     },
 
     renderPipelineInput(el) {
@@ -3588,17 +3696,64 @@ const app = {
             return;
         }
         const step = this.state.pipelineSteps[si];
-        const inputText = step.input || '(no input yet)';
+        const inputText = step.input || '(pending)';
+        const sourceLabel = si === 0 ? `元入力 ({content})` : `Step ${si} 出力 ({result})`;
+        // Previous step artifacts
+        const prevArtifacts = (si > 0 && this.state.pipelineSteps[si - 1].artifacts) || [];
+        const artifactsHtml = prevArtifacts.length > 0
+            ? prevArtifacts.map(a => `<div style="font-size:11px;padding:2px 4px">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
+            : '';
+        // Step-specific attachments from pipelineMeta
+        const stepAttachments = step.attachments || [];
+        const stepAttachHtml = stepAttachments.length > 0
+            ? stepAttachments.map((a, i) => `<div class="list-item" style="display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 4px">
+                <span style="flex:1">${this.escapeHtml(a.mimetype || '')}: ${this.escapeHtml(a.file || a.id || '')}</span>
+                <button class="copy-btn" onclick="app.removeStepAttachment(${si},${i})" title="削除">✕</button>
+              </div>`).join('')
+            : `<div style="font-size:11px;color:#666;padding:4px">(添付なし)</div>`;
         el.innerHTML = `
-            <div class="input-header">
-                <span class="input-step-badge">${t('Step')} ${si + 1}</span>
-                <span class="input-step-name">${this.escapeHtml(step.name)}</span>
+            <div style="margin-bottom:6px">
+                <div style="font-size:10px;color:#888;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between">
+                    <span>${sourceLabel}</span>
+                    <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
+                </div>
+                <pre class="input-display" style="margin:0;background:#1a1a1a;border:1px solid #2d2d2d;padding:6px;white-space:pre-wrap;font-size:11px;max-height:120px;overflow-y:auto">${this.escapeHtml(inputText)}</pre>
+                ${artifactsHtml ? `<div style="margin-top:4px;font-size:10px;color:#888">前ステップ生産物:</div>${artifactsHtml}` : ''}
             </div>
-            <div class="input-source-bar">
-                <span class="input-source-value">${this.escapeHtml(step.source || t('PreviousStep'))}</span>
-                <button class="input-source-btn" onclick="app.showInputSourceDialog()">📂 ${t('Change')}</button>
-            </div>
-            <pre class="input-display">${this.escapeHtml(inputText)}</pre>`;
+            <div>
+                <div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px;display:flex;align-items:center;justify-content:space-between">
+                    <span>固有追加入力 (Attachments)</span>
+                    <button class="copy-btn" onclick="app.addStepAttachment(${si})" style="font-size:10px;padding:1px 6px">＋</button>
+                </div>
+                <div id="step-attachments-${si}" ${this._dropZoneAttrs('step_attachment', si)}
+                     style="min-height:32px;border:1px dashed #3c3c3c;border-radius:3px;padding:2px">${stepAttachHtml}</div>
+            </div>`;
+    },
+
+    addStepAttachment(stepIndex) {
+        this.postMessage({ type: 'open_file_dialog', payload: { filter: 'media', purpose: 'step_attachment', stepIndex } });
+    },
+
+    removeStepAttachment(stepIndex, attachIndex) {
+        const step = this.state.pipelineSteps && this.state.pipelineSteps[stepIndex];
+        if (!step || !step.attachments) return;
+        step.attachments.splice(attachIndex, 1);
+        // Persist to pipelineMeta
+        this._savePipelineStepAttachments(stepIndex);
+        this.renderInput();
+    },
+
+    _savePipelineStepAttachments(stepIndex) {
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node || !node.pipelineMeta) return;
+        try {
+            const meta = JSON.parse(node.pipelineMeta);
+            if (meta && meta.steps && meta.steps[stepIndex]) {
+                meta.steps[stepIndex].attachments = (this.state.pipelineSteps[stepIndex] || {}).attachments || [];
+                node.pipelineMeta = JSON.stringify(meta);
+                this.saveCurrentTab();
+            }
+        } catch (e) {}
     },
 
     renderPrompt() {
@@ -3611,7 +3766,9 @@ const app = {
             return;
         }
 
-        const node = this.getNodeByPath(this.state.currentNodePath);
+        // If the selected node is a data/leaf node, show the parent operation node's prompt
+        const promptNodePath = this.state.selectedOpPath || this.state.currentNodePath;
+        const node = this.getNodeByPath(promptNodePath);
         if (!node) {
             promptEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
             return;
@@ -3650,16 +3807,50 @@ const app = {
             recipeHtml += `<div style="font-size:10px;color:#888;margin-bottom:6px">Config > Recipes でレシピを追加</div>`;
         }
 
+        // Machine-level attachments (node.attachments = images/audio/video for prompt context)
+        const machineAttachments = node.attachments || [];
+        const machineAttachHtml = machineAttachments.length > 0
+            ? machineAttachments.map((a, i) => {
+                const name = a.file || a.id || 'attachment';
+                const icon = (a.mimetype || '').startsWith('image/') ? '🖼' : (a.mimetype || '').startsWith('audio/') ? '🎵' : (a.mimetype || '').startsWith('video/') ? '🎬' : '📎';
+                return `<div class="list-item" style="display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 4px">
+                    <span style="flex:1">${icon} ${this.escapeHtml(name)}${a.size ? ' (' + Math.round(a.size/1024) + 'KB)' : ''}</span>
+                    <button class="copy-btn" onclick="app.removeMachineAttachment(${i})" title="削除">✕</button>
+                </div>`;
+            }).join('')
+            : `<div style="font-size:11px;color:#666;padding:4px">(なし)</div>`;
+
         promptEl.innerHTML = `
             <button class="btn-primary prompt-editor-process-btn" onclick="app.processPrompt()" style="width:100%;padding:4px;font-size:11px;margin-bottom:6px">▶ 処理実行</button>
             <div style="margin-bottom:6px">
                 <div style="font-size:10px;color:#888;margin-bottom:2px">プロンプト:</div>
                 <textarea id="node-content" class="input-textarea" placeholder="{content} で入力を参照" style="min-height:100px">${this.escapeHtml(promptText)}</textarea>
             </div>
-            ${recipeHtml}`;
+            ${recipeHtml}
+            <div style="margin-top:6px">
+                <div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px;display:flex;align-items:center;justify-content:space-between">
+                    <span>演算添付 (Machine attachments)</span>
+                    <button class="copy-btn" onclick="app.addMachineAttachment()" style="font-size:10px;padding:1px 6px">＋</button>
+                </div>
+                <div id="machine-attachments-list" ${this._dropZoneAttrs('machine_attachment')}
+                     style="min-height:32px;border:1px dashed #3c3c3c;border-radius:3px;padding:2px">${machineAttachHtml}</div>
+            </div>`;
 
         // Render pipeline meta if available
         this.renderPipelineMeta(node);
+    },
+
+    addMachineAttachment() {
+        this.postMessage({ type: 'open_file_dialog', payload: { filter: 'media', purpose: 'machine_attachment' } });
+    },
+
+    removeMachineAttachment(index) {
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) return;
+        if (!node.attachments) node.attachments = [];
+        node.attachments.splice(index, 1);
+        this.saveCurrentTab();
+        this.renderPrompt();
     },
 
     editNodePipelineMeta() {
@@ -3755,58 +3946,51 @@ const app = {
             return;
         }
 
-        const node = this.getNodeByPath(this.state.currentNodePath);
-        if (!node) {
-            outputEl.innerHTML = `<div class="empty">${t('EmptyNode')}</div>`;
-            return;
-        }
+        const getRunResults = (opNode) => {
+            if (!opNode || !opNode.children) return [];
+            const proc = opNode.children.find(c => c.title && this.safeAtob(c.title) === 'Processed');
+            return proc ? (proc.children || []) : opNode.children;
+        };
 
-        // Find the Processed folder under node
-        let processedFolder = node.children ? node.children.find(c => {
-            const t = c.title ? (() => { try { return atob(c.title); } catch { return c.title; } })() : '';
-            return t === 'Processed';
-        }) : null;
+        const currentPath = this.state.currentNodePath;
+        const selectedDataPath = this.state.selectedDataPath;
+        const selectedOpPath = this.state.selectedOpPath;
 
-        const runs = processedFolder && processedFolder.children ? processedFolder.children : [];
-
-        let child = null;
+        let runs = [];
         let selectedIdx = 0;
 
-        if (this.state.currentResultNodePath) {
-            child = this.getNodeByPath(this.state.currentResultNodePath);
-            if (child && runs.length > 0) {
-                const idx = runs.findIndex(r => r === child);
-                if (idx !== -1) {
-                    selectedIdx = idx;
-                }
-            }
+        if (selectedDataPath !== '') {
+            const opNode = this.getNodeByPath(selectedOpPath);
+            runs = getRunResults(opNode);
+            selectedIdx = runs.findIndex(r => r === this.getNodeByPath(selectedDataPath));
+            if (selectedIdx === -1) selectedIdx = 0;
         } else {
-            if (runs.length === 0) {
-                outputEl.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
-                return;
-            }
+            const opNode = this.getNodeByPath(currentPath);
+            runs = getRunResults(opNode);
             selectedIdx = this.state.selectedOutputRunIndex !== undefined ? this.state.selectedOutputRunIndex : 0;
             if (selectedIdx >= runs.length) {
                 selectedIdx = 0;
                 this.state.selectedOutputRunIndex = 0;
             }
-            child = runs[selectedIdx];
         }
 
-        if (!child) {
+        if (runs.length === 0) {
             outputEl.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
             return;
         }
 
-        let sentText = 'N/A';
+        const child = runs[selectedIdx];
         let receivedText = child.content ? (() => { try { return atob(child.content); } catch { return child.content; } })() : '';
+        let artifacts = [];
 
         if (child.pipelineMeta) {
             try {
                 const meta = JSON.parse(child.pipelineMeta);
-                if (meta && meta.steps && meta.steps[0]) {
-                    sentText = meta.steps[0].input || 'N/A';
-                    receivedText = meta.steps[0].output || receivedText;
+                if (meta && meta.steps && meta.steps.length > 0) {
+                    // Use last step's output as received data
+                    const lastStep = meta.steps[meta.steps.length - 1];
+                    receivedText = lastStep.output || receivedText;
+                    artifacts = lastStep.artifacts || [];
                 }
             } catch(e) {}
         }
@@ -3816,14 +4000,13 @@ const app = {
             return `<option value="${idx}" ${idx === selectedIdx ? 'selected' : ''}>${this.escapeHtml(title)}</option>`;
         }).join('');
 
-        const toolbarHtml = `
+        let html = `
             <div class="output-toolbar">
                 <span class="output-label">${t('Output')} (${runs.length})</span>
                 <button class="output-save-btn" onclick="app.saveCurrentOutput()">${t('Save')}</button>
                 <button class="output-discard-btn" onclick="app.discardCurrentOutput()">${t('Discard')}</button>
                 <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
             </div>
-            
             <div class="output-run-selector-row" style="margin: 8px; display: flex; align-items: center; gap: 8px; font-size: 11px;">
                 <label for="output-run-selector" style="font-weight: bold; color: #858585;">実行履歴 (History):</label>
                 <select id="output-run-selector" onchange="app.onOutputRunSelected(this.value)" style="background: #252526; color: #ccc; border: 1px solid #3c3c3c; padding: 2px; font-size: 11px; flex: 1;">
@@ -3832,22 +4015,22 @@ const app = {
             </div>
         `;
 
-        let html = toolbarHtml;
-
         if (child.evaluation) {
             html += `<div class="eval-badge" style="margin: 0 8px 8px 8px;">★ ${this.escapeHtml(child.evaluation)}</div>`;
         }
 
+        const artifactsHtml = artifacts.length > 0
+            ? `<div style="font-size:10px;color:#888;margin-bottom:3px;border-bottom:1px solid #333;padding-bottom:2px">生産物 (Artifacts)</div>` +
+              artifacts.map(a => `<div style="font-size:11px;padding:2px 0">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
+            : '';
+
         html += `
-            <div class="output-history-container" style="display: flex; flex-direction: column; gap: 10px; padding: 8px; height: calc(100% - 75px); overflow-y: auto;">
-                <div class="output-history-sent" style="flex: 1; display: flex; flex-direction: column; min-height: 100px;">
-                    <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📥 送信データ (Sent Input)</div>
-                    <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(sentText)}</pre>
+            <div style="display:flex;flex-direction:column;gap:10px;padding:8px;height:calc(100% - 75px);overflow-y:auto;">
+                <div style="flex:1;display:flex;flex-direction:column;min-height:150px;">
+                    <div style="font-size:10px;font-weight:bold;color:#858585;margin-bottom:4px;border-bottom:1px solid #333;padding-bottom:2px;">受信データ (Received Output)</div>
+                    <pre class="output-display" style="margin:0;flex:1;background:#1e1e1e;border:1px solid #2d2d2d;padding:6px;font-family:monospace;white-space:pre-wrap;font-size:11px;overflow-y:auto;">${this.escapeHtml(receivedText)}</pre>
                 </div>
-                <div class="output-history-received" style="flex: 1; display: flex; flex-direction: column; min-height: 150px;">
-                    <div style="font-size: 10px; font-weight: bold; color: #858585; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px;">📤 受信データ (Received Output)</div>
-                    <pre class="output-display" style="margin: 0; flex: 1; background: #1e1e1e; border: 1px solid #2d2d2d; padding: 6px; font-family: monospace; white-space: pre-wrap; font-size: 11px; overflow-y: auto;">${this.escapeHtml(receivedText)}</pre>
-                </div>
+                ${artifactsHtml ? `<div id="output-artifacts" style="font-size:11px">${artifactsHtml}</div>` : `<div id="output-artifacts"></div>`}
             </div>
         `;
         outputEl.innerHTML = html;
@@ -3856,14 +4039,20 @@ const app = {
     onOutputRunSelected(value) {
         const idx = parseInt(value);
         this.state.selectedOutputRunIndex = idx;
-        if (this.state.currentResultNodePath) {
-            const parts = this.state.currentResultNodePath.split('/').filter(p => p !== '');
-            if (parts.length >= 2) {
-                parts[parts.length - 1] = String(idx);
-                this.state.currentResultNodePath = '/' + parts.join('/');
+
+        if (this.state.selectedDataPath !== '') {
+            const opNode = this.getNodeByPath(this.state.selectedOpPath);
+            if (opNode && opNode.children) {
+                const processedIdx = opNode.children.findIndex(c => c.title && this.safeAtob(c.title) === 'Processed');
+                if (processedIdx !== -1) {
+                    const newPath = this.state.selectedOpPath + '/' + processedIdx + '/' + idx;
+                    this.selectNode(newPath);
+                    return;
+                }
             }
         }
-        this.renderTree();
+
+        this.renderInput();
         this.renderOutput();
     },
 
@@ -3875,18 +4064,23 @@ const app = {
             return;
         }
         const step = this.state.pipelineSteps[si];
-        if (!step.completed) {
-            el.innerHTML = `<div class="empty">${t('NoOutput')}</div>`;
-            return;
-        }
-        const outputText = step.output || '(empty output)';
+        // Show streaming output while running, completed output when done
+        const outputText = step.completed
+            ? (step.output || '(empty output)')
+            : (step.streamingOutput || (step.status === 'running' ? '...' : '(pending)'));
+        const artifacts = step.artifacts || [];
+        const artifactsHtml = artifacts.length > 0
+            ? `<div style="font-size:10px;color:#888;margin:8px 8px 3px;border-bottom:1px solid #333;padding-bottom:2px">生産物 (Artifacts)</div>` +
+              artifacts.map(a => `<div style="font-size:11px;padding:2px 8px">🔗 <a style="color:#4fc3f7" href="#" onclick="app.openArtifact(${JSON.stringify(a)});return false">${this.escapeHtml(a.label || a.path || '')}</a></div>`).join('')
+            : '';
         el.innerHTML = `
             <div class="output-toolbar">
-                <span class="output-label">${t('Step')} ${si + 1} ${t('Output')}</span>
-                <button class="output-save-btn" onclick="app.savePipelineOutput(${si})">${t('Save')}</button>
-                <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>
+                <span class="output-label">${t('Step')} ${si + 1} ${t('Output')}${step.completed ? '' : ' ⏳'}</span>
+                ${step.completed ? `<button class="output-save-btn" onclick="app.savePipelineOutput(${si})">${t('Save')}</button>
+                <button class="output-chest-btn" onclick="app.sendToChestDialog()">${t('SendToChest')}</button>` : ''}
             </div>
-            <pre class="output-display">${this.escapeHtml(outputText)}</pre>`;
+            <pre class="output-display" id="pipeline-output-${si}">${this.escapeHtml(outputText)}</pre>
+            <div id="pipeline-artifacts-${si}">${artifactsHtml}</div>`;
     },
 
     // ── Input Source Dialog ────────────────────────────────────────
@@ -3944,6 +4138,41 @@ const app = {
         if (!name) return;
         this.postMessage({ type: 'select_input_source', payload: { stepIndex: this.state.selectedStep, source: 'chest', chestName: name } });
         document.getElementById('input-source-modal')?.classList.remove('visible');
+    },
+
+    onMediaFileDialogResult(payload) {
+        if (!payload || !payload.attachments || payload.attachments.length === 0) return;
+        const purpose = payload.purpose;
+        const attachments = payload.attachments;
+        const node = this.getNodeByPath(this.state.currentNodePath);
+        if (!node) return;
+
+        if (purpose === 'machine_attachment') {
+            if (!node.attachments) node.attachments = [];
+            node.attachments.push(...attachments);
+            this.saveCurrentTab();
+            this.renderPrompt();
+        } else if (purpose === 'input_attachment') {
+            if (!node.inputAttachments) node.inputAttachments = [];
+            node.inputAttachments.push(...attachments);
+            this.saveCurrentTab();
+            this.renderInput();
+        } else if (purpose === 'step_attachment') {
+            const si = payload.stepIndex;
+            if (si == null || !this.state.pipelineSteps || !this.state.pipelineSteps[si]) return;
+            const step = this.state.pipelineSteps[si];
+            if (!step.attachments) step.attachments = [];
+            step.attachments.push(...attachments);
+            this._savePipelineStepAttachments(si);
+            this.renderInput();
+        }
+    },
+
+    openArtifact(artifact) {
+        if (!artifact) return;
+        if (artifact.path) {
+            this.postMessage({ type: 'open_artifact', payload: artifact });
+        }
     },
 
     // ── Chest Operations ───────────────────────────────────────────

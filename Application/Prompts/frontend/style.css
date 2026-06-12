@@ -145,10 +145,9 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 /* Tree */
 .tree-node { padding: 2px 4px; cursor: pointer; border-radius: 2px; display: flex; align-items: center; }
 .tree-node:hover { background: #3d3d3d; }
-.tree-node.selected { background: #094771; }
-.tree-node.selected-input { background: #2a6b2a; }
-.tree-node.selected-result { background: #8a5a1a; }
-.tree-node.selected-data { background: #8a2a2a; }
+.tree-node.selected { background: #1a6b2a; color: #d4edda; }
+.tree-node.selected-data { background: #8a5a1a; color: #ffd8a0; }
+.tree-node.selected-linked { background: #8a2a2a; color: #ffb3b3; }
 .tree-node.completed { background: #1a4f1a; color: #68d391; }
 .tree-node.current-op { border-left: 3px solid #4fc3f7; padding-left: 1px; text-decoration: underline; }
 .tree-node.current-data { border-left: 3px solid #f06292; padding-left: 1px; text-decoration: underline; }
@@ -1180,3 +1179,14 @@ html, body { height: 100%; font-family: 'Segoe UI', sans-serif; font-size: 13px;
 .media-viewer-img { max-width: 88vw; max-height: 78vh; object-fit: contain; border-radius: 4px; }
 .media-viewer-video { max-width: 88vw; max-height: 78vh; border-radius: 4px; }
 .media-viewer-audio { width: 360px; }
+
+/* 連結モード 実行履歴カードグリッド */
+.linked-run-grid { display: flex; flex-direction: column; gap: 4px; padding: 8px; overflow-y: auto; }
+.linked-run-item { display: flex; flex-direction: column; }
+.linked-run-card { width: 100%; min-height: 40px; background: #252526; border: 1px solid #3c3c3c; border-radius: 4px; cursor: pointer; display: flex; flex-direction: row; align-items: center; padding: 4px 8px; gap: 8px; }
+.linked-run-card:hover { border-color: #4ec9b0; }
+.linked-run-card.selected { border-color: #c44; background: #2a0a0a; }
+.linked-run-icon { font-size: 18px; flex-shrink: 0; }
+.linked-run-title { font-size: 11px; color: #ccc; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.linked-run-eval { font-size: 10px; color: #f0c040; flex-shrink: 0; }
+.linked-run-detail { padding: 6px 8px; border: 1px solid #3c3c3c; border-top: none; border-radius: 0 0 4px 4px; background: #1a1a1a; overflow-y: auto; max-height: 300px; }

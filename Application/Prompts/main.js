@@ -385,7 +385,7 @@ ipcMain.on('webview-message', async (event, message) => {
             }
             case 'run_prompt_process': {
                 const steps = [{
-                    name: 'Process Prompt',
+                    name: new Date().toISOString(),
                     type: 'ai',
                     provider: payload.provider || 'openai',
                     model: payload.model || 'gpt-4o-mini',
@@ -393,7 +393,7 @@ ipcMain.on('webview-message', async (event, message) => {
                     userPrompt: payload.userPrompt || '{content}',
                     temperature: String(payload.temperature || 0.7)
                 }];
-                runner.run('Process Prompt', steps, payload.content || '', [], 'child');
+                runner.run(new Date().toISOString(), steps, payload.content || '', [], 'child');
                 break;
             }
             case 'cancel_pipeline': {

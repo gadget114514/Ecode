@@ -88,6 +88,9 @@ class PipelineRunner {
             pipelineName: this.pipelineName,
             startedAt: this.startedAt
         });
+        this.postBridge('pipeline_init', {
+            steps: steps.map((s, i) => ({ ...s, index: i }))
+        });
 
         // Initialize history steps list
         this.historySteps = steps.map((s, idx) => ({

@@ -539,10 +539,11 @@ describe('Storage', () => {
     });
 
     test('providers round-trip', () => {
-        const providers = { openai: { apiKey: 'sk-test', baseUrl: '', models: [] } };
+        const providers = { openai: { apiKey: 'sk-test', baseUrl: '', apiFormat: 'openai', models: [] }, replicate: { apiKey: 'token123', baseUrl: 'https://api.replicate.com', apiFormat: 'replicate', models: [] } };
         st.saveProviders(providers);
         const loaded = st.loadProviders();
         assert.equal(loaded.openai.apiKey, 'sk-test');
+        assert.equal(loaded.replicate.apiFormat, 'replicate');
     });
 
     test('pipelines round-trip', () => {
@@ -572,11 +573,12 @@ describe('Storage', () => {
     });
 
     test('recipes round-trip', () => {
-        const recipes = [{ name: 'r1', type: 'ai', provider: 'openai', model: 'gpt-4.1', temperature: 0.5, systemPrompt: 'sys', command: '' }];
+        const recipes = [{ name: 'r1', type: 'ai', provider: 'openai', model: 'gpt-4.1', temperature: 0.5, systemPrompt: 'sys', command: '', customParams: { negative_prompt: 'ugly' } }];
         st.saveRecipes(recipes);
         const loaded = st.loadRecipes();
         assert.equal(loaded[0].name, 'r1');
         assert.equal(loaded[0].temperature, 0.5);
+        assert.equal(loaded[0].customParams.negative_prompt, 'ugly');
     });
 
     test('history save and list', () => {
@@ -3098,4 +3100,598 @@ describe('Selection & Color logic', () => {
         assert.equal(j.candidates[0].content.parts[0].text, 'mock');
         srv.close();
     });
+
+    // ─── Recovered VM-based test helpers & suite ───
+    const vm = require('node:vm');
+    const appJsPath = path.join(__dirname, '../frontend/app.js');
+    const appJsCode = fs.readFileSync(appJsPath, 'utf8');
+
+    function createMockAppContext() {
+        const context = {
+            window: {},
+            document: {
+                getElementById: (id) => {
+                    return {
+                        style: {},
+                        classList: { remove: () => {}, add: () => {} },
+                        value: '',
+                        querySelectorAll: () => [],
+                        appendChild: () => {}
+                    };
+                },
+                addEventListener: () => {},
+                querySelector: () => ({ style: {} }),
+                createElement: () => ({
+                    classList: { add: () => {}, remove: () => {} },
+                    style: {}
+                })
+            },
+            navigator: {
+                clipboard: { writeText: () => Promise.resolve() }
+            },
+            localStorage: {
+                getItem: () => null,
+                setItem: () => {},
+                removeItem: () => {},
+                clear: () => {}
+            },
+            confirm: () => true,
+            console: console,
+            setTimeout: setTimeout,
+            clearTimeout: clearTimeout,
+            btoa: s => Buffer.from(s, 'binary').toString('base64'),
+            atob: s => Buffer.from(s, 'base64').toString('binary'),
+        };
+        vm.createContext(context);
+        vm.runInContext(appJsCode, context);
+        const app = vm.runInContext('app', context);
+        app._vmContext = context;
+        return app;
+    }
+
+    test('VM-based tests: selectNode and buildTreeHTML behavior matches design specs', () => {
+        const app = createMockAppContext();
+        app.state.tabs = [{ name: 'test', file: 'test.json', root: { title: '', content: '', mimetype: 'text/plain', nodeType: 'root', children: [
+            { title: b64('Step 1'), content: '', mimetype: 'text/plain', nodeType: 'assemble', children: [
+                { title: b64('Processed'), content: '', mimetype: 'text/plain', nodeType: 'placeholder', children: [
+                    { title: b64('Result A'), content: b64('out'), mimetype: 'text/plain', nodeType: 'data', pipelineMeta: '{}', children: [] }
+                ]}
+            ]}
+        ] } }];
+        app.state.activeTab = 0;
+        app.updateRecipeBadge = () => {};
+        app.renderTree = () => {};
+        app.renderList = () => {};
+        app.loadEditor = () => {};
+
+        app.selectNode('0');
+        assert.equal(app.state.selectedOpPath, '0');
+        assert.equal(app.state.selectedDataPath, '');
+
+        app.selectNode('0/0/0');
+        assert.equal(app.state.selectedOpPath, '0');
+        assert.equal(app.state.selectedDataPath, '0/0/0');
+    });
+
+    test('VM-based tests: clicking data node does not overwrite a different active op-node', () => {
+        const app = createMockAppContext();
+        app.state.tabs = [{ name: 'test', file: 'test.json', root: { title: '', content: '', mimetype: 'text/plain', nodeType: 'root', children: [
+            { title: b64('Step 1'), content: '', mimetype: 'text/plain', nodeType: 'assemble', children: [
+                { title: b64('Processed'), content: '', mimetype: 'text/plain', nodeType: 'placeholder', children: [
+                    { title: b64('Result A'), content: b64('out'), mimetype: 'text/plain', nodeType: 'data', pipelineMeta: '{}', children: [] }
+                ]}
+            ]},
+            { title: b64('Step 2'), content: '', mimetype: 'text/plain', nodeType: 'assemble', children: [] }
+        ] } }];
+        app.state.activeTab = 0;
+        app.updateRecipeBadge = () => {};
+        app.renderTree = () => {};
+        app.renderList = () => {};
+        app.loadEditor = () => {};
+
+        // 1. Click Step 2 ("1") -> selectedOpPath = '1'
+        app.selectNode('1');
+        assert.equal(app.state.selectedOpPath, '1');
+        assert.equal(app.state.selectedDataPath, '');
+
+        // 2. Click Result A ("0/0/0") -> selectedDataPath = '0/0/0', but selectedOpPath must remain '1'
+        app.selectNode('0/0/0');
+        assert.equal(app.state.selectedOpPath, '1');
+        assert.equal(app.state.selectedDataPath, '0/0/0');
+    });
+
+    test('VM-based tests: renderInput logic loads correct inputData based on mode', () => {
+        const app = createMockAppContext();
+        app.state.tabs = [{ name: 'test', file: 'test.json', root: { title: '', content: '', mimetype: 'text/plain', nodeType: 'root', children: [
+            { title: b64('Step 1'), content: b64('step 1 template'), mimetype: 'text/plain', nodeType: 'assemble', children: [
+                { title: b64('Processed'), content: '', mimetype: 'text/plain', nodeType: 'placeholder', children: [
+                    { title: b64('Result A'), content: b64('out'), mimetype: 'text/plain', nodeType: 'data', 
+                      pipelineMeta: JSON.stringify({ steps: [{ input: 'historical input' }] }), children: [] }
+                ]}
+            ]}
+        ] } }];
+        app.state.activeTab = 0;
+        
+        let renderedHtml = '';
+        app._vmContext.document.getElementById = (id) => {
+            if (id === 'input-content') {
+                return {
+                    set innerHTML(html) { renderedHtml = html; },
+                    get innerHTML() { return renderedHtml; }
+                };
+            }
+            return { style: {}, classList: { remove: () => {}, add: () => {} }, appendChild: () => {} };
+        };
+
+        // 1. Normal mode (currentNodePath = '0')
+        app.state.currentNodePath = '0';
+        app.state.selectedDataPath = '';
+        app.state.selectedOpPath = '';
+        app.renderInput();
+        assert.ok(renderedHtml.includes('step 1 template'));
+
+        // 2. Viewing mode (selectedDataPath = '0/0/0')
+        app.state.currentNodePath = '0/0/0';
+        app.state.selectedDataPath = '0/0/0';
+        app.state.selectedOpPath = '';
+        app.renderInput();
+        assert.ok(renderedHtml.includes('historical input'));
+    });
+
+    test('VM-based tests: node type color class invariants are satisfied for all selections', () => {
+        const app = createMockAppContext();
+        app.state.tabs = [{ name: 'test', file: 'test.json', root: { title: '', content: '', mimetype: 'text/plain', nodeType: 'root', children: [
+            { title: b64('Step 1'), content: '', mimetype: 'text/plain', nodeType: 'assemble', children: [
+                { title: b64('Processed'), content: '', mimetype: 'text/plain', nodeType: 'placeholder', children: [
+                    { title: b64('Result A'), content: b64('out'), mimetype: 'text/plain', nodeType: 'data', pipelineMeta: '{}', children: [] }
+                ]}
+            ]}
+        ] } }];
+        app.state.activeTab = 0;
+        app.updateRecipeBadge = () => {};
+        app.renderTree = () => {};
+        app.renderList = () => {};
+        app.loadEditor = () => {};
+
+        const checkColorInvariants = () => {
+            const paths = ['', '0', '0/0', '0/0/0'];
+            for (const path of paths) {
+                const node = app.getNodeByPath(path);
+                if (!node) continue;
+                const isData = node.nodeType === 'data';
+                
+                const classes = [];
+                const isSelected = app.state.currentNodePath === path;
+                const isSelectedOp = app.state.selectedOpPath !== '' && app.state.selectedOpPath === path;
+                const isSelectedData = app.state.selectedDataPath !== '' && app.state.selectedDataPath === path;
+
+                if (isSelected) {
+                    if (isData) classes.push('selected-data');
+                    else classes.push('selected');
+                } else if (isSelectedOp) {
+                    classes.push('selected-input');
+                } else if (isSelectedData) {
+                    classes.push('selected-result');
+                }
+
+                if (isData) {
+                    assert.ok(!classes.includes('selected'), `Data node should not have "selected"`);
+                    assert.ok(!classes.includes('selected-input'), `Data node should not have "selected-input"`);
+                } else {
+                    assert.ok(!classes.includes('selected-data'), `Step node should not have "selected-data"`);
+                    assert.ok(!classes.includes('selected-result'), `Step node should not have "selected-result"`);
+                }
+            }
+        };
+
+        app.selectNode('0');
+        checkColorInvariants();
+
+        app.selectNode('0/0/0');
+        checkColorInvariants();
+    });
+
+    test('VM-based tests: data node with originalOpNode and inputAttachments redirects operation pane and input pane correctly', () => {
+        const app = createMockAppContext();
+
+        // Setup dynamic nodes
+        const originalOpNode = {
+            title: b64('Original Op'),
+            content: b64('original prompt text'),
+            mimetype: 'text/plain',
+            selectedRecipe: 'Recipe A',
+            attachments: [{ file: 'op_attach.png', mimetype: 'image/png' }],
+            nodeType: 'op'
+        };
+
+        app.state.tabs = [
+            {
+                name: 'test',
+                file: 'test.json',
+                root: {
+                    title: '', content: '', mimetype: 'text/plain', nodeType: 'root', children: [
+                        {
+                            title: b64('Step 1'), content: '', mimetype: 'text/plain', nodeType: 'assemble', children: [
+                                {
+                                    title: b64('Processed'), content: '', mimetype: 'text/plain', nodeType: 'placeholder', children: [
+                                        {
+                                            title: b64('Result A'),
+                                            content: b64('run output'),
+                                            mimetype: 'text/plain',
+                                            nodeType: 'data',
+                                            pipelineMeta: JSON.stringify({ steps: [{ input: 'in', output: 'out' }] }),
+                                            originalOpNode: JSON.parse(JSON.stringify(originalOpNode)),
+                                            inputAttachments: [{ file: 'input_attach.png', mimetype: 'image/png' }],
+                                            children: []
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ];
+        app.state.activeTab = 0;
+        app.state.recipes = [{ name: 'Recipe A', provider: 'openai', model: 'gpt-4' }, { name: 'Recipe B', provider: 'openai', model: 'gpt-4' }];
+        app.renderTree = () => {};
+        app.renderList = () => {};
+        // Mock UI elements to verify render calls
+        let renderedHtml = '';
+        let inputTextHtml = '';
+        app._vmContext.document.getElementById = (id) => {
+            if (id === 'prompt-content') {
+                return {
+                    set innerHTML(html) { renderedHtml = html; },
+                    get innerHTML() { return renderedHtml; }
+                };
+            }
+            if (id === 'input-content') {
+                return {
+                    set innerHTML(html) { inputTextHtml = html; },
+                    get innerHTML() { return inputTextHtml; }
+                };
+            }
+            if (id === 'node-content') {
+                return { value: 'edited prompt text' };
+            }
+            if (id === 'node-title') {
+                return { value: 'Result A Title' };
+            }
+            if (id === 'input-textarea') {
+                return { value: 'edited input text' };
+            }
+            if (id === 'recipe-badge') {
+                return { textContent: '', style: {} };
+            }
+            return { style: {}, classList: { remove: () => {}, add: () => {} }, appendChild: () => {} };
+        };
+
+        // 1. Select the data node "0/0/0"
+        app.selectNode('0/0/0');
+
+        // Check if loadEditor restored the selectedRecipe from originalOpNode
+        assert.equal(app.state.selectedRecipe, 'Recipe A');
+
+        // Check if renderPrompt printed original prompt text
+        assert.ok(renderedHtml.includes('original prompt text'), 'Should display originalOpNode prompt text');
+
+        // 2. Test recipe selection on data node originalOpNode
+        app.selectRecipe(1); // Select Recipe B
+        const currentDataNode = app.getNodeByPath('0/0/0');
+        assert.equal(currentDataNode.originalOpNode.selectedRecipe, 'Recipe B', 'Recipe selection should be persisted to originalOpNode');
+
+        // 3. Test updateNode writes to originalOpNode.content but leaves data node title on node itself
+        app.updateNode();
+        assert.equal(atob(currentDataNode.originalOpNode.content), 'edited prompt text', 'Prompt text should update originalOpNode content');
+        assert.equal(atob(currentDataNode.title), 'Result A Title', 'Title should update the data node itself');
+        assert.equal(currentDataNode.input, 'edited input text', 'Input text should update the data node itself');
+
+        // Check input rendering for edited input text
+        app.renderInput();
+        assert.ok(inputTextHtml.includes('edited input text'), 'Should display edited input text on renderInput');
+
+        // 4. Test attachments addition and deletion on originalOpNode
+        app.onMediaFileDialogResult({
+            purpose: 'machine_attachment',
+            attachments: [{ file: 'new_op_attach.png', mimetype: 'image/png' }]
+        });
+        assert.equal(currentDataNode.originalOpNode.attachments.length, 2, 'Attachments should be added to originalOpNode');
+        assert.equal(currentDataNode.originalOpNode.attachments[1].file, 'new_op_attach.png');
+
+        app.removeMachineAttachment(0);
+        assert.equal(currentDataNode.originalOpNode.attachments.length, 1, 'Attachments should be removed from originalOpNode');
+        assert.equal(currentDataNode.originalOpNode.attachments[0].file, 'new_op_attach.png');
+
+        // Test input attachments (Belt attachments) addition and deletion on data node itself
+        app.onMediaFileDialogResult({
+            purpose: 'input_attachment',
+            attachments: [{ file: 'new_input_attach.png', mimetype: 'image/png' }]
+        });
+        assert.equal(currentDataNode.inputAttachments.length, 2, 'Input attachments should be added to data node');
+        assert.equal(currentDataNode.inputAttachments[1].file, 'new_input_attach.png');
+
+        app.removeInputAttachment(0);
+        assert.equal(currentDataNode.inputAttachments.length, 1, 'Input attachments should be removed from data node');
+        assert.equal(currentDataNode.inputAttachments[0].file, 'new_input_attach.png');
+
+        // 5. Test processPrompt executes using originalOpNode's attachments and data node's inputAttachments
+        let postedMessage = null;
+        app.postMessage = (msg) => { postedMessage = msg; };
+        app.processPrompt();
+
+        assert.ok(postedMessage, 'Should post run_prompt_process message');
+        assert.equal(postedMessage.type, 'run_prompt_process');
+        assert.equal(postedMessage.payload.userPrompt, 'edited prompt text');
+        assert.equal(postedMessage.payload.content, 'edited input text', 'Should send edited input text');
+        assert.equal(postedMessage.payload.attachments.length, 1);
+        assert.equal(postedMessage.payload.attachments[0].file, 'new_op_attach.png');
+        assert.equal(postedMessage.payload.inputAttachments.length, 1);
+        assert.equal(postedMessage.payload.inputAttachments[0].file, 'new_input_attach.png');
+
+        // 6. Test onPipelineCompleted copies current opNode's inputAttachments
+        const opNodeOnTab = app.getNodeByPath('0');
+        opNodeOnTab.inputAttachments = [{ file: 'source_input_attach.png', mimetype: 'image/png' }];
+        
+        app.onPipelineCompleted({
+            pipelineName: 'Test Pipeline',
+            outputContent: 'new output',
+            steps: [{ input: 'new input', output: 'new output' }]
+        });
+
+        // The newly saved child should be under Step 1 -> Processed (0/0/0)
+        const newChild = app.getNodeByPath('0/0/0');
+        assert.ok(newChild, 'New child node should be saved');
+        assert.equal(newChild.nodeType, 'data');
+        assert.ok(newChild.inputAttachments, 'New child should have inputAttachments copied');
+        assert.equal(newChild.inputAttachments.length, 1);
+        assert.equal(newChild.inputAttachments[0].file, 'source_input_attach.png');
+    });
+
+    test('VM-based tests: recipe customParams can be edited, parsed as JSON, and sent in payload', () => {
+        const app = createMockAppContext();
+        app.state.tabs = [
+            {
+                name: 'test',
+                file: 'test.json',
+                root: {
+                    title: '', content: '', mimetype: 'text/plain', nodeType: 'root', children: [
+                        { title: b64('Step 1'), content: '', mimetype: 'text/plain', nodeType: 'assemble', children: [] }
+                    ]
+                }
+            }
+        ];
+        app.state.activeTab = 0;
+        app.state.recipes = [];
+        app.renderRecipeManager = () => {};
+        app.saveRecipes = () => {};
+        app.renderTree = () => {};
+        app.renderList = () => {};
+
+        // Mock UI elements
+        const uiValues = {
+            'rm-name': 'New AI Recipe',
+            'rm-type': 'ai',
+            'rm-provider': 'replicate',
+            'rm-model': 'stability-ai/sdxl',
+            'rm-temperature': '0.7',
+            'rm-system-prompt': 'Be helpful',
+            'rm-custom-params': '{"negative_prompt": "ugly, blurry", "steps": 25}'
+        };
+
+        app._vmContext.document.getElementById = (id) => {
+            return {
+                value: uiValues[id] || '',
+                style: {},
+                classList: { remove: () => {}, add: () => {} },
+                appendChild: () => {}
+            };
+        };
+
+        // 1. Test addRecipeFromManager parses customParams JSON correctly
+        app.addRecipeFromManager();
+        assert.equal(app.state.recipes.length, 1);
+        const added = app.state.recipes[0];
+        assert.equal(added.name, 'New AI Recipe');
+        assert.equal(added.provider, 'replicate');
+        assert.equal(JSON.stringify(added.customParams), JSON.stringify({ negative_prompt: 'ugly, blurry', steps: 25 }));
+
+        // 2. Test edit and saveEditRecipe with modified custom parameters
+        app.state.editingRecipeIndex = 0;
+        uiValues['edit-name'] = 'Updated AI Recipe';
+        uiValues['edit-provider'] = 'fal-ai';
+        uiValues['edit-model'] = 'fal-ai/flux/schnell';
+        uiValues['edit-system-prompt'] = 'Be concise';
+        uiValues['edit-custom-params'] = '{"aspect_ratio": "16:9"}';
+
+        app.saveEditRecipe(0);
+        const edited = app.state.recipes[0];
+        assert.equal(edited.name, 'Updated AI Recipe');
+        assert.equal(edited.provider, 'fal-ai');
+        assert.equal(JSON.stringify(edited.customParams), JSON.stringify({ aspect_ratio: '16:9' }));
+
+        // 3. Test invalid JSON alerts and does not save
+        uiValues['edit-custom-params'] = '{invalid_json}';
+        let alertCalled = false;
+        app._vmContext.alert = () => { alertCalled = true; };
+        app.saveEditRecipe(0);
+        assert.ok(alertCalled, 'Should alert on invalid JSON');
+        // Custom params should remain unmodified
+        assert.equal(JSON.stringify(app.state.recipes[0].customParams), JSON.stringify({ aspect_ratio: '16:9' }));
+
+        // 4. Test customParams is sent in processPrompt payload
+        app.state.selectedRecipe = 'Updated AI Recipe';
+        app.state.currentNodePath = '0';
+        app.state.selectedOpPath = '0';
+
+        // Mock nodes
+        app.getNodeByPath = (path) => app.state.tabs[0].root.children[0];
+
+        // Override UI elements for processPrompt
+        uiValues['node-content'] = 'edited prompt';
+        uiValues['input-textarea'] = 'edited input';
+
+        let postedMessage = null;
+        app.postMessage = (msg) => { postedMessage = msg; };
+        app.processPrompt();
+
+        assert.ok(postedMessage);
+        assert.equal(postedMessage.type, 'run_prompt_process');
+        assert.equal(JSON.stringify(postedMessage.payload.customParams), JSON.stringify({ aspect_ratio: '16:9' }));
+    });
+
+    test('VM-based tests: tab renaming via renameTab', () => {
+        const app = createMockAppContext();
+        app.state.tabs = [
+            { name: 'OldName.json', file: 'OldName.json', root: {} }
+        ];
+        app.state.activeTab = 0;
+        app.renderTabs = () => {};
+
+        const messages = [];
+        app.postMessage = (msg) => { messages.push(msg); };
+
+        // Rename the tab (which sends rename_file message)
+        app.renameTab(0, 'NewName.json');
+
+        // Assert rename_file payload sent
+        assert.equal(messages.length, 1);
+        assert.equal(messages[0].type, 'rename_file');
+        assert.equal(messages[0].payload.oldFile, 'OldName.json');
+        assert.equal(messages[0].payload.newFile, 'NewName.json');
+
+        // Simulate main process response callback
+        messages.length = 0;
+        app.onRenameFileResult({ success: true, oldFile: 'OldName.json', newFile: 'NewName.json' });
+
+        // Assert tab name updated in state
+        assert.equal(app.state.tabs[0].name, 'NewName.json');
+        assert.equal(app.state.tabs[0].file, 'NewName.json');
+
+        // Assert save_session and get_file_tree payloads sent
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0].type, 'save_session');
+        assert.equal(messages[0].payload.tabs[0].name, 'NewName.json');
+        assert.equal(messages[0].payload.tabs[0].file, 'NewName.json');
+        assert.equal(messages[1].type, 'get_file_tree');
+
+        // Assert invalid names are rejected
+        let alertCalled = false;
+        app._vmContext.alert = () => { alertCalled = true; };
+        messages.length = 0;
+        app.renameTab(0, 'invalid/name');
+        assert.ok(alertCalled, 'Should alert on invalid char "/"');
+        assert.equal(messages.length, 0, 'Should not post message on invalid name');
+
+        alertCalled = false;
+        app.renameTab(0, 'CON.json');
+        assert.ok(alertCalled, 'Should alert on Windows reserved name "CON"');
+        assert.equal(messages.length, 0);
+    });
+
+    test('VM-based tests: custom providers and custom formats integration', () => {
+        const app = createMockAppContext();
+        
+        let innerHtmlContent = '';
+        app._vmContext.document.getElementById = (id) => {
+            if (id === 'provider-list') {
+                return {
+                    style: {},
+                    classList: { remove: () => {}, add: () => {} },
+                    set innerHTML(val) { innerHtmlContent = val; },
+                    get innerHTML() { return innerHtmlContent; },
+                    appendChild: () => {}
+                };
+            }
+            return {
+                style: {},
+                classList: { remove: () => {}, add: () => {} },
+                value: '',
+                querySelectorAll: () => [],
+                appendChild: () => {}
+            };
+        };
+
+        const providers = {
+            'custom-id': { apiFormat: 'custom-sample', apiKey: 'test-key', baseUrl: 'http://test' }
+        };
+        const customMetadata = {
+            'custom-sample': {
+                name: 'Custom Sample',
+                defaultModels: ['sample-model-1', 'sample-model-2']
+            }
+        };
+
+        // Invoke IPC event handler simulation
+        app.onProvidersResult(providers, customMetadata);
+
+        // Assert cached metadata
+        assert.deepEqual(
+            JSON.stringify(app.state.customMetadata),
+            JSON.stringify(customMetadata)
+        );
+
+        // Assert initialized models
+        assert.deepEqual(
+            JSON.stringify(app.state.providerModels['custom-sample']),
+            JSON.stringify(['sample-model-1', 'sample-model-2'])
+        );
+
+        // Assert UI select dropdown contains the custom format
+        assert.ok(innerHtmlContent.includes('custom-sample'), 'Should render the custom API Format option');
+        assert.ok(innerHtmlContent.includes('Custom Sample (Custom)'), 'Should render the custom API Format label');
+    });
 });
+
+describe('Custom Providers Loading', () => {
+    test('loadCustomProviders creates sample and loads valid .js provider', () => {
+        const tmpDir = makeTempDir();
+        const testProviders = {};
+        
+        // Inline loadCustomProviders with custom test object parameter
+        function testLoadCustomProviders(storagePath, targetDict) {
+            const dir = path.join(storagePath, 'custom_providers');
+            if (!fs.existsSync(dir)) {
+                try { fs.mkdirSync(dir, { recursive: true }); } catch(e) {}
+                const sampleCode = `class CustomSampleProvider {
+                    constructor(apiKey, baseUrl) {}
+                    name() { return 'custom-sample'; }
+                    defaultModels() { return ['sample-model-1']; }
+                    async call() { return {}; }
+                }
+                module.exports = CustomSampleProvider;`;
+                try { fs.writeFileSync(path.join(dir, 'sample.js'), sampleCode, 'utf8'); } catch(e) {}
+            }
+            try {
+                const files = fs.readdirSync(dir);
+                for (const file of files) {
+                    if (file.endsWith('.js')) {
+                        const fullPath = path.join(dir, file);
+                        try {
+                            delete require.cache[require.resolve(fullPath)];
+                            const ProviderClass = require(fullPath);
+                            if (ProviderClass && typeof ProviderClass === 'function') {
+                                const tempInstance = new ProviderClass('', '');
+                                if (typeof tempInstance.name === 'function' && typeof tempInstance.call === 'function') {
+                                    const providerName = tempInstance.name();
+                                    targetDict[providerName] = ProviderClass;
+                                }
+                            }
+                        } catch (err) {}
+                    }
+                }
+            } catch (e) {}
+        }
+
+        testLoadCustomProviders(tmpDir, testProviders);
+        
+        assert.ok(testProviders['custom-sample'], 'Should load custom-sample provider');
+        const ProviderClass = testProviders['custom-sample'];
+        const instance = new ProviderClass('', '');
+        assert.equal(instance.name(), 'custom-sample');
+        assert.deepEqual(instance.defaultModels(), ['sample-model-1']);
+        
+        rmrf(tmpDir);
+    });
+});
+

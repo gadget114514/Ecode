@@ -80,6 +80,90 @@ function httpRequest(url, method, headers, body, timeoutMs = 60000) {
     });
 }
 
+function downloadBinary(url, headers = {}) {
+    return new Promise((resolve, reject) => {
+        const u = new URL(url);
+        const mod = u.protocol === 'https:' ? https : http;
+        const opts = {
+            hostname: u.hostname,
+            port: u.port || (u.protocol === 'https:' ? 443 : 80),
+            path: u.pathname + u.search,
+            method: 'GET',
+            headers,
+            timeout: 30000,
+        };
+        const req = mod.request(opts, res => {
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end', () => resolve(Buffer.concat(chunks)));
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('download timeout')); });
+        req.end();
+    });
+}
+
+const customProviders = {};
+
+function loadCustomProviders(storagePath) {
+    const dir = path.join(storagePath, 'custom_providers');
+    if (!fs.existsSync(dir)) {
+        try { fs.mkdirSync(dir, { recursive: true }); } catch(e) {}
+        const sampleCode = `/**
+ * Custom Provider Sample
+ */
+class CustomSampleProvider {
+    constructor(apiKey, baseUrl) {
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl || '';
+    }
+
+    // This unique name will be used as the API Format identifier
+    name() { return 'custom-sample'; }
+
+    defaultModels() { return ['sample-model-1', 'sample-model-2']; }
+
+    async call(req) {
+        // req includes: model, userPrompt, systemPrompt, temperature, maxTokens, attachments, customParams
+        const responseText = \`[Custom Sample] Received prompt: "\${req.userPrompt}" using model "\${req.model}". apiKey is "\${this.apiKey ? 'SET' : 'NOT SET'}".\`;
+        return {
+            content: responseText,
+            model: req.model,
+            outputAttachments: []
+        };
+    }
+
+    async testConnection() {
+        return ''; // Return empty string if success, error message if failure
+    }
+}
+
+module.exports = CustomSampleProvider;
+`;
+        try { fs.writeFileSync(path.join(dir, 'sample.js'), sampleCode, 'utf8'); } catch(e) {}
+    }
+
+    try {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+            if (file.endsWith('.js')) {
+                const fullPath = path.join(dir, file);
+                try {
+                    delete require.cache[require.resolve(fullPath)];
+                    const ProviderClass = require(fullPath);
+                    if (ProviderClass && typeof ProviderClass === 'function') {
+                        const tempInstance = new ProviderClass('', '');
+                        if (typeof tempInstance.name === 'function' && typeof tempInstance.call === 'function') {
+                            const providerName = tempInstance.name();
+                            customProviders[providerName] = ProviderClass;
+                        }
+                    }
+                } catch (err) {}
+            }
+        }
+    } catch (e) {}
+}
+
 // ============================================================
 // AI Providers
 // ============================================================
@@ -461,15 +545,226 @@ class MockHTTPProvider {
     }
 }
 
+class OpenAIImageProvider {
+    constructor(apiKey, baseUrl) {
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl || 'https://api.openai.com';
+    }
+    name() { return 'openai-image'; }
+    defaultModels() { return ['dall-e-3', 'dall-e-2']; }
+
+    async call(req) {
+        const size = req.customParams?.size || '1024x1024';
+        const body = JSON.stringify({
+            model: req.model || 'dall-e-3',
+            prompt: req.userPrompt,
+            n: 1,
+            size,
+            response_format: 'b64_json'
+        });
+        const raw = await httpRequest(
+            this.baseUrl + '/v1/images/generations', 'POST',
+            { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + this.apiKey },
+            body);
+        const j = JSON.parse(raw);
+        if (j.error) throw new Error(j.error.message);
+        const b64 = j.data?.[0]?.b64_json;
+        if (!b64) throw new Error('No image returned from OpenAI');
+        
+        const filename = `generated_${Date.now()}.png`;
+        return {
+            content: `[OpenAI Image Generated: ${filename}]`,
+            model: req.model,
+            outputAttachments: [{
+                file: filename,
+                mimetype: 'image/png',
+                content: b64,
+                size: Buffer.from(b64, 'base64').length
+            }]
+        };
+    }
+    async listModels() { return this.defaultModels(); }
+    async testConnection() { return ''; }
+}
+
+class ReplicateProvider {
+    constructor(apiKey, baseUrl) {
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl || 'https://api.replicate.com';
+    }
+    name() { return 'replicate'; }
+    defaultModels() { return ['stability-ai/sdxl', 'bytedance/animatediff']; }
+
+    async call(req) {
+        let modelVersion = req.model;
+        const body = JSON.stringify({
+            version: modelVersion.includes('/') ? undefined : modelVersion,
+            input: {
+                prompt: req.userPrompt,
+                negative_prompt: req.customParams?.negative_prompt || '',
+                seed: req.customParams?.seed ? parseInt(req.customParams.seed) : undefined,
+                num_inference_steps: req.customParams?.steps ? parseInt(req.customParams.steps) : undefined,
+                guidance_scale: req.customParams?.cfg_scale ? parseFloat(req.customParams.cfg_scale) : undefined,
+                ...req.customParams
+            }
+        });
+
+        let url = this.baseUrl + '/v1/predictions';
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': 'Token ' + this.apiKey
+        };
+        const raw = await httpRequest(url, 'POST', headers, body);
+        let prediction = JSON.parse(raw);
+        if (prediction.error) throw new Error(prediction.error);
+        
+        const id = prediction.id;
+        const getUrl = prediction.urls?.get || (this.baseUrl + '/v1/predictions/' + id);
+
+        let attempts = 0;
+        const maxAttempts = 60;
+        while (attempts < maxAttempts) {
+            await new Promise(res => setTimeout(res, 5000));
+            const pollRaw = await httpRequest(getUrl, 'GET', headers, null);
+            prediction = JSON.parse(pollRaw);
+            if (prediction.status === 'succeeded') {
+                break;
+            }
+            if (prediction.status === 'failed' || prediction.status === 'canceled') {
+                throw new Error(`Replicate prediction ${prediction.status}: ${prediction.error || 'Unknown error'}`);
+            }
+            attempts++;
+        }
+        if (prediction.status !== 'succeeded') {
+            throw new Error('Replicate prediction timeout');
+        }
+
+        const output = prediction.output;
+        if (!output) throw new Error('No output from Replicate prediction');
+
+        const urls = Array.isArray(output) ? output : [output];
+        const outputAttachments = [];
+        for (let i = 0; i < urls.length; i++) {
+            const mediaUrl = urls[i];
+            const buffer = await downloadBinary(mediaUrl);
+            const ext = mediaUrl.split('.').pop().split('?')[0] || 'png';
+            const mimetype = ext === 'mp4' ? 'video/mp4' : (ext === 'mp3' || ext === 'wav' ? 'audio/mpeg' : 'image/png');
+            outputAttachments.push({
+                file: `replicate_${id}_${i}.${ext}`,
+                mimetype,
+                content: buffer.toString('base64'),
+                size: buffer.length
+            });
+        }
+
+        return {
+            content: `[Replicate Completed: prediction ${id}]`,
+            model: req.model,
+            outputAttachments
+        };
+    }
+
+    async listModels() { return this.defaultModels(); }
+    async testConnection() { return ''; }
+}
+
+class FalAIProvider {
+    constructor(apiKey, baseUrl) {
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl || 'https://queue.fal.run';
+    }
+    name() { return 'fal-ai'; }
+    defaultModels() { return ['fal-ai/flux/schnell', 'fal-ai/stable-diffusion-v35-medium']; }
+
+    async call(req) {
+        const modelName = req.model;
+        const url = `${this.baseUrl}/${modelName}`;
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': 'Key ' + this.apiKey
+        };
+        const body = JSON.stringify({
+            prompt: req.userPrompt,
+            negative_prompt: req.customParams?.negative_prompt || '',
+            seed: req.customParams?.seed ? parseInt(req.customParams.seed) : undefined,
+            num_inference_steps: req.customParams?.steps ? parseInt(req.customParams.steps) : undefined,
+            guidance_scale: req.customParams?.cfg_scale ? parseFloat(req.customParams.cfg_scale) : undefined,
+            ...req.customParams
+        });
+
+        const raw = await httpRequest(url, 'POST', headers, body);
+        let job = JSON.parse(raw);
+        if (job.error) throw new Error(job.error);
+        const requestId = job.request_id;
+        const statusUrl = `${url}/requests/${requestId}`;
+
+        let attempts = 0;
+        const maxAttempts = 60;
+        while (attempts < maxAttempts) {
+            await new Promise(res => setTimeout(res, 3000));
+            const pollRaw = await httpRequest(statusUrl, 'GET', headers, null);
+            const statusData = JSON.parse(pollRaw);
+            if (statusData.status === 'COMPLETED') {
+                const finalRaw = await httpRequest(statusUrl, 'GET', headers, null);
+                job = JSON.parse(finalRaw);
+                break;
+            }
+            if (statusData.status === 'FAILED') {
+                throw new Error('Fal.ai prediction failed');
+            }
+            attempts++;
+        }
+
+        const outputAttachments = [];
+        const images = job.images || [];
+        const videos = job.video ? [job.video] : [];
+        const outputs = [...images, ...videos];
+
+        if (outputs.length === 0 && job.output) {
+             outputs.push(job.output);
+        }
+
+        for (let i = 0; i < outputs.length; i++) {
+            const out = outputs[i];
+            const mediaUrl = typeof out === 'string' ? out : (out.url || '');
+            if (!mediaUrl) continue;
+            const buffer = await downloadBinary(mediaUrl);
+            const ext = mediaUrl.split('.').pop().split('?')[0] || 'png';
+            const mimetype = out.content_type || (ext === 'mp4' ? 'video/mp4' : 'image/png');
+            outputAttachments.push({
+                file: `fal_${requestId}_${i}.${ext}`,
+                mimetype,
+                content: buffer.toString('base64'),
+                size: buffer.length
+            });
+        }
+
+        return {
+            content: `[Fal.ai Completed: request ${requestId}]`,
+            model: req.model,
+            outputAttachments
+        };
+    }
+
+    async listModels() { return this.defaultModels(); }
+    async testConnection() { return ''; }
+}
+
 function createProvider(type, apiKey, baseUrl) {
+    if (customProviders[type]) {
+        return new customProviders[type](apiKey, baseUrl);
+    }
     switch (type) {
-        case 'openai':     return new OpenAIProvider(apiKey, baseUrl);
-        case 'anthropic':  return new AnthropicProvider(apiKey, baseUrl);
-        case 'gemini':     return new GeminiProvider(apiKey, baseUrl);
-        case 'ollama':     return new OllamaProvider(apiKey, baseUrl);
-        case 'mock':       return new MockProvider();
-        case 'mock-http':  return new MockHTTPProvider(baseUrl);
-        default:           return null;
+        case 'openai':       return new OpenAIProvider(apiKey, baseUrl);
+        case 'anthropic':    return new AnthropicProvider(apiKey, baseUrl);
+        case 'gemini':       return new GeminiProvider(apiKey, baseUrl);
+        case 'ollama':       return new OllamaProvider(apiKey, baseUrl);
+        case 'mock':         return new MockProvider();
+        case 'mock-http':    return new MockHTTPProvider(baseUrl);
+        case 'openai-image': return new OpenAIImageProvider(apiKey, baseUrl);
+        case 'replicate':    return new ReplicateProvider(apiKey, baseUrl);
+        case 'fal-ai':       return new FalAIProvider(apiKey, baseUrl);
+        default:             return null;
     }
 }
 
@@ -765,9 +1060,13 @@ class PipelineRunner {
 
     setBridgeCallback(cb) { this.bridgeCb = cb; }
 
-    registerProvider(type, apiKey, baseUrl) {
-        const p = createProvider(type, apiKey, baseUrl);
-        if (p) this.providers[type] = p;
+    registerProvider(name, typeOrProvider, apiKey, baseUrl) {
+        if (typeOrProvider && typeof typeOrProvider === 'object') {
+            this.providers[name] = typeOrProvider;
+        } else {
+            const p = createProvider(typeOrProvider, apiKey, baseUrl);
+            if (p) this.providers[name] = p;
+        }
     }
 
     postBridge(type, json) {
@@ -826,9 +1125,14 @@ class PipelineRunner {
         this.pendingSteps = [...steps];
         this.inputSourceOverridden = false;
         this.inputSourceContent = '';
+        this.postBridge('pipeline_init', JSON.stringify({ steps: steps.map((s, i) => ({ ...s, index: i })) }));
         this.postBridge('step_started', JSON.stringify({ index: 0, name: steps[0]?.name || '' }));
         this._runNext().catch(e => {
             this.running = false;
+            try {
+                fs.appendFileSync(path.join(appDataPath, 'error.log'), `[${new Date().toISOString()}] Pipeline Error: ${e.message}\nStack: ${e.stack}\n\n`, 'utf8');
+            } catch (err) {}
+            postToJS('log', JSON.stringify({ message: `❌ Pipeline Error: ${e.message}<details><summary>Call Stack</summary><pre style="margin:4px 0;font-size:11px;color:#ff6b6b;background:rgba(0,0,0,0.2);padding:6px;border-radius:4px;white-space:pre-wrap;">${e.stack}</pre></details>` }));
             this.postBridge('pipeline_error', JSON.stringify({ message: String(e) }));
         });
     }
@@ -866,6 +1170,10 @@ class PipelineRunner {
             await this._executeStep(step);
         } catch (e) {
             this.running = false;
+            try {
+                fs.appendFileSync(path.join(appDataPath, 'error.log'), `[${new Date().toISOString()}] Pipeline Error: ${e.message}\nStack: ${e.stack}\n\n`, 'utf8');
+            } catch (err) {}
+            postToJS('log', JSON.stringify({ message: `❌ Step Error: ${e.message}<details><summary>Call Stack</summary><pre style="margin:4px 0;font-size:11px;color:#ff6b6b;background:rgba(0,0,0,0.2);padding:6px;border-radius:4px;white-space:pre-wrap;">${e.stack}</pre></details>` }));
             this.postBridge('pipeline_error', JSON.stringify({ message: String(e) }));
             return;
         }
@@ -897,6 +1205,7 @@ class PipelineRunner {
                 temperature: parseFloat(step.params?.temperature || '0.7'),
                 maxTokens: parseInt(step.params?.maxTokens || '4096'),
                 attachments: this.inputAttachments || [],
+                customParams: step.params?.customParams || {},
             };
 
             const resp = await provider.call(req);
@@ -907,7 +1216,7 @@ class PipelineRunner {
                     this.historySteps[idx].artifacts = resp.outputAttachments;
                 }
             }
-            this.postBridge('step_done', JSON.stringify({ index: idx, tokens: resp.completionTokens || 0 }));
+            this.postBridge('step_done', JSON.stringify({ index: idx, tokens: resp.completionTokens || 0, outputAttachments: this.historySteps[idx].artifacts || [] }));
 
         } else if (type === 'manual') {
             const mode = step.params?.mode || 'view';
@@ -1003,6 +1312,7 @@ class PipelineRunner {
                             userPrompt,
                             temperature: parseFloat(subStep.temperature || '0.7'),
                             maxTokens: 4096,
+                            customParams: subStep.customParams || {},
                         });
                         branchContent = resp.content;
                     }
@@ -1341,17 +1651,17 @@ function sendFullInit() {
     const pipelines = storage.loadPipelines();
 
     const providers = storage.loadProviders();
-    for (const [type, cfg] of Object.entries(providers)) {
-        runner.registerProvider(type, cfg.apiKey, cfg.baseUrl);
+    for (const [name, cfg] of Object.entries(providers)) {
+        runner.registerProvider(name, cfg.apiFormat || name, cfg.apiKey || '', cfg.baseUrl || '');
     }
     // MockProvider is always available — no API key required
-    runner.registerProvider('mock', '', '');
+    runner.registerProvider('mock', 'mock', '', '');
     if (!providers.mock) {
         providers.mock = { apiKey: '', baseUrl: '', models: ['echo', 'fixed', 'image-echo', 'image-compose'] };
     }
     // MockHTTPProvider — connects to a running MockHTTPAIServer (test_mock_ai_server.exe)
     const mockHttpBaseUrl = providers['mock-http']?.baseUrl || 'http://localhost:8765';
-    runner.registerProvider('mock-http', '', mockHttpBaseUrl);
+    runner.registerProvider('mock-http', 'mock-http', '', mockHttpBaseUrl);
     if (!providers['mock-http']) {
         providers['mock-http'] = { apiKey: '', baseUrl: 'http://localhost:8765', models: ['echo', 'image-echo', 'image-compose'] };
     }
@@ -1367,6 +1677,7 @@ function sendFullInit() {
     postToJS('init', {
         language: localization.lang,
         embedded,
+        appDataPath,
         tabs: session.tabs,
         nodes,
         pipelines,
@@ -1393,6 +1704,25 @@ function handleBridgeMessage(type, payload) {
             if (payload?.path) {
                 const root = storage.loadTabData(payload.path);
                 postToJS('file_data_result', { path: payload.path, root });
+            }
+            break;
+        }
+        case 'rename_file': {
+            const { oldFile, newFile } = payload || {};
+            if (oldFile && newFile) {
+                const oldFull = oldFile.includes(path.sep) ? oldFile : storage.dataPath(oldFile);
+                const newFull = newFile.includes(path.sep) ? newFile : storage.dataPath(newFile);
+                try {
+                    if (fs.existsSync(oldFull)) {
+                        ensureDir(path.dirname(newFull));
+                        fs.renameSync(oldFull, newFull);
+                        postToJS('rename_file_result', { success: true, oldFile, newFile });
+                    } else {
+                        postToJS('rename_file_result', { success: false, error: 'Source file does not exist' });
+                    }
+                } catch (e) {
+                    postToJS('rename_file_result', { success: false, error: e.message });
+                }
             }
             break;
         }
@@ -1429,7 +1759,7 @@ function handleBridgeMessage(type, payload) {
         case 'run_prompt_process': {
             if (payload?.content) {
                 const step = {
-                    name: 'Process Prompt',
+                    name: new Date().toISOString(),
                     type: 'ai',
                     params: {
                         provider: payload.provider || 'openai',
@@ -1437,6 +1767,7 @@ function handleBridgeMessage(type, payload) {
                         systemPrompt: payload.systemPrompt || '',
                         userPrompt: payload.userPrompt || '{content}',
                         temperature: String(payload.temperature ?? 0.7),
+                        customParams: payload.customParams || {},
                     },
                 };
                 // Merge machine-level (演算ペイン) and belt-level (入力ペイン) attachments
@@ -1444,7 +1775,7 @@ function handleBridgeMessage(type, payload) {
                     ...(payload.attachments || []),
                     ...(payload.inputAttachments || [])
                 ];
-                runner.run('Process Prompt', [step], payload.content, allAttachments, 'child');
+                runner.run(new Date().toISOString(), [step], payload.content, allAttachments, 'child');
             }
             break;
         }
@@ -1479,30 +1810,46 @@ function handleBridgeMessage(type, payload) {
             const providers = storage.loadProviders();
             if (!providers.mock) providers.mock = { apiKey: '', baseUrl: '', models: ['echo', 'fixed', 'image-echo', 'image-compose'] };
             if (!providers['mock-http']) providers['mock-http'] = { apiKey: '', baseUrl: 'http://localhost:8765', models: ['echo', 'image-echo', 'image-compose'] };
-            postToJS('providers_result', providers);
+            
+            const customMetadata = {};
+            for (const [name, ProviderClass] of Object.entries(customProviders)) {
+                try {
+                    const tempInstance = new ProviderClass('', '');
+                    customMetadata[name] = {
+                        name: tempInstance.name(),
+                        defaultModels: typeof tempInstance.defaultModels === 'function' ? tempInstance.defaultModels() : []
+                    };
+                } catch (e) {}
+            }
+            postToJS('providers_result', { providers, customMetadata });
             break;
         }
         case 'save_providers': {
             const providers = payload || {};
             storage.saveProviders(providers);
-            for (const [type, cfg] of Object.entries(providers)) {
-                runner.registerProvider(type, cfg.apiKey || '', cfg.baseUrl || '');
+            for (const [name, cfg] of Object.entries(providers)) {
+                runner.registerProvider(name, cfg.apiFormat || name, cfg.apiKey || '', cfg.baseUrl || '');
             }
             // Always keep mock and mock-http registered after provider updates
-            runner.registerProvider('mock', '', '');
-            runner.registerProvider('mock-http', '', providers['mock-http']?.baseUrl || 'http://localhost:8765');
+            runner.registerProvider('mock', 'mock', '', '');
+            runner.registerProvider('mock-http', 'mock-http', '', providers['mock-http']?.baseUrl || 'http://localhost:8765');
             break;
         }
         case 'test_provider_connection': {
-            const { provider: prov, apiKey, baseUrl } = payload || {};
-            const p = createProvider(prov, apiKey, baseUrl);
+            const { provider: prov, apiFormat, apiKey, baseUrl } = payload || {};
+            const p = createProvider(apiFormat || prov, apiKey, baseUrl);
             if (p) {
-                p.testConnection().then(err => {
+                const testFn = typeof p.testConnection === 'function'
+                    ? p.testConnection.bind(p)
+                    : async () => '';
+                testFn().then(err => {
                     postToJS('test_connection_result', {
                         provider: prov,
                         success: !err,
                         message: err || 'Connection OK',
                     });
+                }).catch(err => {
+                    postToJS('test_connection_result', { provider: prov, success: false, message: err.message });
                 });
             } else {
                 postToJS('test_connection_result', { provider: prov, success: false, message: 'Unknown provider' });
@@ -1514,10 +1861,15 @@ function handleBridgeMessage(type, payload) {
             if (prov) {
                 const providers = storage.loadProviders();
                 const cfg = providers[prov] || {};
-                const p = createProvider(prov, cfg.apiKey, cfg.baseUrl);
+                const p = createProvider(cfg.apiFormat || prov, cfg.apiKey, cfg.baseUrl);
                 if (p) {
-                    p.listModels().then(models => {
+                    const listFn = typeof p.listModels === 'function'
+                        ? p.listModels.bind(p)
+                        : (typeof p.defaultModels === 'function' ? p.defaultModels.bind(p) : async () => []);
+                    listFn().then(models => {
                         postToJS('model_list', { provider: prov, models });
+                    }).catch(() => {
+                        postToJS('model_list', { provider: prov, models: [] });
                     });
                 } else {
                     postToJS('model_list', { provider: prov, models: [] });
@@ -2090,6 +2442,7 @@ ipcMain.on('bridge', (_event, msg) => {
 app.whenReady().then(() => {
     appDataPath = getAppDataPath();
     storage.init(appDataPath);
+    loadCustomProviders(appDataPath);
 
     // Check for --embedded flag
     const args = process.argv.slice(2);

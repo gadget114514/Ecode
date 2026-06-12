@@ -63,14 +63,16 @@ endif()
   file(GLOB _dlls "${dll_dir}/*.dll")
   foreach(_dll ${_dlls})
     get_filename_component(_dll_name "${_dll}" NAME)
-    execute_process(
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_dll}" "${out_dir}/plugins/${_dll_name}"
-      RESULT_VARIABLE _dll_ret
-    )
-    if(_dll_ret EQUAL 0)
-      message(STATUS "Copied ${_dll} -> ${out_dir}/plugins/${_dll_name}")
-    else()
-      message(WARNING "Failed to copy ${_dll} -> ${out_dir}/plugins/${_dll_name}")
+    if(NOT _dll_name STREQUAL "WebView2Loader.dll")
+      execute_process(
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_dll}" "${out_dir}/plugins/${_dll_name}"
+        RESULT_VARIABLE _dll_ret
+      )
+      if(_dll_ret EQUAL 0)
+        message(STATUS "Copied ${_dll} -> ${out_dir}/plugins/${_dll_name}")
+      else()
+        message(WARNING "Failed to copy ${_dll} -> ${out_dir}/plugins/${_dll_name}")
+      endif()
     endif()
   endforeach()
 
