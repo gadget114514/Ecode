@@ -72,3 +72,6 @@ bin/Release/
 
 # WebView2 user data directory
 *.WebView2/
+
+# Electron build artifacts
+*.asar
