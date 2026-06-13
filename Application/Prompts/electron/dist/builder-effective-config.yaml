@@ -1,0 +1,15 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.ecode.prompts
+productName: Prompts
+files:
+  - filter:
+      - main.js
+      - preload.js
+extraResources:
+  - from: ../frontend
+    to: frontend
+win:
+  target: dir
+electronVersion: 31.7.7

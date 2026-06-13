@@ -1,0 +1,16 @@
+{
+  "name": "prompts-electron",
+  "version": "1.0.0",
+  "description": "Prompts - AI Pipeline Editor",
+  "author": "Ecode",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . Prompts --platform=win32 --arch=x64 --out=dist --overwrite --asar --extra-resource=../frontend",
+    "test": "node --test test.js"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "@electron/packager": "^18.3.5"
+  }
+}
