@@ -1,0 +1,87 @@
+{
+  "projects": [
+    {
+      "name": "Ecode",
+      "milestones": [
+        { "date": "2026-09-30", "label": "v1.0 リリース", "color": "#ef4444" }
+      ],
+      "tasks": [
+        {
+          "id": "1",
+          "name": "基盤機能（完了済）",
+          "children": [
+            {
+              "id": "1.1",
+              "name": "ターミナル",
+              "children": [
+                { "id": "1.1.1", "name": "ターミナル + CLIランチャー", "qty": 1, "hours": 80, "assignee": "", "plan": { "start": "2025-01-01", "end": "2025-06-30" }, "actual": { "start": "2025-01-01", "end": "2025-06-30" }, "note": "ConPTYベースのターミナル実装" },
+                { "id": "1.1.2", "name": "OSC 8 ハイパーリンク", "qty": 1, "hours": 24, "assignee": "", "plan": { "start": "2025-04-01", "end": "2025-05-31" }, "actual": { "start": "2025-04-01", "end": "2025-05-31" }, "note": "ターミナル出力のファイルパスクリック" },
+                { "id": "1.1.3", "name": "osc1337対応", "qty": 1, "hours": 16, "assignee": "", "plan": { "start": "2025-06-01", "end": "2025-07-31" }, "actual": { "start": "2025-06-01", "end": "2025-07-31" }, "note": "" },
+                { "id": "1.1.4", "name": "sixel対応", "qty": 1, "hours": 32, "assignee": "", "plan": { "start": "2025-07-01", "end": "2025-09-30" }, "actual": { "start": "2025-07-01", "end": "2025-09-30" }, "note": "libsixel統合" }
+              ]
+            },
+            {
+              "id": "1.2",
+              "name": "エディタ",
+              "children": [
+                { "id": "1.2.1", "name": "テキストエディタ", "qty": 1, "hours": 64, "assignee": "", "plan": { "start": "2025-01-01", "end": "2025-05-31" }, "actual": { "start": "2025-01-01", "end": "2025-05-31" }, "note": "メモリマップドI/O対応" },
+                { "id": "1.2.2", "name": "ファイル内検索（Grep）", "qty": 1, "hours": 24, "assignee": "", "plan": { "start": "2025-04-01", "end": "2025-06-30" }, "actual": { "start": "2025-04-01", "end": "2025-06-30" }, "note": "正規表現・拡張子フィルタ対応" },
+                { "id": "1.2.3", "name": "巨大ファイル対応", "qty": 1, "hours": 16, "assignee": "", "plan": { "start": "2025-05-01", "end": "2025-07-31" }, "actual": { "start": "2025-05-01", "end": "2025-07-31" }, "note": "" },
+                { "id": "1.2.4", "name": "IMEインライン入力", "qty": 1, "hours": 24, "assignee": "", "plan": { "start": "2025-06-01", "end": "2025-08-31" }, "actual": { "start": "2025-06-01", "end": "2025-08-31" }, "note": "" }
+              ]
+            },
+            {
+              "id": "1.3",
+              "name": "プラグイン・連携",
+              "children": [
+                { "id": "1.3.1", "name": "プラグインランチャー", "qty": 1, "hours": 32, "assignee": "", "plan": { "start": "2025-03-01", "end": "2025-06-30" }, "actual": { "start": "2025-03-01", "end": "2025-06-30" }, "note": "Applications/Plugins機構" },
+                { "id": "1.3.2", "name": "CLI連携（agy/opencode/claude）", "qty": 1, "hours": 24, "assignee": "", "plan": { "start": "2025-05-01", "end": "2025-08-31" }, "actual": { "start": "2025-05-01", "end": "2025-08-31" }, "note": "" },
+                { "id": "1.3.3", "name": "Cross CLI通信（LocalMsg）", "qty": 1, "hours": 48, "assignee": "", "plan": { "start": "2025-07-01", "end": "2025-11-30" }, "actual": { "start": "2025-07-01", "end": "2025-11-30" }, "note": "IPMsg/LocalSendプロトコル対応" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "2",
+          "name": "未実装機能",
+          "children": [
+            {
+              "id": "2.1",
+              "name": "UI改善",
+              "children": [
+                { "id": "2.1.1", "name": "多言語UI対応", "qty": 1, "hours": 32, "assignee": "", "plan": { "start": "2026-06-15", "end": "2026-08-15" }, "actual": { "start": null, "end": null }, "note": "日本語/英語の切替" },
+                { "id": "2.1.2", "name": "テーマ機能", "qty": 1, "hours": 40, "assignee": "", "plan": { "start": "2026-07-01", "end": "2026-09-15" }, "actual": { "start": null, "end": null }, "note": "ダーク/ライトテーマ" },
+                { "id": "2.1.3", "name": "UIアイコン整備", "qty": 1, "hours": 16, "assignee": "", "plan": { "start": "2026-08-01", "end": "2026-09-15" }, "actual": { "start": null, "end": null }, "note": "小さなアイコンの追加" }
+              ]
+            },
+            {
+              "id": "2.2",
+              "name": "エディタ機能拡張",
+              "children": [
+                { "id": "2.2.1", "name": "セッション保存・復元", "qty": 1, "hours": 32, "assignee": "", "plan": { "start": "2026-06-15", "end": "2026-08-01" }, "actual": { "start": null, "end": null }, "note": "ウィンドウ状態・タブの保持" },
+                { "id": "2.2.2", "name": "メモ帳キーバインド", "qty": 1, "hours": 16, "assignee": "", "plan": { "start": "2026-07-01", "end": "2026-08-15" }, "actual": { "start": null, "end": null }, "note": "" },
+                { "id": "2.2.3", "name": "オートセーブ", "qty": 1, "hours": 16, "assignee": "", "plan": { "start": "2026-08-01", "end": "2026-09-01" }, "actual": { "start": null, "end": null }, "note": "" }
+              ]
+            },
+            {
+              "id": "2.3",
+              "name": "スクリプティング・拡張",
+              "children": [
+                { "id": "2.3.1", "name": "JSマクロ/バイトコード", "qty": 1, "hours": 48, "assignee": "", "plan": { "start": "2026-07-15", "end": "2026-10-15" }, "actual": { "start": null, "end": null }, "note": "Duktapeベースのマクロ＋コンパイラ" },
+                { "id": "2.3.2", "name": "MCPサーバー", "qty": 1, "hours": 40, "assignee": "", "plan": { "start": "2026-08-01", "end": "2026-10-31" }, "actual": { "start": null, "end": null }, "note": "Model Context Protocol対応" },
+                { "id": "2.3.3", "name": "言語サーバー/AIアシスタント", "qty": 1, "hours": 56, "assignee": "", "plan": { "start": "2026-09-01", "end": "2026-12-31" }, "actual": { "start": null, "end": null }, "note": "LSP統合またはAI補完" }
+              ]
+            },
+            {
+              "id": "2.4",
+              "name": "ドキュメント",
+              "children": [
+                { "id": "2.4.1", "name": "ドキュメント・ヘルプ整備", "qty": 1, "hours": 24, "assignee": "", "plan": { "start": "2026-08-15", "end": "2026-09-30" }, "actual": { "start": null, "end": null }, "note": "About/Help画面、ユーザーガイド" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

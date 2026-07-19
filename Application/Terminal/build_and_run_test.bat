@@ -15,3 +15,9 @@ cl /std:c++17 /EHsc /utf-8 /DUNICODE /D_UNICODE /Iinclude tests/test_buffer_boun
 if %ERRORLEVEL% EQU 0 (
     test_buffer_boundary.exe
 )
+echo.
+cl /std:c++17 /EHsc /utf-8 /DUNICODE /D_UNICODE /Iinclude tests/test_esc_recovery.cpp src/TerminalBuffer.cpp src/TerminalEmulator.cpp user32.lib gdi32.lib shell32.lib ole32.lib d2d1.lib dwrite.lib /Fe:test_esc_recovery.exe
+if %ERRORLEVEL% EQU 0 (
+    test_esc_recovery.exe
+)
+

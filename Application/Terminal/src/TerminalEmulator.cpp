@@ -121,6 +121,25 @@ void TerminalEmulator::reset(TerminalBuffer* buffer) {
 
     // Reset DCS buffer
     dcsBuffer_.clear();
+
+    pendingHighSurrogate_ = 0;
+    escIntermediate_  = 0;
+}
+
+void TerminalEmulator::executeC0(wchar_t ch) {
+    if (!buffer_) return;
+    switch (ch) {
+    case L'\r': buffer_->carriageReturn(); break;
+    case L'\n':
+    case L'\v':
+    case L'\f': buffer_->lineFeed();       break;
+    case L'\b': buffer_->backspace();      break;
+    case L'\t': buffer_->tab();            break;
+    case L'\a': MessageBeep(-1);           break;
+    case L'\x0f': lineDrawingG0_ = false;  break; // SI
+    case L'\x0e': lineDrawingG0_ = true;   break; // SO
+    default:    break;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +155,10 @@ void TerminalEmulator::process(const std::wstring& text) {
         // OSC accumulation
         // ----------------------------------------------------------------
         if (state_ == State::Osc) {
-            if (ch == L'\a') {
+            if (ch == L'\x18' || ch == L'\x1a') {
+                oscText_.clear();
+                state_ = State::Ground;
+            } else if (ch == L'\a') {
                 handleOsc(oscText_);
                 oscText_.clear();
                 state_ = State::Ground;
@@ -152,6 +174,10 @@ void TerminalEmulator::process(const std::wstring& text) {
                 }
             } else {
                 oscText_ += ch;
+                if (oscText_.size() >= 4194304) {
+                    oscText_.clear();
+                    state_ = State::Ground;
+                }
             }
             continue;
         }
@@ -160,7 +186,10 @@ void TerminalEmulator::process(const std::wstring& text) {
         // DCS accumulation (Sixel data)
         // ----------------------------------------------------------------
         if (state_ == State::DcsEntry) {
-            if (ch == L'\x1b') {
+            if (ch == L'\x18' || ch == L'\x1a') {
+                dcsBuffer_.clear();
+                state_ = State::Ground;
+            } else if (ch == L'\x1b') {
                 // ESC always terminates DCS (handles cross-chunk ESC\ splits too)
                 handleDcs(dcsBuffer_);
                 dcsBuffer_.clear();
@@ -176,6 +205,10 @@ void TerminalEmulator::process(const std::wstring& text) {
                 state_ = State::Ground;
             } else if (ch >= 0x20 && ch <= 0x7e) {
                 dcsBuffer_.push_back((char)ch);
+                if (dcsBuffer_.size() >= 4194304) {
+                    dcsBuffer_.clear();
+                    state_ = State::Ground;
+                }
             }
             continue;
         }
@@ -184,6 +217,20 @@ void TerminalEmulator::process(const std::wstring& text) {
         // CSI parameter accumulation
         // ----------------------------------------------------------------
         if (state_ == State::Csi || state_ == State::CsiParam) {
+            if (ch == L'\x1b') {          // ESC aborts the sequence, starts a new one
+                csiParams_.clear();
+                state_ = State::Escape;
+                continue;
+            }
+            if (ch == L'\x18' || ch == L'\x1a') {           // CAN / SUB: abort
+                csiParams_.clear();
+                state_ = State::Ground;
+                continue;
+            }
+            if (ch < 0x20) {                                 // other C0: execute, continue
+                executeC0(ch);
+                continue;                                    // stay in CsiParam
+            }
             if (ch >= 0x40 && ch <= 0x7e) {
                 // final byte
                 handleCsi(csiParams_, ch);
@@ -191,7 +238,12 @@ void TerminalEmulator::process(const std::wstring& text) {
                 state_ = State::Ground;
             } else {
                 csiParams_ += ch;
-                state_ = State::CsiParam;
+                if (csiParams_.size() >= 256) {
+                    csiParams_.clear();
+                    state_ = State::Ground;
+                } else {
+                    state_ = State::CsiParam;
+                }
             }
             continue;
         }
@@ -202,6 +254,21 @@ void TerminalEmulator::process(const std::wstring& text) {
         if (state_ == State::Escape) {
             state_ = State::Ground;
             handleEscape(ch);
+            continue;
+        }
+
+        // ----------------------------------------------------------------
+        // Escape intermediate (ESC #, ESC %, ESC SP, etc.)
+        // ----------------------------------------------------------------
+        if (state_ == State::EscapeIntermediate) {
+            state_ = State::Ground;
+            if (escIntermediate_ == L'#' && ch == L'8') {
+                // DECALN: fill screen with E, home cursor
+                int rows = buffer_->rows();
+                int cols = buffer_->columns();
+                buffer_->fillRect(0, 0, rows - 1, cols - 1, L'E', TerminalCell());
+                buffer_->moveCursorTo(0, 0);
+            }
             continue;
         }
 
@@ -222,20 +289,36 @@ void TerminalEmulator::process(const std::wstring& text) {
         // ----------------------------------------------------------------
         // Ground state
         // ----------------------------------------------------------------
+        if (pendingHighSurrogate_ != 0) {
+            if (ch >= 0xdc00 && ch <= 0xdfff) {
+                // Form surrogate pair
+                std::wstring cluster;
+                cluster += pendingHighSurrogate_;
+                cluster += ch;
+                pendingHighSurrogate_ = 0;
+
+                // stamp active hyperlink URL onto attributes
+                currentAttrs_.hyperlinkUrl = activeHyperlinkUrl_;
+                buffer_->putText(cluster, currentAttrs_);
+                continue;
+            } else {
+                // The pending high surrogate was lonely. Process it now.
+                std::wstring cluster;
+                cluster += pendingHighSurrogate_;
+                pendingHighSurrogate_ = 0;
+
+                currentAttrs_.hyperlinkUrl = activeHyperlinkUrl_;
+                buffer_->putText(cluster, currentAttrs_);
+                // Do not continue. Process 'ch' normally in the Ground state.
+            }
+        }
+
         if (ch == L'\x1b') { state_ = State::Escape; continue; }
 
         // C0 controls
-        switch (ch) {
-        case L'\r': buffer_->carriageReturn(); continue;
-        case L'\n':
-        case L'\v':
-        case L'\f': buffer_->lineFeed();       continue;
-        case L'\b': buffer_->backspace();       continue;
-        case L'\t': buffer_->tab();             continue;
-        case L'\a': MessageBeep(-1);            continue;
-        case L'\x0f': lineDrawingG0_ = false;   continue; // SI
-        case L'\x0e': lineDrawingG0_ = true;    continue; // SO
-        default:    break;
+        if (ch < 0x20) {
+            executeC0(ch);
+            continue;
         }
 
         // Printable BMP character
@@ -243,11 +326,17 @@ void TerminalEmulator::process(const std::wstring& text) {
             // handle surrogate pair (UTF-16 wide chars)
             std::wstring cluster;
             cluster += ch;
-            if (ch >= 0xd800 && ch <= 0xdbff && i + 1 < text.size()) {
-                wchar_t next = text[i+1];
-                if (next >= 0xdc00 && next <= 0xdfff) {
-                    cluster += next;
-                    ++i;
+            if (ch >= 0xd800 && ch <= 0xdbff) {
+                if (i + 1 < text.size()) {
+                    wchar_t next = text[i+1];
+                    if (next >= 0xdc00 && next <= 0xdfff) {
+                        cluster += next;
+                        ++i;
+                    }
+                } else {
+                    // Buffer the trailing high surrogate for the next process call
+                    pendingHighSurrogate_ = ch;
+                    continue;
                 }
             }
 
@@ -279,6 +368,12 @@ void TerminalEmulator::handleEscape(wchar_t ch) {
         state_ = State::CharsetG0;               break;
     case L')':
         state_ = State::CharsetG1;               break;
+    case L'#':
+    case L'%':
+    case L' ':
+        escIntermediate_ = ch;
+        state_ = State::EscapeIntermediate;
+        break;
     case L'7':
         saveCursorFull();                        break;
     case L'8':
@@ -369,6 +464,18 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
         return;
     }
 
+    // --- DECSLRM: CSI Pl;Pr s (space intermediate byte) ---
+    if (fin == L's' && params.find(L' ') != std::wstring::npos) {
+        std::wstring clean;
+        for (wchar_t c : params)
+            if (c != L' ') clean += c;
+        auto lrparts = splitParams(clean);
+        int pl = lrparts.size() > 0 ? paramInt(lrparts, 0, 1) : 1;
+        int pr = lrparts.size() > 1 ? paramInt(lrparts, 1, buffer_->columns()) : buffer_->columns();
+        buffer_->setLeftRightMargin(pl - 1, pr - 1);
+        return;
+    }
+
     // --- rectangle operations ($ intermediate byte) ---
     if (params.find(L'$') != std::wstring::npos) {
         std::wstring clean;
@@ -425,6 +532,7 @@ void TerminalEmulator::handleCsi(const std::wstring& raw, wchar_t fin) {
                 case 5:    enabled = buffer_->reverseVideo();                  break;
                 case 6:    enabled = buffer_->originMode();                   break;
                 case 7:    enabled = buffer_->autoWrapEnabled();              break;
+                case 69:   enabled = buffer_->leftRightMarginEnabled();       break;
                 case 12:   enabled = buffer_->cursorBlink();                  break;
                 case 25:   enabled = buffer_->cursorVisible();                break;
                 case 1000: enabled = buffer_->mouseTrackingMode() == 1000;    break;
@@ -583,6 +691,7 @@ void TerminalEmulator::handlePrivateMode(const std::wstring& params, bool enable
         case 5:    buffer_->setReverseVideo(enabled);                 break; // DECSCNM
         case 6:    buffer_->setOriginMode(enabled);                   break;
         case 7:    buffer_->setAutoWrapEnabled(enabled);              break;
+        case 69:   buffer_->setLeftRightMarginEnabled(enabled);       break; // DECLRMM
         case 12:   buffer_->setCursorBlink(enabled);                  break;
         case 25:   buffer_->setCursorVisible(enabled);                break;
         case 1000: buffer_->setMouseTrackingMode(enabled ? 1000 : 0); break;

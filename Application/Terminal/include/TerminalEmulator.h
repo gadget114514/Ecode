@@ -99,9 +99,11 @@ private:
         DcsEntry,     // ESC P  (accumulated for sixel)
         CharsetG0,    // ESC (
         CharsetG1,    // ESC )
+        EscapeIntermediate, // ESC intermediate (e.g. #, %, space)
     };
 
     void handleEscape(wchar_t ch);
+    void executeC0(wchar_t ch);
     void handleCsi(const std::wstring& params, wchar_t finalByte);
     void handleOsc(const std::wstring& text);
     void handlePrivateMode(const std::wstring& params, bool enabled);
@@ -183,4 +185,7 @@ private:
     bool         multipartActive_ = false;
     std::wstring multipartOptions_;   // options from MultipartFile=
     std::string  multipartBuffer_;    // accumulated base64 data
+
+    wchar_t      pendingHighSurrogate_ = 0;
+    wchar_t      escIntermediate_ = 0;
 };

@@ -29,6 +29,7 @@ const wchar_t *g_Strings[APP_LANG_COUNT][IDS_STRING_COUNT] = {
         L"Exact Match",          // IDS_RAD_EXACT
         L"Space Divided (All)",  // IDS_RAD_SPACED
         L"Regular Expression",   // IDS_RAD_REGEX
+        L"Wildcard (*, ?)",      // IDS_RAD_WILDCARD
         L"Ignore Case (Global)", // IDS_CHK_IGNORECASE
         L"Size Filter",          // IDS_GRP_SIZE
         L"Enable Size Filter",   // IDS_CHK_SIZE
@@ -84,6 +85,7 @@ const wchar_t *g_Strings[APP_LANG_COUNT][IDS_STRING_COUNT] = {
         L"完全一致",                   // IDS_RAD_EXACT
         L"スペース区切り (すべて)",    // IDS_RAD_SPACED
         L"正規表現",                   // IDS_RAD_REGEX
+        L"ワイルドカード (*, ?)",      // IDS_RAD_WILDCARD
         L"大文字/小文字を無視 (全体)", // IDS_CHK_IGNORECASE
         L"サイズフィルター",           // IDS_GRP_SIZE
         L"サイズフィルターを有効化",   // IDS_CHK_SIZE
@@ -116,92 +118,98 @@ const wchar_t *g_Strings[APP_LANG_COUNT][IDS_STRING_COUNT] = {
     },
     // APP_LANG_CHINESE_SIMP
     {L"搜索", L"文件名:", L"就绪", L"正在搜索...", L"找到 %d 个项目", L"名称",
-     L"路径", L"修改日期", L"大小", L"保存结果", L"搜索目标:", L"添加文件夹",
-     L"移除文件夹", L"非", L"代码页:",
-     // Config
-     L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
-     L"Space Divided (All)", L"Regular Expression", L"Ignore Case (Global)",
-     L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
-     L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
-     L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
-     L"OK", L"Cancel",
-     // Menu
-     L"File", L"Config", L"Language", L"Help", L"Search Options...",
-     L"About...", L"Context", L"Copy Path"},
+      L"路径", L"修改日期", L"大小", L"保存结果", L"搜索目标:", L"添加文件夹",
+      L"移除文件夹", L"非", L"代码页:",
+      // Config
+      L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
+      L"Space Divided (All)", L"Regular Expression", L"Wildcard (*, ?)",
+      L"Ignore Case (Global)",
+      L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
+      L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
+      L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
+      L"OK", L"Cancel",
+      // Menu
+      L"File", L"Config", L"Language", L"Help", L"Search Options...",
+      L"About...", L"Context", L"Copy Path"},
     // APP_LANG_CHINESE_TRAD
     {L"搜尋", L"檔案名稱:", L"就緒", L"搜尋中...", L"找到 %d 個項目", L"名稱",
-     L"路徑", L"修改日期", L"大小", L"儲存結果", L"搜尋目標:", L"新增資料夾",
-     L"移除資料夾", L"非", L"代碼頁:",
-     // Config
-     L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
-     L"Space Divided (All)", L"Regular Expression", L"Ignore Case (Global)",
-     L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
-     L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
-     L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
-     L"OK", L"Cancel",
-     // Menu
-     L"File", L"Config", L"Language", L"Help", L"Search Options...",
-     L"About...", L"Context", L"Copy Path"},
+      L"路徑", L"修改日期", L"大小", L"儲存結果", L"搜尋目標:", L"新增資料夾",
+      L"移除資料夾", L"非", L"代碼頁:",
+      // Config
+      L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
+      L"Space Divided (All)", L"Regular Expression", L"Wildcard (*, ?)",
+      L"Ignore Case (Global)",
+      L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
+      L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
+      L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
+      L"OK", L"Cancel",
+      // Menu
+      L"File", L"Config", L"Language", L"Help", L"Search Options...",
+      L"About...", L"Context", L"Copy Path"},
     // APP_LANG_SPANISH
     {L"Buscar", L"Nombre de archivo:", L"Listo", L"Buscando...",
-     L"Encontrado %d elementos", L"Nombre", L"Ruta", L"Fecha de modificación",
-     L"Tamaño", L"Guardar resultados", L"Candidatos de búsqueda:",
-     L"Añadir carpeta", L"Eliminar", L"No", L"Página de códigos:",
-     // Config
-     L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
-     L"Space Divided (All)", L"Regular Expression", L"Ignore Case (Global)",
-     L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
-     L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
-     L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
-     L"OK", L"Cancel",
-     // Menu
-     L"File", L"Config", L"Language", L"Help", L"Search Options...",
-     L"About...", L"Context", L"Copy Path"},
+      L"Encontrado %d elementos", L"Nombre", L"Ruta", L"Fecha de modificación",
+      L"Tamaño", L"Guardar resultados", L"Candidatos de búsqueda:",
+      L"Añadir carpeta", L"Eliminar", L"No", L"Página de códigos:",
+      // Config
+      L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
+      L"Space Divided (All)", L"Regular Expression", L"Wildcard (*, ?)",
+      L"Ignore Case (Global)",
+      L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
+      L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
+      L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
+      L"OK", L"Cancel",
+      // Menu
+      L"File", L"Config", L"Language", L"Help", L"Search Options...",
+      L"About...", L"Context", L"Copy Path"},
     // APP_LANG_FRENCH
     {L"Rechercher", L"Nom de fichier:", L"Prêt", L"Recherche en cours...",
-     L"Trouvé %d éléments", L"Nom", L"Chemin", L"Date de modification",
-     L"Taille", L"Enregistrer les résultats", L"Candidats de recherche:",
-     L"Ajouter un dossier", L"Supprimer", L"Non", L"Page de codes:",
-     // Config
-     L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
-     L"Space Divided (All)", L"Regular Expression", L"Ignore Case (Global)",
-     L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
-     L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
-     L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
-     L"OK", L"Cancel",
-     // Menu
-     L"File", L"Config", L"Language", L"Help", L"Search Options...",
-     L"About...", L"Context", L"Copy Path"},
+      L"Trouvé %d éléments", L"Nom", L"Chemin", L"Date de modification",
+      L"Taille", L"Enregistrer les résultats", L"Candidats de recherche:",
+      L"Ajouter un dossier", L"Supprimer", L"Non", L"Page de codes:",
+      // Config
+      L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
+      L"Space Divided (All)", L"Regular Expression", L"Wildcard (*, ?)",
+      L"Ignore Case (Global)",
+      L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
+      L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
+      L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
+      L"OK", L"Cancel",
+      // Menu
+      L"File", L"Config", L"Language", L"Help", L"Search Options...",
+      L"About...", L"Context", L"Copy Path"},
     // APP_LANG_GERMAN
     {L"Suchen", L"Dateiname:", L"Bereit", L"Suche...", L"%d Elemente gefunden",
-     L"Name", L"Pfad", L"Änderungsdatum", L"Größe", L"Ergebnisse speichern",
-     L"Suchkandidaten:", L"Ordner hinzufügen", L"Entfernen", L"Nicht",
-     L"Codepage:",
-     // Config
-     L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
-     L"Space Divided (All)", L"Regular Expression", L"Ignore Case (Global)",
-     L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
-     L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
-     L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
-     L"OK", L"Cancel",
-     // Menu
-     L"File", L"Config", L"Language", L"Help", L"Search Options...",
-     L"About...", L"Context", L"Copy Path"},
+      L"Name", L"Pfad", L"Änderungsdatum", L"Größe", L"Ergebnisse speichern",
+      L"Suchkandidaten:", L"Ordner hinzufügen", L"Entfernen", L"Nicht",
+      L"Codepage:",
+      // Config
+      L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
+      L"Space Divided (All)", L"Regular Expression", L"Wildcard (*, ?)",
+      L"Ignore Case (Global)",
+      L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
+      L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
+      L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
+      L"OK", L"Cancel",
+      // Menu
+      L"File", L"Config", L"Language", L"Help", L"Search Options...",
+      L"About...", L"Context", L"Copy Path"},
     // APP_LANG_PORTUGUESE
     {L"Pesquisar", L"Nome do arquivo:", L"Pronto", L"Pesquisando...",
-     L"Encontrado %d itens", L"Nome", L"Caminho", L"Data de modificação",
-     L"Tamanho", L"Salvar resultados", L"Candidatos de pesquisa:",
-     L"Adicionar pasta", L"Remover", L"Não", L"Página de códigos:",
-     // Config
-     L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
-     L"Space Divided (All)", L"Regular Expression", L"Ignore Case (Global)",
-     L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
-     L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
-     L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
-     L"OK", L"Cancel",
-     // Menu
-     L"File", L"Config", L"Language", L"Help", L"Search Options...",
-     L"About...", L"Context", L"Copy Path"}};
+      L"Encontrado %d itens", L"Nome", L"Caminho", L"Data de modificação",
+      L"Tamanho", L"Salvar resultados", L"Candidatos de pesquisa:",
+      L"Adicionar pasta", L"Remover", L"Não", L"Página de códigos:",
+      // Config
+      L"Search Options", L"Match Mode", L"Substring", L"Exact Match",
+      L"Space Divided (All)", L"Regular Expression", L"Wildcard (*, ?)",
+      L"Ignore Case (Global)",
+      L"Size Filter", L"Enable Size Filter", L"Min:", L"Max:", L"Date Filter",
+      L"Enable Date Filter", L"From:", L"To:", L"Include", L"Files", L"Folders",
+      L"Type Filter", L"Ext:", L"Advanced", L"Match Full Path", L"Exclude:",
+      L"OK", L"Cancel",
+      // Menu
+      L"File", L"Config", L"Language", L"Help", L"Search Options...",
+      L"About...", L"Context", L"Copy Path"}};
 
 const wchar_t *g_LangNames[APP_LANG_COUNT] = {L"English",
                                               L"Japanese",

@@ -144,6 +144,7 @@ bool TerminalView::StartSession(const std::wstring& shell,
     if (codePage != CP_UTF8 || codePage_ == CP_UTF8)
         codePage_ = codePage;
     session_.SetCodePage(codePage_);
+    buffer_.setAmbiguousWide(codePage_ == 932);
 
     // Initial size from window, or reasonable default
     int cols = (int)(buffer_.columns());
@@ -516,6 +517,7 @@ LRESULT TerminalView::OnCreate(HWND hwnd) {
             int cp = (int)GetPrivateProfileIntW(
                 L"Terminal", L"CodePage", CP_UTF8, iniPath.c_str());
             if (cp > 0) codePage_ = (UINT)cp;
+            buffer_.setAmbiguousWide(codePage_ == 932);
         }
     }
 
@@ -1785,7 +1787,7 @@ std::string TerminalView::EncodeKey(WPARAM vk, bool ctrl, bool shift, bool alt) 
             return std::string(1, c);
         }
         switch (vk) {
-        case VK_SPACE:  return "\x00"; // Ctrl+Space = NUL
+        case VK_SPACE:  return std::string(1, '\0'); // Ctrl+Space = NUL
         case VK_OEM_4:  return "\x1b"; // Ctrl+[ = ESC
         case VK_OEM_5:  return "\x1c"; // Ctrl+\ = FS
         case VK_OEM_6:  return "\x1d"; // Ctrl+] = GS
@@ -1840,7 +1842,7 @@ std::string TerminalView::EncodeKey(WPARAM vk, bool ctrl, bool shift, bool alt) 
     case VK_F11: return "\x1b[23" + modStr + "~";
     case VK_F12: return "\x1b[24" + modStr + "~";
     // --- control chars ---
-    case VK_BACK:   return altPfx + "\x7f";
+    case VK_BACK:   return altPfx + (ctrl ? "\x08" : "\x7f");
     case VK_RETURN: return altPfx + "\r";
     case VK_TAB:    return shift ? "\x1b[Z" : "\x09";
     case VK_ESCAPE: return altPfx + "\x1b";

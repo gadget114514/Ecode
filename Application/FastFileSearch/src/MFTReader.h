@@ -19,7 +19,8 @@ enum MatchMode {
   MatchMode_Substring = 0,
   MatchMode_Exact,
   MatchMode_SpaceDivided,
-  MatchMode_RegEx
+  MatchMode_RegEx,
+  MatchMode_Wildcard
 };
 
 struct SearchOptions {

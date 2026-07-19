@@ -892,6 +892,66 @@ LRESULT DrawItemWithHighlight(LPNMLVCUSTOMDRAW lplvcd, HWND hDlg) {
       }
     } catch (...) {
     }
+  } else if (g_options.mode == MatchMode_Wildcard) {
+    size_t sLen = text.length();
+    size_t pLen = query.length();
+    auto charEq = [&](wchar_t a, wchar_t b) {
+      if (g_options.ignoreCase)
+        return towlower(a) == towlower(b);
+      return a == b;
+    };
+    std::vector<std::vector<int>> dp(sLen + 1, std::vector<int>(pLen + 1, -1));
+    dp[0][0] = 0;
+    for (size_t s = 0; s <= sLen; s++) {
+      for (size_t p = 0; p <= pLen; p++) {
+        if (dp[s][p] == -1) continue;
+        int prev = dp[s][p];
+        if (p < pLen && query[p] == L'*') {
+          if (dp[s][p + 1] == -1 || prev < dp[s][p + 1])
+            dp[s][p + 1] = prev;
+          if (s < sLen) {
+            if (dp[s + 1][p] == -1 || prev + 1 < dp[s + 1][p])
+              dp[s + 1][p] = prev + 1;
+          }
+        } else if (s < sLen && p < pLen &&
+                   (query[p] == L'?' || charEq(text[s], query[p]))) {
+          if (dp[s + 1][p + 1] == -1 || prev + 1 < dp[s + 1][p + 1])
+            dp[s + 1][p + 1] = prev + 1;
+        }
+      }
+    }
+    if (dp[sLen][pLen] != -1) {
+      std::vector<bool> matched(sLen, false);
+      size_t s = sLen, p = pLen;
+      while (s > 0 || p > 0) {
+        if (p > 0 && query[p - 1] == L'*') {
+          if (s > 0 && dp[s - 1][p] != -1 && dp[s - 1][p] + 1 == dp[s][p]) {
+            matched[s - 1] = true;
+            s--;
+          } else if (dp[s][p - 1] != -1 && dp[s][p - 1] == dp[s][p]) {
+            p--;
+          } else {
+            break;
+          }
+        } else if (s > 0 && p > 0) {
+          matched[s - 1] = true;
+          s--;
+          p--;
+        } else {
+          break;
+        }
+      }
+      size_t i = 0;
+      while (i < sLen) {
+        if (matched[i]) {
+          size_t start = i;
+          while (i < sLen && matched[i]) i++;
+          ranges.push_back({start, i - start});
+        } else {
+          i++;
+        }
+      }
+    }
   } else { // Substring
     size_t pos = textLower.find(queryLower);
     while (pos != std::wstring::npos) {
@@ -1371,6 +1431,8 @@ INT_PTR CALLBACK ConfigDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam,
                     Localization::GetString(IDS_RAD_SPACED));
     SetDlgItemTextW(hDlg, IDC_RADIO_REGEX,
                     Localization::GetString(IDS_RAD_REGEX));
+    SetDlgItemTextW(hDlg, IDC_RADIO_WILDCARD,
+                    Localization::GetString(IDS_RAD_WILDCARD));
     SetDlgItemTextW(hDlg, IDC_CHKS_IGNORECASE,
                     Localization::GetString(IDS_CHK_IGNORECASE));
 
@@ -1413,7 +1475,9 @@ INT_PTR CALLBACK ConfigDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam,
       id = IDC_RADIO_SPACED;
     else if (g_options.mode == MatchMode_RegEx)
       id = IDC_RADIO_REGEX;
-    CheckRadioButton(hDlg, IDC_RADIO_SUBSTRING, IDC_RADIO_REGEX, id);
+    else if (g_options.mode == MatchMode_Wildcard)
+      id = IDC_RADIO_WILDCARD;
+    CheckRadioButton(hDlg, IDC_RADIO_SUBSTRING, IDC_RADIO_WILDCARD, id);
     CheckDlgButton(hDlg, IDC_CHKS_IGNORECASE,
                    g_options.ignoreCase ? BST_CHECKED : BST_UNCHECKED);
 
@@ -1482,6 +1546,8 @@ INT_PTR CALLBACK ConfigDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam,
         g_options.mode = MatchMode_SpaceDivided;
       else if (IsDlgButtonChecked(hDlg, IDC_RADIO_REGEX))
         g_options.mode = MatchMode_RegEx;
+      else if (IsDlgButtonChecked(hDlg, IDC_RADIO_WILDCARD))
+        g_options.mode = MatchMode_Wildcard;
       g_options.ignoreCase =
           (IsDlgButtonChecked(hDlg, IDC_CHKS_IGNORECASE) == BST_CHECKED);
 

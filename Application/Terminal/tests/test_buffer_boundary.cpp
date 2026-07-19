@@ -545,6 +545,54 @@ static void test_decsc_decrc_at_boundary() {
 }
 
 // ============================================================================
+// 21. Relative cursor movement respects scroll region margins when starting inside
+// ============================================================================
+static void test_margin_clamping_relative() {
+    TestHarness h(80, 24);
+    h.feed(CSI L"6;16r"); // scroll region 5..15 (scrollTop_ = 5, scrollBottom_ = 15)
+    h.feed(CSI L"10;1H"); // CUP to row 9 (inside)
+    ASSERT(h.buf.cursorRow() == 9, "row is 9");
+
+    h.feed(CSI L"10A"); // CUU 10 -> moving up by 10. Should clamp to 5 (scrollTop)
+    ASSERT(h.buf.cursorRow() == 5, "relative move up clamped to scrollTop");
+
+    h.feed(CSI L"10B"); // CUD 10 -> moving down by 10. Should clamp to 15 (scrollBottom)
+    ASSERT(h.buf.cursorRow() == 15, "relative move down clamped to scrollBottom");
+}
+
+// ============================================================================
+// 22. Surrogate pair split across chunk boundaries
+// ============================================================================
+static void test_surrogate_split() {
+    TestHarness h(80, 24);
+    h.feed(CSI L"H");
+
+    // Feed high surrogate first
+    std::wstring highPart = L"\xD83D";
+    h.feed(highPart);
+
+    // Feed low surrogate next
+    std::wstring lowPart = L"\xDE00";
+    h.feed(lowPart);
+
+    // Now they should form U+1F600 (Smile emoji, width 2)
+    ASSERT(h.buf.cursorColumn() == 2, "surrogate split combined and advanced cursor by 2");
+    ASSERT(h.buf.lineAt(0)[0].wide == true, "combined char is wide");
+}
+
+// ============================================================================
+// 23. Character width tests for BMP emojis and mathematical symbols
+// ============================================================================
+static void test_character_width_emoji() {
+    // Check ✅ (U+2705) -> width 2
+    ASSERT(TerminalBuffer::characterWidth(L"\u2705") == 2, "✅ is width 2");
+    // Check ⭐ (U+2B50) -> width 2
+    ASSERT(TerminalBuffer::characterWidth(L"\u2b50") == 2, "⭐ is width 2");
+    // Check U+1D400 (Mathematical Bold Capital A: \xD835\xDC00) -> width 1
+    ASSERT(TerminalBuffer::characterWidth(L"\xD835\xDC00") == 1, "U+1D400 mathematical bold A is width 1");
+}
+
+// ============================================================================
 // Main — only PASS on success
 // ============================================================================
 int main() {
@@ -572,6 +620,9 @@ int main() {
         { "18. Combining char after wrap",            test_combining_after_wrap },
         { "19. Mixed ASCII + CJK exact",              test_mixed_ascii_cjk_exact },
         { "20. DECSC/DECRC at boundary",              test_decsc_decrc_at_boundary },
+        { "21. Relative cursor move respects margins",test_margin_clamping_relative },
+        { "22. Surrogate split across boundary",      test_surrogate_split },
+        { "23. Character width emoji/math",           test_character_width_emoji },
     };
 
     int count = sizeof(tests) / sizeof(tests[0]);

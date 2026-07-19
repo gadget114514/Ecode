@@ -3,6 +3,43 @@
 #include <regex>
 #include <sstream>
 
+static bool WildcardMatch(const std::wstring &str, const std::wstring &pattern,
+                          bool ignoreCase) {
+  size_t sLen = str.length();
+  size_t pLen = pattern.length();
+  size_t sIdx = 0, pIdx = 0;
+  size_t starIdx = std::wstring::npos;
+  size_t matchIdx = 0;
+
+  auto charEqual = [&](wchar_t a, wchar_t b) {
+    if (ignoreCase)
+      return towlower(a) == towlower(b);
+    return a == b;
+  };
+
+  while (sIdx < sLen) {
+    if (pIdx < pLen && (pattern[pIdx] == L'?' || charEqual(str[sIdx], pattern[pIdx]))) {
+      sIdx++;
+      pIdx++;
+    } else if (pIdx < pLen && pattern[pIdx] == L'*') {
+      starIdx = pIdx;
+      matchIdx = sIdx;
+      pIdx++;
+    } else if (starIdx != std::wstring::npos) {
+      pIdx = starIdx + 1;
+      matchIdx++;
+      sIdx = matchIdx;
+    } else {
+      return false;
+    }
+  }
+
+  while (pIdx < pLen && pattern[pIdx] == L'*')
+    pIdx++;
+
+  return pIdx == pLen;
+}
+
 exFatReader::exFatReader() : hVolume(INVALID_HANDLE_VALUE), currentDrive(0) {}
 exFatReader::~exFatReader() { Close(); }
 
@@ -260,6 +297,8 @@ bool exFatReader::MatchPattern(const std::wstring &str,
       }
     }
     matched = allTokensFound;
+  } else if (options.mode == MatchMode_Wildcard) {
+    matched = WildcardMatch(str, pattern, options.ignoreCase);
   } else {
     // Default: Substring
     if (options.ignoreCase) {

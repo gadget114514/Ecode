@@ -41,6 +41,11 @@ void TerminalBuffer::resize(int columns, int rows) {
     columns_ = std::max(20, columns);
     rows_    = std::max(5,  rows);
 
+    // reset left/right margins on resize
+    leftMargin_  = 0;
+    rightMargin_ = columns_ - 1;
+    leftRightMarginEnabled_ = false;
+
     // preserve scroll region proportionally
     if (oldScrollTop == 0 && oldScrollBottom == oldRows - 1) {
         scrollTop_    = 0;
@@ -106,8 +111,11 @@ void TerminalBuffer::clearScreen() {
     pendingWrap_ = false;
     screen_.assign(rows_, blankLine());
     cursorRow_ = cursorColumn_ = 0;
-    scrollTop_ = 0;
+    scrollTop_    = 0;
     scrollBottom_ = rows_ - 1;
+    leftMargin_   = 0;
+    rightMargin_  = columns_ - 1;
+    leftRightMarginEnabled_ = false;
 }
 
 void TerminalBuffer::clearAll() {
@@ -119,7 +127,8 @@ void TerminalBuffer::clearLine(int mode, const TerminalCell& attrs) {
     pendingWrap_ = false;
     if (screen_.empty()) return;
     Line& line = screen_[cursorRow_];
-    int start = 0, end = columns_ - 1;
+    const int eR = effectiveRight();
+    int start = 0, end = eR;
     if      (mode == 0) start = cursorColumn_;
     else if (mode == 1) end   = cursorColumn_;
     for (int c = start; c <= end && c < (int)line.size(); ++c)
@@ -152,7 +161,7 @@ void TerminalBuffer::putChar(wchar_t ch, const TerminalCell& attributes) {
 void TerminalBuffer::putText(const std::wstring& text, const TerminalCell& attributes) {
     if (text.empty()) return;
 
-    const int width = characterWidth(text);
+    const int width = characterWidth(text, ambiguousWide_);
 
     // combining / zero-width: attach to preceding cell
     if (width == 0) {
@@ -167,7 +176,7 @@ void TerminalBuffer::putText(const std::wstring& text, const TerminalCell& attri
     if (pendingWrap_) {
         // mark current line as soft-wrapped before advancing
         if (!screen_.empty())
-            screen_[cursorRow_][std::max(0, columns_ - 1)].softWrapped = true;
+            screen_[cursorRow_][std::max(0, effectiveRight())].softWrapped = true;
         carriageReturn();
         lineFeed();
         pendingWrap_ = false;
@@ -183,11 +192,13 @@ void TerminalBuffer::putText(const std::wstring& text, const TerminalCell& attri
         return;
     }
 
+    const int eR = effectiveRight();
+
     // autowrap: if character doesn't fit and DECAWM is set, wrap now.
     // When DECAWM is off the character at the right margin is overwritten in-place.
-    if (autoWrapEnabled_ && cursorColumn_ + width > columns_) {
+    if (autoWrapEnabled_ && cursorColumn_ + width > eR + 1) {
         if (!screen_.empty())
-            screen_[cursorRow_][std::max(0, columns_ - 1)].softWrapped = true;
+            screen_[cursorRow_][std::max(0, eR)].softWrapped = true;
         carriageReturn();
         lineFeed();
     }
@@ -213,8 +224,8 @@ void TerminalBuffer::putText(const std::wstring& text, const TerminalCell& attri
     }
 
     cursorColumn_ += width;
-    if (cursorColumn_ >= columns_) {
-        cursorColumn_ = columns_ - 1;
+    if (cursorColumn_ > eR) {
+        cursorColumn_ = eR;
         pendingWrap_  = autoWrapEnabled_;
     }
 }
@@ -222,7 +233,7 @@ void TerminalBuffer::putText(const std::wstring& text, const TerminalCell& attri
 // ---------------------------------------------------------------------------
 // cursor movement
 // ---------------------------------------------------------------------------
-void TerminalBuffer::carriageReturn()              { pendingWrap_ = false; cursorColumn_ = 0; }
+void TerminalBuffer::carriageReturn()              { pendingWrap_ = false; cursorColumn_ = (leftRightMarginEnabled_ && originMode_) ? leftMargin_ : 0; }
 
 void TerminalBuffer::lineFeed() {
     pendingWrap_ = false;
@@ -278,8 +289,30 @@ void TerminalBuffer::resetTabStops() {
 
 void TerminalBuffer::moveCursorRelative(int rowDelta, int columnDelta) {
     pendingWrap_ = false;
+    const int oldRow = cursorRow_;
+    const int oldCol = cursorColumn_;
+
     cursorRow_    += rowDelta;
     cursorColumn_ += columnDelta;
+
+    if (rowDelta > 0) {
+        if (oldRow >= scrollTop_ && oldRow <= scrollBottom_ && cursorRow_ > scrollBottom_)
+            cursorRow_ = scrollBottom_;
+    } else if (rowDelta < 0) {
+        if (oldRow >= scrollTop_ && oldRow <= scrollBottom_ && cursorRow_ < scrollTop_)
+            cursorRow_ = scrollTop_;
+    }
+
+    if (leftRightMarginEnabled_) {
+        if (columnDelta > 0) {
+            if (oldCol >= leftMargin_ && oldCol <= rightMargin_ && cursorColumn_ > rightMargin_)
+                cursorColumn_ = rightMargin_;
+        } else if (columnDelta < 0) {
+            if (oldCol >= leftMargin_ && oldCol <= rightMargin_ && cursorColumn_ < leftMargin_)
+                cursorColumn_ = leftMargin_;
+        }
+    }
+
     clampCursor();
 }
 
@@ -356,25 +389,28 @@ void TerminalBuffer::restoreCursor() {
 // ---------------------------------------------------------------------------
 void TerminalBuffer::eraseCharacters(int count, const TerminalCell& attrs) {
     pendingWrap_ = false;
-    const int end = std::min(columns_ - 1, cursorColumn_ + std::max(1, count) - 1);
+    const int eR = effectiveRight();
+    const int end = std::min(eR, cursorColumn_ + std::max(1, count) - 1);
     for (int c = cursorColumn_; c <= end; ++c) eraseCell(cursorRow_, c, attrs);
 }
 
 void TerminalBuffer::insertCharacters(int count) {
     pendingWrap_ = false;
+    const int eR = effectiveRight();
     Line& line = screen_[cursorRow_];
-    const int amount = std::min(std::max(1, count), columns_ - cursorColumn_);
-    for (int c = columns_ - 1; c >= cursorColumn_ + amount; --c) line[c] = line[c - amount];
+    const int amount = std::min(std::max(1, count), eR - cursorColumn_ + 1);
+    for (int c = eR; c >= cursorColumn_ + amount; --c) line[c] = line[c - amount];
     for (int c = cursorColumn_; c < cursorColumn_ + amount; ++c) line[c] = TerminalCell();
     normalizeWideCells(line);
 }
 
 void TerminalBuffer::deleteCharacters(int count) {
     pendingWrap_ = false;
+    const int eR = effectiveRight();
     Line& line = screen_[cursorRow_];
-    const int amount = std::min(std::max(1, count), columns_ - cursorColumn_);
-    for (int c = cursorColumn_; c < columns_ - amount; ++c) line[c] = line[c + amount];
-    for (int c = columns_ - amount; c < columns_; ++c)      line[c] = TerminalCell();
+    const int amount = std::min(std::max(1, count), eR - cursorColumn_ + 1);
+    for (int c = cursorColumn_; c <= eR - amount; ++c) line[c] = line[c + amount];
+    for (int c = eR - amount + 1; c <= eR; ++c)        line[c] = TerminalCell();
     normalizeWideCells(line);
 }
 
@@ -383,7 +419,8 @@ void TerminalBuffer::repeatPreviousChar(int count) {
     int prevCol = cursorColumn_ - 1;
     if (screen_[cursorRow_][prevCol].wideContinuation && prevCol > 0) --prevCol;
     const TerminalCell prev = screen_[cursorRow_][prevCol];
-    for (int i = 0; i < std::max(1, count) && cursorColumn_ < columns_; ++i)
+    const int eR = effectiveRight();
+    for (int i = 0; i < std::max(1, count) && cursorColumn_ <= eR; ++i)
         putText(prev.text, prev);
 }
 
@@ -455,12 +492,51 @@ void TerminalBuffer::resetScrollRegion() {
     scrollBottom_ = rows_ - 1;
 }
 
+void TerminalBuffer::setLeftRightMargin(int left, int right) {
+    if (!leftRightMarginEnabled_) return;
+    pendingWrap_  = false;
+    int l = clamp(left, 0, columns_ - 2);
+    int r = clamp(right, l + 1, columns_ - 1);
+    leftMargin_  = l;
+    rightMargin_ = r;
+    if (originMode_) {
+        cursorColumn_ = leftMargin_;
+        cursorRow_    = scrollTop_;
+    }
+    clampCursor();
+}
+
+void TerminalBuffer::resetLeftRightMargin() {
+    pendingWrap_     = false;
+    leftMargin_      = 0;
+    rightMargin_     = columns_ - 1;
+}
+
+void TerminalBuffer::setLeftRightMarginEnabled(bool enabled) {
+    leftRightMarginEnabled_ = enabled;
+    if (!enabled) {
+        leftMargin_  = 0;
+        rightMargin_ = columns_ - 1;
+    }
+}
+
+bool TerminalBuffer::leftRightMarginEnabled() const { return leftRightMarginEnabled_; }
+int  TerminalBuffer::leftMargin()  const { return leftMargin_; }
+int  TerminalBuffer::rightMargin() const { return rightMargin_; }
+int  TerminalBuffer::effectiveRight() const {
+    return leftRightMarginEnabled_ ? rightMargin_ : columns_ - 1;
+}
+
 void TerminalBuffer::softReset() {
     // DECSTR: Soft Terminal Reset — resets modes but not screen
     pendingWrap_ = false;
     // scroll region
     scrollTop_    = 0;
     scrollBottom_ = rows_ - 1;
+    // left/right margins
+    leftMargin_  = 0;
+    rightMargin_ = columns_ - 1;
+    leftRightMarginEnabled_ = false;
     // modes
     originMode_     = false;
     autoWrapEnabled_ = true;
@@ -527,6 +603,8 @@ bool TerminalBuffer::hasScrollRegion() const {
 // ---------------------------------------------------------------------------
 void TerminalBuffer::setBracketedPasteEnabled(bool v)      { bracketedPasteEnabled_ = v; }
 bool TerminalBuffer::bracketedPasteEnabled()         const { return bracketedPasteEnabled_; }
+void TerminalBuffer::setAmbiguousWide(bool v)              { ambiguousWide_ = v; }
+bool TerminalBuffer::ambiguousWide()                 const { return ambiguousWide_; }
 void TerminalBuffer::setSyncOutputEnabled(bool v)          { syncOutputEnabled_ = v; }
 bool TerminalBuffer::syncOutputEnabled()             const { return syncOutputEnabled_; }
 void TerminalBuffer::setMouseTrackingMode(int mode)        { mouseTrackingMode_ = mode; }
@@ -647,9 +725,12 @@ TerminalBuffer::Line TerminalBuffer::blankLine(const TerminalCell& attrs) const 
 }
 
 // Unicode character width — combined from termdock + standard wcwidth tables
-int TerminalBuffer::characterWidth(wchar_t ch) {
-    const unsigned u = (unsigned)ch;
+// Unicode character width — combined from termdock + standard wcwidth tables
+int TerminalBuffer::characterWidth(wchar_t ch, bool ambiguousWide) {
+    return characterWidth((unsigned int)ch, ambiguousWide);
+}
 
+int TerminalBuffer::characterWidth(unsigned int u, bool ambiguousWide) {
     // Zero-width combining / non-printing ranges
     if (u == 0x00ad
         || (u >= 0x0300 && u <= 0x036f)
@@ -677,7 +758,10 @@ int TerminalBuffer::characterWidth(wchar_t ch) {
         || (u >= 0xfe20 && u <= 0xfe2f))
         return 0;
 
-    // Double-width (CJK, full-width, emoji)
+    if (u >= 0xd800 && u <= 0xdfff)
+        return 1;
+
+    // Double-width (CJK, full-width)
     if ((u >= 0x1100 && u <= 0x115f)
         || u == 0x2329 || u == 0x232a
         || (u >= 0x2e80 && u <= 0xa4cf)
@@ -687,17 +771,88 @@ int TerminalBuffer::characterWidth(wchar_t ch) {
         || (u >= 0xfe30 && u <= 0xfe6f)
         || (u >= 0xff00 && u <= 0xff60)
         || (u >= 0xffe0 && u <= 0xffe6)
-        || (u >= 0xd800 && u <= 0xdfff)    // surrogate pairs (emoji etc.)
-        || (u >= 0x1f300 && u <= 0x1f64f)
-        || (u >= 0x1f900 && u <= 0x1f9ff))
+        || (u >= 0x20000 && u <= 0x3fffd))
         return 2;
+
+    // Emojis that are always wide
+    if (u == 0x2b50 || u == 0x2b55
+        || u == 0x231a || u == 0x231b || u == 0x23f0 || u == 0x23f3
+        || (u >= 0x23e9 && u <= 0x23ec)
+        || (u >= 0x23f8 && u <= 0x23fa)
+        || u == 0x25b6 || u == 0x25c0)
+        return 2;
+
+    // Emojis in 2600-27BF range (always wide)
+    if (u >= 0x2600 && u <= 0x27bf) {
+        if (u == 0x2600 || u == 0x2601 || u == 0x2602 || u == 0x2603 || u == 0x2604
+            || u == 0x2611 || u == 0x2614 || u == 0x2615 || u == 0x261d || u == 0x263a
+            || (u >= 0x2648 && u <= 0x2653)
+            || u == 0x2660 || u == 0x2663 || u == 0x2665 || u == 0x2666 || u == 0x267b || u == 0x267f
+            || u == 0x2693 || u == 0x26a0 || u == 0x26a1 || u == 0x26aa || u == 0x26ab
+            || u == 0x26bd || u == 0x26be || u == 0x26c4 || u == 0x26c5 || u == 0x26d4
+            || u == 0x26e9 || u == 0x26f2 || u == 0x26f3 || u == 0x26f5 || u == 0x26fa || u == 0x26fd
+            || u == 0x2702 || u == 0x2705 || u == 0x270a || u == 0x270b || u == 0x270c || u == 0x270d
+            || u == 0x2728 || u == 0x274c || u == 0x274e || (u >= 0x2753 && u <= 0x2755) || u == 0x2757
+            || u == 0x2764 || u == 0x27b0 || u == 0x27bf) {
+            return 2;
+        }
+    }
+
+    // Supplementary planes: CJK extensions & emojis
+    if (u >= 0x1f000 && u <= 0x1ffff) {
+        if ((u >= 0x1f300 && u <= 0x1f64f)
+            || (u >= 0x1f680 && u <= 0x1f6ff)
+            || (u >= 0x1f900 && u <= 0x1faff)
+            || (u >= 0x1f000 && u <= 0x1f0ff)
+            || (u >= 0x1f100 && u <= 0x1f2ff))
+            return 2;
+    }
+
+    // Ambiguous-width classification (follow Unicode EastAsianWidth=A)
+    if (ambiguousWide) {
+        if ((u >= 0x01a8 && u <= 0x01a8)
+            || (u >= 0x01c4 && u <= 0x01cc)
+            || (u >= 0x01f1 && u <= 0x01f3)
+            || (u >= 0x0370 && u <= 0x03ff)  // Greek
+            || (u >= 0x0400 && u <= 0x04ff)  // Cyrillic
+            || (u >= 0x2010 && u <= 0x2027)  // General punctuation
+            || (u >= 0x2030 && u <= 0x2035)
+            || u == 0x203b || u == 0x203e || u == 0x203f
+            || (u >= 0x2070 && u <= 0x207f)
+            || (u >= 0x2080 && u <= 0x208f)
+            || (u >= 0x20a0 && u <= 0x20cf)  // Currency symbols
+            || (u >= 0x2100 && u <= 0x214f)  // Letterlike symbols
+            || (u >= 0x2150 && u <= 0x218f)  // Number forms
+            || (u >= 0x2190 && u <= 0x21ff)  // Arrows
+            || (u >= 0x2200 && u <= 0x22ff)  // Mathematical operators
+            || (u >= 0x2300 && u <= 0x23ff)  // Miscellaneous technical
+            || (u >= 0x2400 && u <= 0x243f)  // Control pictures
+            || (u >= 0x2440 && u <= 0x245f)
+            || (u >= 0x2460 && u <= 0x24ff)  // Enclosed alphanumerics
+            || (u >= 0x2500 && u <= 0x257f)  // Box drawing
+            || (u >= 0x2580 && u <= 0x259f)  // Block elements
+            || (u >= 0x25a0 && u <= 0x25ff)  // Geometric shapes
+            || (u >= 0x2600 && u <= 0x26ff)  // Miscellaneous symbols
+            || (u >= 0x2700 && u <= 0x27bf)) // Dingbats
+            return 2;
+    }
 
     return 1;
 }
 
-int TerminalBuffer::characterWidth(const std::wstring& text) {
+int TerminalBuffer::characterWidth(const std::wstring& text, bool ambiguousWide) {
     int w = 0;
-    for (wchar_t c : text) w = std::max(w, characterWidth(c));
+    for (size_t i = 0; i < text.size(); ++i) {
+        unsigned int cp = text[i];
+        if (cp >= 0xd800 && cp <= 0xdbff && i + 1 < text.size()) {
+            unsigned int next = text[i+1];
+            if (next >= 0xdc00 && next <= 0xdfff) {
+                cp = 0x10000 + ((cp - 0xd800) << 10) + (next - 0xdc00);
+                ++i;
+            }
+        }
+        w = std::max(w, characterWidth(cp, ambiguousWide));
+    }
     return w;
 }
 
@@ -867,7 +1022,7 @@ void TerminalBuffer::fillRect(int top, int left, int bottom, int right, wchar_t 
             cell.wide = false;
             cell.wideContinuation = false;
             cell.softWrapped = false;
-            if (characterWidth(ch) == 2) {
+            if (characterWidth(ch, ambiguousWide_) == 2) {
                 cell.wide = true;
                 if (c + 1 < columns_)
                     screen_[r][c+1] = TerminalCell();
@@ -1032,8 +1187,10 @@ void TerminalBuffer::clampCursor() {
     // In normal mode it is constrained to the physical screen.
     const int rowMin = originMode_ ? scrollTop_    : 0;
     const int rowMax = originMode_ ? scrollBottom_ : rows_ - 1;
+    const int colMin = (originMode_ && leftRightMarginEnabled_) ? leftMargin_ : 0;
+    const int colMax = (originMode_ && leftRightMarginEnabled_) ? rightMargin_ : columns_ - 1;
     cursorRow_    = clamp(cursorRow_,    rowMin, rowMax);
-    cursorColumn_ = clamp(cursorColumn_, 0, columns_ - 1);
+    cursorColumn_ = clamp(cursorColumn_, colMin, colMax);
 }
 
 void TerminalBuffer::trimHistory() {

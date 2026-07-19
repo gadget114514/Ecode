@@ -266,9 +266,16 @@ static duk_ret_t js_editor_backspace(duk_context *ctx) {
     } else {
       size_t pos = buf->GetCaretPos();
       if (pos > 0) {
-        buf->MoveCaretByChar(-1);
-        size_t newPos = buf->GetCaretPos();
-        buf->Delete(newPos, pos - newPos);
+        size_t fetchSize = (pos > 8) ? 8 : pos;
+        std::string text = buf->GetText(pos - fetchSize, fetchSize);
+        size_t relPos = text.length();
+        size_t prevRelPos = relPos - 1;
+        while (prevRelPos > 0 && (text[prevRelPos] & 0xC0) == 0x80)
+          prevRelPos--;
+        size_t bytesToDelete = relPos - prevRelPos;
+        size_t deleteAt = pos - bytesToDelete;
+        buf->Delete(deleteAt, bytesToDelete);
+        buf->SetCaretPos(deleteAt);
         buf->UpdateDesiredColumn();
       }
     }

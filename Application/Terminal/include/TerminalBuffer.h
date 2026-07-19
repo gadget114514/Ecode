@@ -76,6 +76,13 @@ public:
     // --- scroll region / modes ---
     void setScrollRegion(int top, int bottom);
     void resetScrollRegion();
+    void setLeftRightMargin(int left, int right);
+    void resetLeftRightMargin();
+    void setLeftRightMarginEnabled(bool enabled);
+    bool leftRightMarginEnabled() const;
+    int  leftMargin()  const;
+    int  rightMargin() const;
+    int  effectiveRight() const;
     void softReset();
     void setOriginMode(bool enabled);
     bool originMode() const;
@@ -110,6 +117,8 @@ public:
     // --- feature flags (read by TerminalView / TerminalEmulator) ---
     void setBracketedPasteEnabled(bool v);
     bool bracketedPasteEnabled()         const;
+    void setAmbiguousWide(bool v);
+    bool ambiguousWide()                 const;
 
     // synchronised output (?2026) — suppresses intermediate paints
     void setSyncOutputEnabled(bool v);
@@ -184,8 +193,9 @@ public:
     TermColor paletteColor(int index) const;
 
     // --- static utilities ---
-    static int characterWidth(wchar_t ch);
-    static int characterWidth(const std::wstring& text);
+    static int characterWidth(wchar_t ch, bool ambiguousWide = false);
+    static int characterWidth(unsigned int cp, bool ambiguousWide = false);
+    static int characterWidth(const std::wstring& text, bool ambiguousWide = false);
 
 private:
     Line blankLine(const TerminalCell& attrs = TerminalCell()) const;
@@ -211,6 +221,9 @@ private:
     bool savedPendingWrapAlt_ = false;
     int scrollTop_    = 0;
     int scrollBottom_ = 29;
+    int leftMargin_   = 0;
+    int rightMargin_  = 119;
+    bool leftRightMarginEnabled_ = false;
     int maxHistoryLines_ = 100000;
 
     // tab stops (default every 8 columns)
@@ -245,6 +258,7 @@ private:
 
     // reverse video
     bool reverseVideo_ = false;
+    bool ambiguousWide_ = false;
 
     // saved private modes (?Ps s / ?Ps r)
     bool savedPrivateMode1_    = false;
