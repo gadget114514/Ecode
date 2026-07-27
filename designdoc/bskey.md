@@ -165,7 +165,59 @@ containing such characters break.
 | M3 | Colon-form SGR sub-parameters (`38:2::r:g:b`) misparsed — `stoi` reads only `38` | `TerminalEmulator.cpp:648-751` |
 | M4 | Combining character (width 0) arriving while `pendingWrap_` is set attaches to column N−2 instead of the just-printed char at N−1 | `TerminalBuffer.cpp:159-165` |
 
-### 3.6 Input-side defects (minor)
+### 3.6 F5 — backspace skips wide-continuation cells  ★ kanji over-deletion
+
+*(Added after the §4.1/§4.2 implementation landed in commit `61206ad`.)*
+
+**Symptom:** Backspacing over **kanji** (fullwidth chars) deletes 1 character
+on the first press but 2 characters on the second press (3 total). ASCII is
+unaffected.
+
+**Location:** `TerminalBuffer.cpp:250-256` (`TerminalBuffer::backspace()`)
+
+```cpp
+void TerminalBuffer::backspace() {
+    pendingWrap_ = false;
+    if (cursorColumn_ <= 0) return;
+    --cursorColumn_;
+    if (cursorColumn_ > 0 && screen_[cursorRow_][cursorColumn_].wideContinuation)
+        --cursorColumn_;                    // ← BUG: extra decrement
+}
+```
+
+Per the VT spec, BS moves the cursor **exactly one column** left. ConPTY /
+conhost already accounts for fullwidth characters occupying two cells and
+emits `\b\b` itself to cross one. The extra "skip the continuation cell"
+decrement makes the local cursor drift one column further left than conhost's
+model each time a `\b` lands on a continuation cell. The subsequent
+erase/repaint then lands one full character too far left, eating the
+neighbouring kanji. No continuation cells exist for ASCII text, which is why
+only fullwidth characters are affected.
+
+**Fix:** BS must move exactly one column (stopping at the left margin when
+DECLRMM margins are active):
+
+```cpp
+void TerminalBuffer::backspace() {
+    pendingWrap_ = false;
+    const int leftStop = (leftRightMarginEnabled_ && cursorColumn_ > leftMargin_)
+                         ? leftMargin_ : 0;
+    if (cursorColumn_ > leftStop) --cursorColumn_;
+}
+```
+
+(`moveCursorRelative`/CUB have no such skip and are already 1-column-exact —
+verified; no other movement op needs changing.)
+
+**Tests** (`Application/Terminal/tests/test_backspace_wide.cpp`, new):
+
+| Case | Input | Expected |
+|------|-------|----------|
+| Buffer-level wide BS | put `あい` (cursor col 4), `backspace()` ×2 | cursor at col **2** (bug: col 1) |
+| Conhost erase pattern | `process(L"あい")` then `process(L"\b\b  \b\b")` | cols 0-1 keep `あ`, cols 2-3 blank, cursor col 2 |
+| ASCII guard | `abc` + `\b \b` | exactly one char erased, cursor col 2 |
+
+### 3.7 Input-side defects (minor)
 
 | # | Issue | Location |
 |---|-------|----------|

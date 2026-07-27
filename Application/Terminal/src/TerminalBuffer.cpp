@@ -249,10 +249,9 @@ void TerminalBuffer::reverseIndex() {
 
 void TerminalBuffer::backspace() {
     pendingWrap_ = false;
-    if (cursorColumn_ <= 0) return;
-    --cursorColumn_;
-    if (cursorColumn_ > 0 && screen_[cursorRow_][cursorColumn_].wideContinuation)
-        --cursorColumn_;
+    const int leftStop = (leftRightMarginEnabled_ && cursorColumn_ > leftMargin_)
+                         ? leftMargin_ : 0;
+    if (cursorColumn_ > leftStop) --cursorColumn_;
 }
 
 void TerminalBuffer::tab() {

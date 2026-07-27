@@ -20,4 +20,9 @@ cl /std:c++17 /EHsc /utf-8 /DUNICODE /D_UNICODE /Iinclude tests/test_esc_recover
 if %ERRORLEVEL% EQU 0 (
     test_esc_recovery.exe
 )
+echo.
+cl /std:c++17 /EHsc /utf-8 /DUNICODE /D_UNICODE /Iinclude tests/test_backspace_wide.cpp src/TerminalBuffer.cpp src/TerminalEmulator.cpp user32.lib gdi32.lib shell32.lib ole32.lib d2d1.lib dwrite.lib /Fe:test_backspace_wide.exe
+if %ERRORLEVEL% EQU 0 (
+    test_backspace_wide.exe
+)
 
