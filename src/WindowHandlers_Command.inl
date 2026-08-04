@@ -893,6 +893,12 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
       UpdateMenu(hwnd);
     }
     break;
+
+  case IDM_FILE_CLEAR_AUTOSAVE:
+    SettingsManager::Instance().ClearAutoSaveSession();
+    MessageBoxW(hwnd, L"Auto-saved session has been cleared.", L"Ecode", MB_ICONINFORMATION | MB_OK);
+    break;
+
   case IDM_EDIT_UNDO:
     g_editor->Undo();
     break;

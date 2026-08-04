@@ -95,7 +95,7 @@ static LRESULT HandleCreate(HWND hwnd) {
   // Auto-restore session on launch
   int autoSaveIndex = SettingsManager::Instance().GetAutoSaveSessionIndex();
   if (autoSaveIndex != -1) {
-    int ret = MessageBoxW(hwnd, L"An auto-saved session was found. Restore?", L"Ecode Session", MB_YESNO | MB_ICONQUESTION);
+    int ret = MessageBoxW(hwnd, L"An auto-saved session was found.\n\nClick 'Yes' to restore it.\nClick 'No' to discard it.", L"Ecode Session", MB_YESNO | MB_ICONQUESTION);
     if (ret == IDYES) {
       if (g_editor->GetBuffers().size() > 0) {
         g_editor->CloseBuffer(0);

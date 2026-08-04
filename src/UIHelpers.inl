@@ -244,6 +244,8 @@ void UpdateMenu(HWND hwnd) {
     AppendMenu(hFile, MF_POPUP, (UINT_PTR)hFolders, L10N("menu_file_folders"));
   }
   AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
+  AppendMenu(hFile, MF_STRING, IDM_FILE_CLEAR_AUTOSAVE, L"Clear Auto-saved Session");
+  AppendMenu(hFile, MF_SEPARATOR, 0, NULL);
   AppendMenu(hFile, MF_STRING, IDM_FILE_EXIT, GetMenuString("menu_file_exit", L"C-x C-c").c_str());
 
   // Edit Menu

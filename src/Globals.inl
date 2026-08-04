@@ -108,6 +108,7 @@ void HandleDestroy(HWND hwnd);
 #define IDM_FILE_SCRATCH 106
 #define IDM_FILE_EXIT 107
 #define IDM_FILE_RELOAD 108
+#define IDM_FILE_CLEAR_AUTOSAVE 109
 
 #define IDM_EDIT_UNDO 201
 #define IDM_EDIT_REDO 202
