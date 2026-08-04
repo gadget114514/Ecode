@@ -95,14 +95,16 @@ static LRESULT HandleCreate(HWND hwnd) {
   // Auto-restore session on launch
   int autoSaveIndex = SettingsManager::Instance().GetAutoSaveSessionIndex();
   if (autoSaveIndex != -1) {
-    int ret = MessageBoxW(hwnd, L"An auto-saved session was found.\n\nClick 'Yes' to restore it.\nClick 'No' to discard it.", L"Ecode Session", MB_YESNO | MB_ICONQUESTION);
-    if (ret == IDYES) {
+    Dialogs::SessionRestoreResult res = Dialogs::ShowSessionRestoreDialog(hwnd);
+    if (res == Dialogs::SessionRestoreResult::Restore) {
       if (g_editor->GetBuffers().size() > 0) {
         g_editor->CloseBuffer(0);
       }
       SettingsManager::Instance().LoadSession(autoSaveIndex);
+      SettingsManager::Instance().ClearAutoSaveSession();
+    } else if (res == Dialogs::SessionRestoreResult::Remove) {
+      SettingsManager::Instance().ClearAutoSaveSession();
     }
-    SettingsManager::Instance().ClearAutoSaveSession();
   }
   ScanPlugins();
   UpdateMenu(hwnd);

@@ -13,7 +13,19 @@ Editor::Editor() : m_activeBufferIndex(0) {}
 Editor::~Editor() {}
 
 size_t Editor::OpenFile(const std::wstring &path) {
-  DebugLog("Editor::OpenFile: path=" + WStringToString(path), LOG_DEBUG); auto buffer = std::make_unique<Buffer>();
+  DebugLog("Editor::OpenFile: path=" + WStringToString(path), LOG_DEBUG);
+  
+  Buffer *existing = GetBufferByName(path);
+  if (existing) {
+    for (size_t i = 0; i < m_buffers.size(); ++i) {
+      if (m_buffers[i].get() == existing) {
+        SwitchToBuffer(i);
+        return i;
+      }
+    }
+  }
+
+  auto buffer = std::make_unique<Buffer>();
   if (m_progressCb)
     buffer->SetProgressCallback(m_progressCb);
   if (buffer->OpenFile(path)) {
@@ -346,17 +358,11 @@ void Editor::SwitchToBuffer(size_t index) {
 
     if (action == Dialogs::FileModifiedAction::Reload) {
       buf->OpenFile(buf->GetPath());
-    } else if (action == Dialogs::FileModifiedAction::OpenInNewBuffer) {
-      size_t newIdx = OpenFile(buf->GetPath());
-      if (newIdx != static_cast<size_t>(-1)) {
-        buf->UpdateFileTime();
-        m_activeBufferIndex = newIdx;
-        return;
-      }
-    } else {
+    } else if (action == Dialogs::FileModifiedAction::Keep) {
       // Keep: user acknowledged the external change, suppress future prompts
       buf->UpdateFileTime();
     }
+    // else DoNothing: leave buffer untouched
   }
 
   m_activeBufferIndex = index;

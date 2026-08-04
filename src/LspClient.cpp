@@ -70,6 +70,7 @@ void LspClient::SendNotification(const std::string &method,
 }
 
 void LspClient::OnProcessOutput(const std::string &output) {
+  std::lock_guard<std::mutex> lock(m_mutex);
   m_readBuffer += output;
 
   while (true) {
@@ -99,22 +100,31 @@ void LspClient::OnProcessOutput(const std::string &output) {
 void LspClient::HandleMessage(const std::string &json) {
   // Very basic JSON parsing for id and method
   // In a real implementation, we'd use a proper JSON library
-  DebugLog("LSP HandleMessage: " + json.substr(0, (std::min)((size_t)200, json.length())), LOG_DEBUG); if (json.find("\"id\":") != std::string::npos) {
-    // It's a response
-    size_t idPos = json.find("\"id\":");
-    size_t valStart = json.find_first_of("0123456789", idPos);
-    size_t valEnd = json.find_first_not_of("0123456789", valStart);
-    if (valStart != std::string::npos) {
-      int id = std::stoi(json.substr(valStart, valEnd - valStart));
-      m_responses[id] = json;
+  DebugLog("LSP HandleMessage: " + json.substr(0, (std::min)((size_t)200, json.length())), LOG_DEBUG);
+  try {
+    if (json.find("\"id\":") != std::string::npos) {
+      // It's a response
+      size_t idPos = json.find("\"id\":");
+      size_t valStart = json.find_first_of("0123456789", idPos);
+      if (valStart != std::string::npos) {
+        size_t valEnd = json.find_first_not_of("0123456789", valStart);
+        size_t len = (valEnd == std::string::npos) ? std::string::npos : (valEnd - valStart);
+        int id = std::stoi(json.substr(valStart, len));
+        m_responses[id] = json;
+      }
+    } else if (json.find("\"method\":\"textDocument/publishDiagnostics\"") !=
+               std::string::npos) {
+      m_diagnostics = json;
     }
-  } else if (json.find("\"method\":\"textDocument/publishDiagnostics\"") !=
-             std::string::npos) {
-    m_diagnostics = json;
+  } catch (const std::exception &e) {
+    DebugLog("LSP HandleMessage - Exception: " + std::string(e.what()), LOG_ERROR);
+  } catch (...) {
+    DebugLog("LSP HandleMessage - Unknown exception", LOG_ERROR);
   }
 }
 
 std::string LspClient::GetResponse(int requestId) {
+  std::lock_guard<std::mutex> lock(m_mutex);
   auto it = m_responses.find(requestId);
   if (it != m_responses.end()) {
     return it->second;
@@ -122,4 +132,7 @@ std::string LspClient::GetResponse(int requestId) {
   return "";
 }
 
-std::string LspClient::GetDiagnostics() { return m_diagnostics; }
+std::string LspClient::GetDiagnostics() {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  return m_diagnostics;
+}

@@ -313,22 +313,12 @@ size_t PieceTable::GetLineAtOffset(size_t offset) const {
   if (offset >= m_totalLength)
     return GetTotalLines() - 1;
 
-  size_t currentLine = 0;
-  size_t accumulatedOffset = 0;
-
-  for (const auto &p : m_pieces) {
-    if (offset < accumulatedOffset + p.length) {
-      // Offset is in this piece
-      const char *data = GetPieceData(p);
-      size_t offsetInPiece = offset - accumulatedOffset;
-      currentLine += CountNewlines(data, offsetInPiece);
-      return currentLine;
-    }
-    currentLine += p.lineCount;
-    accumulatedOffset += p.length;
+  if (!m_lineCacheValid) {
+    RebuildLineCache();
   }
 
-  return currentLine;
+  auto it = std::upper_bound(m_lineOffsetCache.begin(), m_lineOffsetCache.end(), offset);
+  return std::distance(m_lineOffsetCache.begin(), it) - 1;
 }
 
 // OPTIMIZATION #1: Line offset cache for O(1) lookups (10,000x faster)

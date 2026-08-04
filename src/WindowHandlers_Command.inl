@@ -731,6 +731,11 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     Localization::Instance().SetLanguage(Language::German);
     UpdateMenu(hwnd);
     break;
+  case IDM_FILE_CLEAR_AUTOSAVE:
+    SettingsManager::Instance().ClearAutoSaveSession();
+    UpdateMenu(hwnd);
+    break;
+
   case IDM_FILE_EXIT:
     PostQuitMessage(0);
     break;
@@ -873,8 +878,8 @@ static LRESULT HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
             hwnd, buf->GetPath(), buf->IsDirty());
         if (action == Dialogs::FileModifiedAction::Reload) {
           buf->OpenFile(buf->GetPath());
-        } else if (action == Dialogs::FileModifiedAction::OpenInNewBuffer) {
-          g_editor->OpenFile(buf->GetPath());
+        } else if (action == Dialogs::FileModifiedAction::Keep) {
+          buf->UpdateFileTime();
         }
       } else {
         buf->OpenFile(buf->GetPath());

@@ -23,7 +23,11 @@ public:
   static ConfirmationResult
   ShowSaveConfirmationDialog(HWND hwnd, const std::wstring &filename);
 
-  enum class FileModifiedAction { Reload, Keep, OpenInNewBuffer };
+  enum class FileModifiedAction { Reload, Keep, DoNothing };
   static FileModifiedAction
   ShowFileModifiedDialog(HWND hwnd, const std::wstring &filename, bool isDirty);
+
+  enum class SessionRestoreResult { Restore, Keep, Remove };
+  static SessionRestoreResult ShowSessionRestoreDialog(HWND hwnd);
 };
+

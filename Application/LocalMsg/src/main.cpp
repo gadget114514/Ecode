@@ -26,11 +26,14 @@
 #include <shlwapi.h>
 #include <iphlpapi.h>
 #include <winhttp.h>
+#include <wincrypt.h>
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "winhttp.lib")
+#pragma comment(lib, "crypt32.lib")
+
 
 #include <string>
 #include <vector>
@@ -202,6 +205,8 @@ struct InboundReq {
     std::string           responseBody;
 };
 
+static bool VerifyServerCertFingerprint(HINTERNET hReq, const std::wstring& expectedFingerprint);
+
 struct SendParams {
     std::wstring peerIp;
     int          peerPort   = LS_PORT;
@@ -209,6 +214,7 @@ struct SendParams {
     std::wstring filename;
     int          xferIdx    = -1;
     HWND         notifyHwnd = nullptr;
+    std::wstring peerFingerprint;
 };
 
 struct TextSendParams {
@@ -218,6 +224,7 @@ struct TextSendParams {
     std::wstring senderAlias;
     std::wstring toUser;
     HWND         notifyHwnd = nullptr;
+    std::wstring peerFingerprint;
 };
 
 struct PseudoUser {
@@ -1224,21 +1231,25 @@ static DWORD WINAPI SendFileThread(LPVOID pv) {
             DWORD bl = (DWORD)prepBody.size();
             if (WinHttpSendRequest(hReq, WINHTTP_NO_ADDITIONAL_HEADERS, 0, (LPVOID)prepBody.c_str(), bl, bl, 0)
                 && WinHttpReceiveResponse(hReq, nullptr)) {
-                DWORD avail = 0; WinHttpQueryDataAvailable(hReq, &avail);
-                if (avail > 0) {
-                    std::string resp(avail, 0); DWORD read = 0;
-                    WinHttpReadData(hReq, &resp[0], avail, &read); resp.resize(read);
-                    DebugLog(L"HTTP <<< prepare-upload response: " + s2ws(resp));
-                    sessionId = JsonGet(resp, "sessionId");
-                    size_t fp = resp.find("\"files\"");
-                    if (fp != std::string::npos) {
-                        size_t ob = resp.find('{', fp + 7);
-                        if (ob != std::string::npos) {
-                            size_t oe = resp.find('}', ob);
-                            if (oe != std::string::npos)
-                                token = JsonGet(resp.substr(ob, oe - ob + 1), fileId);
+                if (VerifyServerCertFingerprint(hReq, sp->peerFingerprint)) {
+                    DWORD avail = 0; WinHttpQueryDataAvailable(hReq, &avail);
+                    if (avail > 0) {
+                        std::string resp(avail, 0); DWORD read = 0;
+                        WinHttpReadData(hReq, &resp[0], avail, &read); resp.resize(read);
+                        DebugLog(L"HTTP <<< prepare-upload response: " + s2ws(resp));
+                        sessionId = JsonGet(resp, "sessionId");
+                        size_t fp = resp.find("\"files\"");
+                        if (fp != std::string::npos) {
+                            size_t ob = resp.find('{', fp + 7);
+                            if (ob != std::string::npos) {
+                                size_t oe = resp.find('}', ob);
+                                if (oe != std::string::npos)
+                                    token = JsonGet(resp.substr(ob, oe - ob + 1), fileId);
+                            }
                         }
                     }
+                } else {
+                    DebugLog(L"HTTP <<< prepare-upload FAILED (fingerprint mismatch)");
                 }
             } else {
                 DebugLog(L"HTTP <<< prepare-upload FAILED (WinHttpSendRequest/ReceiveResponse)");
@@ -1262,20 +1273,24 @@ static DWORD WINAPI SendFileThread(LPVOID pv) {
             WinHttpAddRequestHeaders(hReq, L"Content-Type: application/octet-stream\r\n", (DWORD)-1, WINHTTP_ADDREQ_FLAG_ADD);
             if (WinHttpSendRequest(hReq, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                    WINHTTP_NO_REQUEST_DATA, 0, (DWORD)fsize.QuadPart, 0)) {
-                char buf[LS_CHUNK]; int64_t sent = 0; BOOL ro = TRUE;
-                while (ro && sent < fsize.QuadPart) {
-                    DWORD r = 0; ro = ReadFile(hf, buf, sizeof(buf), &r, nullptr); if (!r) break;
-                    DWORD w = 0; WinHttpWriteData(hReq, buf, r, &w); sent += w;
-                    if (sp->xferIdx >= 0) {
-                        EnterCriticalSection(&g_xferCs);
-                        g_transfers[sp->xferIdx].doneBytes = sent;
-                        LeaveCriticalSection(&g_xferCs);
-                        PostMessage(sp->notifyHwnd, WM_LS_XFER_PROGRESS, (WPARAM)sp->xferIdx, (LPARAM)(LONG)sent);
+                if (VerifyServerCertFingerprint(hReq, sp->peerFingerprint)) {
+                    char buf[LS_CHUNK]; int64_t sent = 0; BOOL ro = TRUE;
+                    while (ro && sent < fsize.QuadPart) {
+                        DWORD r = 0; ro = ReadFile(hf, buf, sizeof(buf), &r, nullptr); if (!r) break;
+                        DWORD w = 0; WinHttpWriteData(hReq, buf, r, &w); sent += w;
+                        if (sp->xferIdx >= 0) {
+                            EnterCriticalSection(&g_xferCs);
+                            g_transfers[sp->xferIdx].doneBytes = sent;
+                            LeaveCriticalSection(&g_xferCs);
+                            PostMessage(sp->notifyHwnd, WM_LS_XFER_PROGRESS, (WPARAM)sp->xferIdx, (LPARAM)(LONG)sent);
+                        }
                     }
+                    WinHttpReceiveResponse(hReq, nullptr);
+                    ok = (sent >= fsize.QuadPart);
+                    DebugLog(ok ? L"HTTP <<< upload OK" : L"HTTP <<< upload FAILED (incomplete)");
+                } else {
+                    DebugLog(L"HTTP <<< upload FAILED (fingerprint mismatch)");
                 }
-                WinHttpReceiveResponse(hReq, nullptr);
-                ok = (sent >= fsize.QuadPart);
-                DebugLog(ok ? L"HTTP <<< upload OK" : L"HTTP <<< upload FAILED (incomplete)");
             } else {
                 DebugLog(L"HTTP <<< upload FAILED (WinHttpSendRequest)");
             }
@@ -1294,6 +1309,31 @@ static DWORD WINAPI SendFileThread(LPVOID pv) {
         PostMessage(sp->notifyHwnd, WM_LS_XFER_DONE, (WPARAM)sp->xferIdx, ok ? 1 : 0);
     }
     delete sp; return 0;
+}
+
+static bool VerifyServerCertFingerprint(HINTERNET hReq, const std::wstring& expectedFingerprint) {
+    if (expectedFingerprint.empty()) return true; // fallback or legacy
+    PCCERT_CONTEXT pCertContext = nullptr;
+    DWORD size = sizeof(pCertContext);
+    if (!WinHttpQueryOption(hReq, WINHTTP_OPTION_SERVER_CERT_CONTEXT, &pCertContext, &size)) {
+        DebugLog(L"VerifyServerCertFingerprint - failed to get cert context");
+        return false;
+    }
+    
+    // Calculate SHA-256 of the DER-encoded certificate
+    unsigned char sha[32];
+    mbedtls_sha256(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded, sha, 0);
+    CertFreeCertificateContext(pCertContext);
+
+    char fp[65] = {};
+    for (int i = 0; i < 32; ++i) snprintf(fp + i*2, 3, "%02x", sha[i]);
+    std::wstring actualFingerprint = s2ws(fp);
+
+    if (actualFingerprint != expectedFingerprint) {
+        DebugLog(L"VerifyServerCertFingerprint - FINGERPRINT MISMATCH! expected: " + expectedFingerprint + L" actual: " + actualFingerprint);
+        return false;
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1326,7 +1366,11 @@ static DWORD WINAPI SendTextThread(LPVOID pv) {
             DWORD bl = (DWORD)body.size();
             if (WinHttpSendRequest(hReq, WINHTTP_NO_ADDITIONAL_HEADERS, 0, (LPVOID)body.c_str(), bl, bl, 0)
                 && WinHttpReceiveResponse(hReq, nullptr)) {
-                DebugLog(L"HTTP <<< text message sent OK");
+                if (VerifyServerCertFingerprint(hReq, sp->peerFingerprint)) {
+                    DebugLog(L"HTTP <<< text message sent OK");
+                } else {
+                    DebugLog(L"HTTP <<< text message FAILED (fingerprint mismatch)");
+                }
             } else {
                 DebugLog(L"HTTP <<< text message FAILED");
             }
@@ -1364,6 +1408,7 @@ static bool SendTextHttps(const std::wstring& fromUser, const std::wstring& toUs
     sp->senderAlias = fromUser;
     sp->toUser = toUser;
     sp->notifyHwnd = g_hwnd;
+    sp->peerFingerprint = target.fingerprint;
     if (!QueueUserWorkItem(SendTextThread, sp, 0)) { delete sp; return false; }
     return true;
 }
@@ -2390,6 +2435,7 @@ static void QueueSend(const std::wstring& path, const PeerInfo& peer) {
     sp->localPath  = path;
     sp->filename   = PathFindFileNameW(path.c_str());
     sp->notifyHwnd = g_hwnd;
+    sp->peerFingerprint = peer.fingerprint;
 
     TransferEntry te;
     te.id        = s2ws(MakeId());
@@ -2748,6 +2794,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     AppendCommLog(L"SEND text to "+peer.alias+L" ("+peer.ip+L"): "+text.substr(0,80)+(text.size()>80?L"\x2026":L""));
                     auto* sp = new TextSendParams;
                     sp->peerIp=peer.ip; sp->peerPort=peer.port; sp->text=text; sp->senderAlias=g_localAlias; sp->toUser=peer.alias; sp->notifyHwnd=hwnd;
+                    sp->peerFingerprint=peer.fingerprint;
                     if (!QueueUserWorkItem(SendTextThread, sp, 0)) delete sp;
                     SetWindowTextW(g_textInput,L"");
                 }

@@ -1840,9 +1840,9 @@ Dialogs::ShowFileModifiedDialog(HWND hwnd, const std::wstring &filename,
 
   if (s_TaskDialogIndirect) {
     TDButton buttons[3] = {
-      { IDYES,    L"&Reload from disk" },
-      { IDNO,     L"&Keep current buffer" },
-      { IDCANCEL, L"Open in &new buffer" },
+      { IDYES,    L"Yes: &Reload" },
+      { IDNO,     L"No: Do nothing and &close" },
+      { IDCANCEL, L"Cancel: Do nothing and &stay" },
     };
     TDConfig cfg = { sizeof(cfg) };
     cfg.hwndParent = hwnd;
@@ -1858,19 +1858,80 @@ Dialogs::ShowFileModifiedDialog(HWND hwnd, const std::wstring &filename,
     s_TaskDialogIndirect(&cfg, &result, nullptr, nullptr);
     if (result == IDYES)      return FileModifiedAction::Reload;
     if (result == IDNO)       return FileModifiedAction::Keep;
-    return FileModifiedAction::OpenInNewBuffer;
+    return FileModifiedAction::DoNothing;
   }
 
   // Fallback: standard MessageBox
   msg += isDirty
     ? L"\n\nReload and discard changes?"
     : L"\n\nReload this file?";
-  msg += L"\n\nYes = Reload   No = Keep   Cancel = Open in new buffer";
+  msg += L"\n\nYes = Reload   No = Do nothing and close   Cancel = Do nothing and stay";
   int result = MessageBoxW(hwnd, msg.c_str(), L"Ecode - File Modified",
                            MB_YESNOCANCEL | MB_ICONWARNING);
   if (result == IDYES)   return FileModifiedAction::Reload;
   if (result == IDNO)    return FileModifiedAction::Keep;
-  return FileModifiedAction::OpenInNewBuffer;
+  return FileModifiedAction::DoNothing;
+}
+
+Dialogs::SessionRestoreResult Dialogs::ShowSessionRestoreDialog(HWND hwnd) {
+  // Use TaskDialogIndirect (Vista+) for custom button labels.
+  struct TDButton { int id; const wchar_t *text; };
+  struct TDConfig {
+    DWORD cbSize;
+    HWND  hwndParent;
+    HINSTANCE hInstance;
+    DWORD dwFlags;
+    const wchar_t *pszWindowTitle;
+    const wchar_t *pszMainIcon;
+    const wchar_t *pszMainInstruction;
+    const wchar_t *pszContent;
+    UINT cButtons;
+    const TDButton *pButtons;
+  };
+  const DWORD TDF_ALLOW_CANCEL = 0x00000008;
+
+  static HRESULT (WINAPI *s_TaskDialogIndirect)(const TDConfig *,
+      int *, int *, BOOL *) = nullptr;
+  if (!s_TaskDialogIndirect) {
+    HMODULE hMod = LoadLibraryW(L"comctl32.dll");
+    if (hMod)
+      s_TaskDialogIndirect = (decltype(s_TaskDialogIndirect))
+          GetProcAddress(hMod, "TaskDialogIndirect");
+  }
+
+  if (s_TaskDialogIndirect) {
+    TDButton buttons[3] = {
+      { IDYES,    L"&Restore the session" },
+      { IDNO,     L"&Keep the session" },
+      { IDCANCEL, L"&Remove the auto stored session" },
+    };
+    TDConfig cfg = { sizeof(cfg) };
+    cfg.hwndParent = hwnd;
+    cfg.dwFlags = TDF_ALLOW_CANCEL;
+    cfg.pszWindowTitle = L"Ecode Session";
+    cfg.pszMainInstruction = L"An auto-saved session was found";
+    cfg.pszContent = L"How do you want to treat it?";
+    cfg.pszMainIcon = MAKEINTRESOURCEW(-3); // TD_INFORMATION_ICON
+    cfg.cButtons = 3;
+    cfg.pButtons = buttons;
+
+    int result;
+    s_TaskDialogIndirect(&cfg, &result, nullptr, nullptr);
+    if (result == IDYES)      return SessionRestoreResult::Restore;
+    if (result == IDNO)       return SessionRestoreResult::Keep;
+    return SessionRestoreResult::Remove;
+  }
+
+  // Fallback: standard MessageBox
+  std::wstring msg = L"An auto-saved session was found. How do you want to treat it?\n\n"
+                     L"Yes = Restore the session\n"
+                     L"No = Keep the session\n"
+                     L"Cancel = Remove the auto stored session";
+  int result = MessageBoxW(hwnd, msg.c_str(), L"Ecode Session",
+                           MB_YESNOCANCEL | MB_ICONQUESTION);
+  if (result == IDYES)    return SessionRestoreResult::Restore;
+  if (result == IDNO)     return SessionRestoreResult::Keep;
+  return SessionRestoreResult::Remove;
 }
 
 std::wstring Dialogs::BrowseForFolder(HWND hwnd) {

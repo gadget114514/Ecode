@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex>
 
 
 class LspClient {
@@ -36,4 +37,6 @@ private:
 
   std::map<int, std::string> m_responses;
   std::string m_diagnostics; // Global diagnostics state (simplified)
+  mutable std::mutex m_mutex;
 };
+

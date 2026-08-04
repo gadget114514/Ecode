@@ -73,6 +73,7 @@ void Localization::LoadTranslations() {
   en["menu_file_recent"] = L"Recent &Files";
   en["menu_file_recent_empty"] = L"(Empty)";
   en["menu_file_exit"] = L"E&xit";
+  en["menu_file_clear_autosave"] = L"Clear the auto saved session";
 
   en["menu_edit"] = L"&Edit";
   en["menu_edit_undo"] = L"&Undo";
@@ -200,6 +201,7 @@ void Localization::LoadTranslations() {
   jp["menu_file_recent"] = L"最近使ったファイル(&R)";
   jp["menu_file_recent_empty"] = L"(空)";
   jp["menu_file_exit"] = L"終了(&X)";
+  jp["menu_file_clear_autosave"] = L"自動保存セッションの消去";
 
   jp["menu_edit"] = L"編集(&E)";
   jp["menu_edit_undo"] = L"元に戻す(&U)";
@@ -321,6 +323,7 @@ void Localization::LoadTranslations() {
   es["menu_file_recent"] = L"Archivos &recientes";
   es["menu_file_recent_empty"] = L"(Vacío)";
   es["menu_file_exit"] = L"&Salir";
+  es["menu_file_clear_autosave"] = L"Limpiar sesión guardada automáticamente";
 
   es["menu_edit"] = L"&Editar";
   es["menu_edit_undo"] = L"&Deshacer";
@@ -429,6 +432,7 @@ void Localization::LoadTranslations() {
   fr["menu_file_recent"] = L"Fichiers &récents";
   fr["menu_file_recent_empty"] = L"(Vide)";
   fr["menu_file_exit"] = L"&Quitter";
+  fr["menu_file_clear_autosave"] = L"Effacer la session sauvegardée automatiquement";
 
   fr["menu_edit"] = L"&Modifier";
   fr["menu_edit_undo"] = L"&Annuler";
@@ -537,6 +541,7 @@ void Localization::LoadTranslations() {
   de["menu_file_recent"] = L"&Zuletzt geöffnete Dateien";
   de["menu_file_recent_empty"] = L"(Leer)";
   de["menu_file_exit"] = L"&Beenden";
+  de["menu_file_clear_autosave"] = L"Automatisch gespeicherte Sitzung löschen";
 
   de["menu_edit"] = L"&Bearbeiten";
   de["menu_edit_undo"] = L"&Rückgängig";

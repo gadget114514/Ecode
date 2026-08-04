@@ -3,6 +3,8 @@
 // JS API: Minibuffer, shell process management
 // Included by ScriptEngine.cpp
 // =============================================================================
+#include <mutex>
+
 
 // Extern declarations for minibuffer in main.cpp
 extern HWND g_minibufferHwnd;
@@ -171,15 +173,25 @@ static duk_ret_t js_editor_run_command(duk_context *ctx) {
 
   std::wstring wcmd = StringToWString(cmd);
   std::string output;
+  std::mutex outputMutex;
   Process proc;
   bool success =
-      proc.Start(wcmd, [&](const std::string &out) { output += out; });
+      proc.Start(wcmd, [&](const std::string &out) {
+        std::lock_guard<std::mutex> lock(outputMutex);
+        output += out;
+      });
 
   if (success) {
-    // Wait for the process to finish
+    // Wait for the process to finish while keeping the UI responsive
     while (proc.IsRunning()) {
+      MSG msg;
+      while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+      }
       Sleep(10);
     }
+    std::lock_guard<std::mutex> lock(outputMutex);
     duk_push_string(ctx, output.c_str());
   } else {
     duk_push_string(ctx, "Error: Failed to start process");
